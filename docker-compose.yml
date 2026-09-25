@@ -1,11 +1,10 @@
 # Deployed by Coolify (build pack "Docker Compose"). Coolify generates
-# SERVICE_PASSWORD_POSTGRES and sets SOURCE_COMMIT; the domain is set on `app`.
+# SERVICE_PASSWORD_POSTGRES and passes SOURCE_COMMIT as a build arg; the domain is set on `app`.
 services:
   app:
     build: .
     environment:
       DATABASE_URL: postgres://family:${SERVICE_PASSWORD_POSTGRES}@db:5432/family
-      SOURCE_COMMIT: ${SOURCE_COMMIT:-dev}
       TZ: Europe/Lisbon
     depends_on:
       db:
