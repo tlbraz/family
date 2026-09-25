@@ -1,0 +1,31 @@
+# Deployed by Coolify (build pack "Docker Compose"). Coolify generates
+# SERVICE_PASSWORD_POSTGRES and sets SOURCE_COMMIT; the domain is set on `app`.
+services:
+  app:
+    build: .
+    environment:
+      DATABASE_URL: postgres://family:${SERVICE_PASSWORD_POSTGRES}@db:5432/family
+      SOURCE_COMMIT: ${SOURCE_COMMIT:-dev}
+      TZ: Europe/Lisbon
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: family
+      POSTGRES_USER: family
+      POSTGRES_PASSWORD: ${SERVICE_PASSWORD_POSTGRES}
+    volumes:
+      - family-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U family -d family"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+volumes:
+  family-pgdata:

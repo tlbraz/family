@@ -1,0 +1,102 @@
+:root {
+  --bg: #f6f1ea;
+  --card: #fffdf9;
+  --ink: #2b2620;
+  --muted: #8a8076;
+  --line: #e8e0d5;
+  --accent: #d9643a;
+  --up: #3f8f5a;
+  --down: #c0392b;
+  --note: #fff4c2;
+  color-scheme: light dark;
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1c1a17;
+    --card: #26231f;
+    --ink: #f1ebe3;
+    --muted: #a39a8f;
+    --line: #3a352f;
+    --note: #3b3522;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); }
+.page {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: max(24px, env(safe-area-inset-top)) 16px 32px;
+}
+.hero { margin: 16px 0 24px; }
+.date { margin: 0; color: var(--muted); text-transform: capitalize; }
+h1 { margin: 4px 0 0; font-size: clamp(2rem, 6vw, 2.8rem); letter-spacing: -0.02em; }
+h2 { margin: 0; font-size: 1.05rem; }
+.grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
+.card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 16px;
+}
+.card.soon { display: flex; align-items: center; gap: 12px; opacity: 0.75; }
+.card.soon p { margin: 2px 0 0; color: var(--muted); font-size: 0.9rem; }
+.icon { font-size: 1.6rem; }
+.badge {
+  margin-left: auto;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 2px 8px;
+}
+.notes { grid-column: 1 / -1; }
+.note-form { display: flex; gap: 8px; margin: 12px 0; flex-wrap: wrap; }
+.note-form input {
+  flex: 1 1 200px;
+  font: inherit;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--bg);
+  color: var(--ink);
+}
+.note-form .author { flex: 0 1 120px; }
+button {
+  font: inherit;
+  border: 0;
+  border-radius: 10px;
+  padding: 10px 16px;
+  background: var(--accent);
+  color: #fff;
+  cursor: pointer;
+}
+button:disabled { opacity: 0.5; cursor: default; }
+.note-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
+.note-list li {
+  position: relative;
+  background: var(--note);
+  border-radius: 10px;
+  padding: 12px 32px 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  overflow-wrap: anywhere;
+}
+.note-meta { font-size: 0.8rem; color: var(--muted); }
+.x {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  background: none;
+  color: var(--muted);
+  padding: 2px 8px;
+  font-size: 1.1rem;
+}
+.empty, .error { margin: 0; color: var(--muted); }
+.error { color: var(--down); }
+.footer { margin-top: 32px; text-align: center; font-size: 0.8rem; color: var(--muted); }
+.up { color: var(--up); }
+.down { color: var(--down); }
