@@ -4,6 +4,7 @@ import { api } from '../api';
 import { addDays, dateKey, fromKey, pad, timeOf } from '../dates';
 import { Avatar, AvatarStack } from './Avatar';
 import { Icon, TYPE_LABEL } from './Icon';
+import type { Shared } from '../share';
 import { Sheet } from './Sheet';
 import { VoiceButton } from './VoiceButton';
 
@@ -118,11 +119,12 @@ interface Props {
   aiEnabled: boolean;
   occurrence: Occurrence | null; // null = new event
   day: string;
+  shared?: Shared; // text/photo shared from another app
   onClose: () => void;
   onSaved: () => void;
 }
 
-export function EventSheet({ members, canEdit, aiEnabled, occurrence, day, onClose, onSaved }: Props) {
+export function EventSheet({ members, canEdit, aiEnabled, occurrence, day, shared, onClose, onSaved }: Props) {
   const isNew = !occurrence;
   const [event, setEvent] = useState<CalendarEvent | null>(null);
   const [form, setForm] = useState<Form>(() => blank(day));
@@ -144,6 +146,16 @@ export function EventSheet({ members, canEdit, aiEnabled, occurrence, day, onClo
     }
   }, [occurrence]);
 
+  // Shared from another app: let Claude fill it in, or at least keep the text.
+  const usedShare = useRef(false);
+  useEffect(() => {
+    if (!shared || usedShare.current) return;
+    usedShare.current = true;
+    const firstLine = shared.text.split('\n').find((l) => l.trim()) ?? '';
+    if (aiEnabled) void read(shared.image, shared.text);
+    else setForm((f) => ({ ...f, title: firstLine.slice(0, 120), notes: shared.text.slice(0, 2000) }));
+  }, [shared]);
+
   const set = <K extends keyof Form>(k: K, v: Form[K]) => setForm((f) => ({ ...f, [k]: v }));
   const toggle = (list: number[], id: number) => (list.includes(id) ? list.filter((x) => x !== id) : [...list, id]);
 
@@ -159,7 +171,7 @@ export function EventSheet({ members, canEdit, aiEnabled, occurrence, day, onClo
     } catch (e) {
       setError((e as Error).message);
       // Claude couldn't fill it in (e.g. no credit): at least keep what was said as the title.
-      if (spoken) setForm((f) => (f.title.trim() ? f : { ...f, title: spoken.slice(0, 120) }));
+      if (spoken) setForm((f) => (f.title.trim() ? f : { ...f, title: spoken.split('\n')[0]!.slice(0, 120), notes: f.notes || (spoken.includes('\n') || spoken.length > 120 ? spoken.slice(0, 2000) : '') }));
     } finally {
       setReading(false);
       if (fileRef.current) fileRef.current.value = '';
