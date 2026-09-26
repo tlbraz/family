@@ -32,6 +32,7 @@ export function toEvent(row: EventRow, participants: number[]): CalendarEvent {
     notes: row.notes,
     participants,
     bring: row.bring,
+    reminders: row.reminders,
     repeat: rruleToRepeat(row.rrule),
     source: row.source,
   };
@@ -55,6 +56,7 @@ export function eventValues(input: EventInput) {
     location: input.location,
     notes: input.notes,
     bring: input.bring,
+    reminders: [...new Set(input.reminders)].sort((a, b) => b - a),
     rrule: input.repeat ? repeatToRrule(input.repeat, start) : null,
     updatedAt: new Date(),
   };
@@ -92,6 +94,7 @@ export async function listOccurrences(db: Db, fromKey: string, toKey: string): P
       location: row.location,
       participants: people.get(row.id) ?? [],
       bring: row.bring,
+      reminders: row.reminders,
       repeats: !!row.rrule,
     };
     if (!row.rrule) {
@@ -208,6 +211,7 @@ export async function searchEvents(db: Db, q: string, now = new Date()): Promise
       location: row.location,
       participants: people.get(row.id) ?? [],
       bring: row.bring,
+      reminders: row.reminders,
       repeats: !!row.rrule,
     };
     (end > now ? upcoming : past).push(o);
@@ -231,6 +235,7 @@ function generated(key: string, kind: Occurrence['kind'], title: string, start: 
     location: null,
     participants,
     bring: [],
+    reminders: [],
     repeats: kind !== 'school',
   };
 }

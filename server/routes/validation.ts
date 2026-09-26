@@ -15,6 +15,7 @@ export const EventInputSchema = z
     notes: z.string().trim().max(2000).nullable(),
     participants: z.array(z.number().int()).max(20),
     bring: z.array(z.object({ text: z.string().trim().min(1).max(80), done: z.boolean() })).max(30),
+    reminders: z.array(z.number().int().min(-1440).max(10080)).max(5).default([]),
     repeat: z
       .object({
         freq: z.enum(['weekly', 'monthly', 'yearly']),
@@ -25,6 +26,12 @@ export const EventInputSchema = z
       .nullable(),
   })
   .refine((e) => new Date(e.end) > new Date(e.start), { message: 'The end must be after the start', path: ['end'] });
+
+export const TaskInputSchema = z.object({
+  title: z.string().trim().min(1).max(120),
+  due: date,
+  memberId: z.number().int().nullable(),
+});
 
 export const MemberInputSchema = z.object({
   name: z.string().trim().min(1).max(40),

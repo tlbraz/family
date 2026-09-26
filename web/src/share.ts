@@ -1,5 +1,5 @@
-// Things shared to the app (Share → Family on the phone). The service worker (public/sw.js)
-// stashes them in a cache and opens /?share=1; we pick them up once and clean the URL.
+// Things shared to the app (Share → Family on the phone). The server keeps them for a few
+// minutes and opens /?share=<id>; we pick them up once and clean the URL.
 export interface Shared {
   text: string;
   image?: File;
@@ -13,16 +13,16 @@ let taken: Promise<Shared | null> | null = null;
 
 export function takeShared(): Promise<Shared | null> {
   taken ??= (async () => {
-    if (!new URLSearchParams(location.search).has('share')) return null;
+    const id = new URLSearchParams(location.search).get('share');
+    if (!id) return null;
     history.replaceState(history.state, '', '/');
-    if (!('caches' in window)) return null;
-    const box = await caches.open('share');
-    const [t, f] = await Promise.all([box.match('/shared/text'), box.match('/shared/file')]);
-    await Promise.all([box.delete('/shared/text'), box.delete('/shared/file')]);
-    const text = t ? (await t.text()).trim() : '';
-    const blob = f ? await f.blob() : null;
-    const image = blob?.type.startsWith('image/') ? new File([blob], 'shared', { type: blob.type }) : undefined;
-    return text || image ? { text, image } : null;
+    const res = await fetch(`/api/share/${encodeURIComponent(id)}`).catch(() => null);
+    if (!res?.ok) return null;
+    const body: { text: string; image: { mediaType: string; data: string } | null } = await res.json();
+    const image = body.image
+      ? new File([await (await fetch(`data:${body.image.mediaType};base64,${body.image.data}`)).blob()], 'shared', { type: body.image.mediaType })
+      : undefined;
+    return body.text || image ? { text: body.text, image } : null;
   })();
   return taken;
 }

@@ -4,6 +4,8 @@ import { connect, runMigrations } from './db';
 import { createApp } from './app';
 import { runDigests } from './lib/digest';
 import { deleteGoogleEvent, googleEnabled, loadGoogleKey, pushEvent, shareWithParents, syncRound } from './lib/google';
+import { runReminders } from './lib/reminders';
+import { loadTelegramChats } from './lib/telegram';
 import { seed } from './seed';
 
 const url = process.env.DATABASE_URL;
@@ -13,6 +15,7 @@ const { db, close } = connect(url);
 await runMigrations(db);
 await seed(db);
 await loadGoogleKey(db);
+await loadTelegramChats(db);
 
 const logErr = (what: string) => (e: Error) => console.error(`${what}:`, e.message);
 const app = createApp(db, {
@@ -28,8 +31,8 @@ app.use('*', async (c, next) => {
   if (host === 'family.lan' && !c.req.path.startsWith('/api')) return c.redirect(PUBLIC_URL + c.req.path, 301);
   await next();
 });
-// Share → Family normally lands in the service worker; if it isn't running yet, just open the app.
-app.post('/share', (c) => c.redirect('/', 303));
+// Phones that installed the app before the share target moved to /api/share still post here.
+app.post('/share', (c) => app.fetch(new Request(new URL('/api/share', c.req.url), c.req.raw)));
 // The built web app; unknown paths fall back to index.html so client-side routes work.
 app.use('/*', serveStatic({ root: './dist/web' }));
 app.get('*', serveStatic({ path: './dist/web/index.html' }));
@@ -42,6 +45,7 @@ const server = serve({ fetch: app.fetch, port }, () =>
 const timers = [
   setInterval(() => void runDigests(db).catch(logErr('digest')), 60_000),
   setInterval(() => void syncRound(db), 2 * 60_000),
+  setInterval(() => void runReminders(db).catch(logErr('reminders')), 60_000),
 ];
 void syncRound(db);
 

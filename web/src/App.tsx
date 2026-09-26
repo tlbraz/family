@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { AppConfig, Health, Member, Occurrence } from '../../shared/types';
+import type { AppConfig, Health, Member, Occurrence, Task } from '../../shared/types';
 import { api } from './api';
 import { useBack } from './back';
 import { type Shared, takeShared } from './share';
@@ -11,9 +11,10 @@ import { FamilyView } from './components/FamilyView';
 import { FridgeNotes } from './components/FridgeNotes';
 import { Icon } from './components/Icon';
 import { SignIn } from './components/SignIn';
+import { TaskSheet } from './components/TaskSheet';
 
 type Tab = 'calendar' | 'notes' | 'family';
-type Open = { occurrence: Occurrence | null; day: string; shared?: Shared } | null;
+type Open = { kind: 'event'; occurrence: Occurrence | null; day: string; shared?: Shared } | { kind: 'task'; task: Task | null; day: string } | null;
 
 export function App() {
   const [tab, setTab] = useState<Tab>('calendar');
@@ -50,7 +51,7 @@ export function App() {
     if (!shared || !config) return;
     if (!canEdit) return setSignIn(true);
     setTab('calendar');
-    setOpen({ occurrence: null, day: dateKey(new Date()), shared });
+    setOpen({ kind: 'event', occurrence: null, day: dateKey(new Date()), shared });
     setShared(null);
   }, [shared, config, canEdit]);
 
@@ -77,8 +78,9 @@ export function App() {
             members={members}
             refreshKey={refresh}
             canEdit={canEdit}
-            onOpen={(occurrence) => setOpen({ occurrence, day: dateKey(new Date(occurrence.start)) })}
-            onAdd={(day) => setOpen({ occurrence: null, day })}
+            onOpen={(occurrence) => setOpen({ kind: 'event', occurrence, day: dateKey(new Date(occurrence.start)) })}
+            onOpenTask={(task) => setOpen({ kind: 'task', task, day: task.due })}
+            onAdd={(day) => setOpen({ kind: 'event', occurrence: null, day })}
           />
         )}
         {tab === 'notes' && (
@@ -92,7 +94,7 @@ export function App() {
             <FridgeNotes />
           </div>
         )}
-        {tab === 'family' && <FamilyView members={members} canEdit={canEdit} googleOn={!!config?.features.google} onChanged={loadAll} />}
+        {tab === 'family' && <FamilyView members={members} canEdit={canEdit} googleOn={!!config?.features.google} telegramOn={!!config?.features.telegram} onChanged={loadAll} />}
 
         <footer className="footer">
           {health ? (
@@ -106,9 +108,9 @@ export function App() {
       </main>
 
       {tab === 'calendar' && canEdit && (
-        <button className="fab" onClick={() => setOpen({ occurrence: null, day: dateKey(new Date()) })}>
+        <button className="fab" onClick={() => setOpen({ kind: 'event', occurrence: null, day: dateKey(new Date()) })}>
           <Icon name="plus" size={20} stroke={2.5} />
-          Add event
+          Add
         </button>
       )}
 
@@ -127,7 +129,20 @@ export function App() {
         ))}
       </nav>
 
-      {open && (
+      {open?.kind === 'task' && (
+        <TaskSheet
+          members={members}
+          task={open.task}
+          day={open.day}
+          onClose={() => setOpen(null)}
+          onEvent={open.task ? undefined : () => setOpen({ kind: 'event', occurrence: null, day: open.day })}
+          onSaved={() => {
+            setOpen(null);
+            setRefresh((r) => r + 1);
+          }}
+        />
+      )}
+      {open?.kind === 'event' && (
         <EventSheet
           members={members}
           canEdit={canEdit}
@@ -136,6 +151,7 @@ export function App() {
           day={open.day}
           shared={open.shared}
           onClose={() => setOpen(null)}
+          onTodo={open.occurrence ? undefined : () => setOpen({ kind: 'task', task: null, day: open.day })}
           onSaved={() => {
             setOpen(null);
             setRefresh((r) => r + 1);

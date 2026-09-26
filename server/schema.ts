@@ -51,6 +51,7 @@ export const events = pgTable(
     location: text('location'),
     notes: text('notes'),
     bring: jsonb('bring').$type<BringItem[]>().notNull().default([]),
+    reminders: jsonb('reminders').$type<number[]>().notNull().default([]), // minutes before start → Telegram
     rrule: text('rrule'), // e.g. FREQ=WEEKLY;BYDAY=SA — null = one-off
     exdates: jsonb('exdates').$type<string[]>().notNull().default([]), // ISO starts of skipped occurrences
     source: text('source').$type<'app' | 'google'>().notNull().default('app'),
@@ -81,3 +82,18 @@ export const settings = pgTable('settings', {
   key: text('key').primaryKey(),
   value: text('value').notNull(),
 });
+
+// School to-dos: "sign the permission slip by Friday". Shown on the due day and in the evening message.
+export const tasks = pgTable(
+  'tasks',
+  {
+    id: serial('id').primaryKey(),
+    title: text('title').notNull(),
+    due: date('due').notNull(), // YYYY-MM-DD
+    memberId: integer('member_id').references(() => members.id, { onDelete: 'set null' }), // who it's for; null = the family
+    done: boolean('done').notNull().default(false),
+    doneAt: timestamp('done_at', { withTimezone: true }), // when it was ticked; the calendar hides it the day after
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [index('tasks_due_idx').on(t.due)],
+);

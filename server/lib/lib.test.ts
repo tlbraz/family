@@ -3,6 +3,7 @@ import { easter, holidays } from './holidays';
 import { fold, pickOccurrence } from './calendar';
 import { expand, repeatToRrule, rruleToRepeat } from './recurrence';
 import { dateKey } from './time';
+import { taskLine } from './digest';
 
 describe('holidays', () => {
   it('computes Easter', () => {
@@ -72,5 +73,16 @@ describe('search: which date of a repeating event to show', () => {
     const rule = repeatToRrule({ freq: 'weekly', interval: 1, until: '2026-09-20' }, start);
     const got = pickOccurrence(rule, start, hour, [], new Date(2026, 8, 26, 12, 0));
     expect(dateKey(got!)).toBe('2026-09-19');
+  });
+});
+
+describe('to-dos in the evening message', () => {
+  const who = new Map([[3, 'Gonçalo']]);
+  const task = (due: string, memberId: number | null = 3) => ({ id: 1, title: 'Sign the slip', due, memberId, done: false, doneAt: null });
+  it('says when each one is due, as read on Thursday 2026-10-01', () => {
+    expect(taskLine(task('2026-10-02'), '2026-10-01', who)).toBe('☐ Sign the slip — Gonçalo · due tomorrow');
+    expect(taskLine(task('2026-10-01'), '2026-10-01', who)).toBe('☐ Sign the slip — Gonçalo · <b>due today</b>');
+    expect(taskLine(task('2026-09-29', null), '2026-10-01', who)).toBe('☐ Sign the slip · <b>overdue</b> (was Tuesday)');
+    expect(taskLine(task('2026-10-04'), '2026-10-01', who)).toBe('☐ Sign the slip — Gonçalo · due Sunday');
   });
 });

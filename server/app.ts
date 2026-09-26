@@ -4,13 +4,16 @@ import type { AppConfig, Health } from '../shared/types';
 import type { Db } from './db';
 import { AiError, draftEvent, aiEnabled, type ImageInput } from './lib/ai';
 import { type AuthEnv, loadMember, requireParent } from './lib/auth';
-import { tomorrowDigest, weekDigest } from './lib/digest';
+import { todayDigest, tomorrowDigest, weekDigest } from './lib/digest';
 import { googleEnabled, googleStatus, saveGoogleKey, syncRound } from './lib/google';
-import { sendTelegram, telegramEnabled } from './lib/telegram';
+import { addTelegramChat, removeTelegramChat, sendTelegram, telegramStatus } from './lib/telegram';
 import { authRoutes } from './routes/auth';
 import { type EventHooks, eventRoutes } from './routes/events';
 import { memberRoutes, toMember } from './routes/members';
 import { noteRoutes } from './routes/notes';
+import { shareRoutes } from './routes/share';
+import { taskRoutes } from './routes/tasks';
+import { upcomingRoutes } from './routes/upcoming';
 import { members } from './schema';
 import pkg from '../package.json';
 
@@ -46,7 +49,7 @@ export function createApp(db: Db, hooks: AppHooks = noop) {
     const me = c.get('me');
     const body: AppConfig = {
       me: me ? toMember(me) : null,
-      features: { ai: aiEnabled(), google: googleEnabled(), telegram: telegramEnabled() },
+      features: { ai: aiEnabled(), google: googleEnabled(), telegram: !!process.env.TELEGRAM_BOT_TOKEN },
     };
     return c.json(body);
   });
@@ -54,6 +57,9 @@ export function createApp(db: Db, hooks: AppHooks = noop) {
   api.route('/auth', authRoutes(db));
   api.route('/members', memberRoutes(db, hooks.membersChanged));
   api.route('/notes', noteRoutes(db));
+  api.route('/share', shareRoutes());
+  api.route('/tasks', taskRoutes(db));
+  api.route('/upcoming', upcomingRoutes(db));
   api.route('/', eventRoutes(db, hooks));
 
   // Photo or sentence → a draft event for the form (nothing is saved here).
@@ -95,11 +101,31 @@ export function createApp(db: Db, hooks: AppHooks = noop) {
     return c.json(await googleStatus(db));
   });
 
-  // Send the Telegram digests now (for testing): ?kind=tomorrow|week
+  // Send the Telegram digests now (for testing): ?kind=today|tomorrow|week
   api.post('/digest', requireParent, async (c) => {
-    const msg = c.req.query('kind') === 'week' ? await weekDigest(db) : await tomorrowDigest(db);
-    if (!msg) return c.json({ sent: false, reason: 'Nothing on tomorrow' });
+    const kind = c.req.query('kind');
+    const msg = kind === 'week' ? await weekDigest(db) : kind === 'today' ? await todayDigest(db) : await tomorrowDigest(db);
+    if (!msg) return c.json({ sent: false, reason: `Nothing on ${kind === 'today' ? 'today' : 'tomorrow'}` });
     return c.json({ sent: await sendTelegram(msg) });
+  });
+
+  // Who gets the Telegram messages. Someone opens the bot and taps Start, then a parent adds them here.
+  api.get('/telegram', requireParent, async (c) => {
+    if (!process.env.TELEGRAM_BOT_TOKEN) return c.json({ error: 'Telegram is not set up on the server' }, 400);
+    return c.json(await telegramStatus());
+  });
+  api.post('/telegram/chats', requireParent, async (c) => {
+    const body = await c.req.json().catch(() => ({}));
+    const id = String(body.id ?? '').trim();
+    const name = String(body.name ?? '').trim().slice(0, 60);
+    if (!/^-?\d{1,20}$/.test(id) || !name) return c.json({ error: 'Pick someone from the list' }, 400);
+    await addTelegramChat(db, { id, name });
+    const sent = await sendTelegram(`👋 Hi ${name.replace(/[<>&]/g, '')}! You'll now get the family calendar messages here.`, id);
+    return c.json({ ...(await telegramStatus()), sent });
+  });
+  api.delete('/telegram/chats/:id', requireParent, async (c) => {
+    await removeTelegramChat(db, c.req.param('id'));
+    return c.json(await telegramStatus());
   });
 
   return new Hono().route('/api', api);

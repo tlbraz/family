@@ -57,6 +57,7 @@ export interface CalendarEvent {
   notes: string | null;
   participants: number[];
   bring: BringItem[];
+  reminders: number[]; // minutes before the start (negative = after, e.g. -480 = 08:00 on an all-day event)
   repeat: Repeat | null;
   source: 'app' | 'google';
 }
@@ -76,6 +77,7 @@ export interface Occurrence {
   location: string | null;
   participants: number[];
   bring: BringItem[];
+  reminders: number[]; // minutes before the start (negative = after, e.g. -480 = 08:00 on an all-day event)
   repeats: boolean;
 }
 
@@ -84,6 +86,18 @@ export interface SearchResults {
   upcoming: Occurrence[];
   past: Occurrence[];
 }
+
+/** A small to-do with a due date ("pay €10 for the trip by Friday"). */
+export interface Task {
+  id: number;
+  title: string;
+  due: string; // YYYY-MM-DD
+  memberId: number | null; // who it's for; null = the family
+  done: boolean;
+  doneAt: string | null; // ISO
+}
+
+export type TaskInput = Pick<Task, 'title' | 'due' | 'memberId'>;
 
 export interface AppConfig {
   me: Member | null;
