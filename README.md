@@ -1,6 +1,6 @@
 # Family
 
-The family planner: one web app for the house, at **http://family.lan** (on the LAN or over Tailscale).
+The family planner: one web app for the house, at **https://family.home.tbraz.pt** (on the LAN or over Tailscale; http://family.lan redirects there).
 Install it on a phone with *Share → Add to Home Screen*.
 
 ## Stack

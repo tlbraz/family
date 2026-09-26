@@ -22,7 +22,8 @@ export function authRoutes(db: Db) {
       return c.json({ error: 'Wrong password' }, 401);
     }
     const token = await createSession(db, m.id);
-    setCookie(c, SESSION_COOKIE, token, { httpOnly: true, sameSite: 'Lax', path: '/', maxAge: SESSION_DAYS * 86_400 });
+    const secure = c.req.header('x-forwarded-proto') === 'https';
+    setCookie(c, SESSION_COOKIE, token, { httpOnly: true, secure, sameSite: 'Lax', path: '/', maxAge: SESSION_DAYS * 86_400 });
     return c.json({ ok: true });
   });
 

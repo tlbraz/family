@@ -92,7 +92,7 @@ async function setSetting(db: Db, key: string, value: string | null) {
 export async function calendarId(db: Db): Promise<string> {
   const known = process.env.GOOGLE_CALENDAR_ID || (await getSetting(db, 'google:calendarId'));
   if (known) return known;
-  const { data } = await call('POST', '/calendars', { summary: 'Family', description: 'Managed by http://family.lan', timeZone: TZ });
+  const { data } = await call('POST', '/calendars', { summary: 'Family', description: `Managed by ${process.env.PUBLIC_URL || 'https://family.home.tbraz.pt'}`, timeZone: TZ });
   await setSetting(db, 'google:calendarId', data.id);
   return data.id;
 }
@@ -130,7 +130,7 @@ export async function pushEvent(db: Db, id: string) {
     people.length ? `Who: ${people.join(', ')}` : '',
     row.bring.length ? `Bring: ${row.bring.map((b) => b.text).join(', ')}` : '',
     row.notes ?? '',
-    '— family.lan',
+    `— ${process.env.PUBLIC_URL || 'https://family.home.tbraz.pt'}`,
   ].filter(Boolean).join('\n');
   const recurrence = row.rrule
     ? [`RRULE:${row.rrule}`, ...row.exdates.map((d) => (row.allDay ? `EXDATE;VALUE=DATE:${dateKey(new Date(d)).replace(/-/g, '')}` : `EXDATE:${new Date(d).toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '')}`))]

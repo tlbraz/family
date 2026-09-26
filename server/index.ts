@@ -20,6 +20,14 @@ const app = createApp(db, {
   removed: (gid) => googleEnabled() && void deleteGoogleEvent(db, gid).catch(logErr('google delete')),
   membersChanged: () => googleEnabled() && void shareWithParents(db).catch(logErr('google share')),
 });
+// The old http://family.lan address sends people to HTTPS (needed for the microphone and other browser features).
+// /api stays reachable on both, for health checks and the ops scripts.
+const PUBLIC_URL = process.env.PUBLIC_URL || 'https://family.home.tbraz.pt';
+app.use('*', async (c, next) => {
+  const host = c.req.header('host')?.split(':')[0];
+  if (host === 'family.lan' && !c.req.path.startsWith('/api')) return c.redirect(PUBLIC_URL + c.req.path, 301);
+  await next();
+});
 // The built web app; unknown paths fall back to index.html so client-side routes work.
 app.use('/*', serveStatic({ root: './dist/web' }));
 app.get('*', serveStatic({ path: './dist/web/index.html' }));
