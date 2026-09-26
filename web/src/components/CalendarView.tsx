@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Member, Occurrence } from '../../../shared/types';
 import { api } from '../api';
 import { addDays, dateKey, dayLabel, fromKey, monthName, onDay, startOfWeek, timeOf, weekdayShort } from '../dates';
-import { AvatarStack } from './Avatar';
+import { Avatar, AvatarStack } from './Avatar';
 import { Icon, TYPE_LABEL } from './Icon';
 
 interface Props {
@@ -175,7 +175,7 @@ export function CalendarView({ members, refreshKey, onOpen, onAdd, canEdit }: Pr
         )}
       </div>
 
-      <div className="people" role="group" aria-label="Show events for">
+      <div className={`people ${who !== null ? 'filtered' : ''}`} role="group" aria-label="Show events for">
         <button className={`person-all ${who === null ? 'on' : ''}`} onClick={() => setWho(null)} aria-pressed={who === null}>
           Everyone
         </button>
@@ -186,9 +186,10 @@ export function CalendarView({ members, refreshKey, onOpen, onAdd, canEdit }: Pr
             style={{ '--c': m.color } as React.CSSProperties}
             onClick={() => setWho(who === m.id ? null : m.id)}
             aria-pressed={who === m.id}
+            aria-label={m.name}
             title={m.name}
           >
-            {m.name}
+            <Avatar member={m} size={36} />
           </button>
         ))}
       </div>

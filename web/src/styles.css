@@ -105,12 +105,15 @@ h1, h2, h3 { margin: 0; text-wrap: balance; }
 /* Person filter */
 .people { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; margin: 0 -16px; padding-inline: 16px; scrollbar-width: none; }
 .people::-webkit-scrollbar { display: none; }
+.people { align-items: center; }
 .person, .person-all {
   flex: none; height: 36px; padding: 0 14px; border-radius: 18px; border: 2px solid transparent;
   background: var(--card); font-weight: 800; font-size: 0.9rem;
 }
-.person { color: var(--c); border-color: color-mix(in srgb, var(--c) 30%, transparent); }
-.person.on { background: var(--c); color: #fff; border-color: var(--c); }
+.person { width: 44px; height: 44px; padding: 0; border-radius: 50%; display: grid; place-items: center; background: none; transition: opacity 0.15s, border-color 0.15s; }
+.person .avatar { pointer-events: none; }
+.person.on { border-color: var(--c); }
+.people.filtered .person:not(.on) { opacity: 0.45; }
 .person-all.on { background: var(--accent); color: var(--on-accent); }
 
 /* Week strip */
