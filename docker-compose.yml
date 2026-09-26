@@ -12,6 +12,7 @@ services:
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}            # event from a photo or sentence
       GOOGLE_SERVICE_ACCOUNT: ${GOOGLE_SERVICE_ACCOUNT:-}  # shared "Family" Google Calendar (key JSON)
       GOOGLE_CALENDAR_ID: ${GOOGLE_CALENDAR_ID:-}          # optional; created automatically if empty
+      OPS_TOKEN: ${OPS_TOKEN:-}                            # lets the ops session add events (acts as OPS_MEMBER, default Tiago)
     depends_on:
       db:
         condition: service_healthy

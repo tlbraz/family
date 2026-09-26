@@ -30,6 +30,14 @@ export async function verifyPassword(pw: string, stored: string): Promise<boolea
 
 const sha256 = (s: string) => createHash('sha256').update(s).digest('hex');
 
+function opsTokenMatches(given: string): boolean {
+  const expected = process.env.OPS_TOKEN;
+  if (!expected || expected.length < 32) return false;
+  const a = Buffer.from(sha256(given));
+  const b = Buffer.from(sha256(expected));
+  return timingSafeEqual(a, b);
+}
+
 export async function createSession(db: Db, memberId: number): Promise<string> {
   const token = randomBytes(32).toString('base64url');
   const expiresAt = new Date(Date.now() + SESSION_DAYS * 86_400_000);
@@ -46,7 +54,12 @@ export function loadMember(db: Db) {
   return createMiddleware<AuthEnv>(async (c, next) => {
     const token = getCookie(c, SESSION_COOKIE);
     let me: MemberRow | null = null;
-    if (token) {
+    const bearer = c.req.header('authorization')?.match(/^Bearer (.+)$/)?.[1];
+    if (bearer && opsTokenMatches(bearer)) {
+      // The ops container (Claude in Tiago's operator session) acts as the parent named in OPS_MEMBER.
+      const [row] = await db.select().from(members).where(eq(members.name, process.env.OPS_MEMBER || 'Tiago'));
+      me = row ?? null;
+    } else if (token) {
       const [row] = await db
         .select({ member: members })
         .from(sessions)

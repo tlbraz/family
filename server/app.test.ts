@@ -25,6 +25,13 @@ describe('permissions', () => {
     expect(res.status).toBe(401);
   });
 
+  it('ignores a wrong ops token', async () => {
+    process.env.OPS_TOKEN = 'x'.repeat(40);
+    const res = await up().request('/api/events', { method: 'POST', body: '{}', headers: { 'content-type': 'application/json', authorization: 'Bearer nope' } });
+    expect(res.status).toBe(401);
+    delete process.env.OPS_TOKEN;
+  });
+
   it('rejects an empty note', async () => {
     const res = await up().request('/api/notes', {
       method: 'POST',
