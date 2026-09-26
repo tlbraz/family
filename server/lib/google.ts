@@ -7,7 +7,8 @@ import { dateKey, parseDateKey } from './time';
 
 // Two-way sync with one shared "Family" Google Calendar, owned by a Google service account
 // and shared (writer) with each parent's Google account. Parents subscribe on their phones
-// and get Google's normal notifications. Disabled unless GOOGLE_SERVICE_ACCOUNT (the key JSON) is set.
+// and get Google's normal notifications. Off until a service account key is pasted on the Family page
+// (or set as GOOGLE_SERVICE_ACCOUNT).
 //
 // Rules: the app is the source of truth for events made in the app; from Google we only take
 // their deletion or a changed time. Events made in Google are imported (and kept up to date).
@@ -17,14 +18,52 @@ const TZ = 'Europe/Lisbon';
 const COLOR: Record<string, string> = { medical: '11', sports: '10', school: '9', party: '4', family: '5', work: '8', holiday: '7', other: '1' };
 const EMOJI: Record<string, string> = { medical: '🩺', sports: '⚽', school: '🎒', party: '🎉', family: '🏠', work: '💼', holiday: '🌴', other: '📌' };
 
-export const googleEnabled = () => !!process.env.GOOGLE_SERVICE_ACCOUNT;
-
+// The key comes from the env var or, more usually, from the Family page (stored in settings).
+let key: { client_email: string; private_key: string } | null = null;
 let jwt: JWT | null = null;
-async function call<T = any>(method: string, path: string, body?: unknown): Promise<{ status: number; data: T }> {
-  if (!jwt) {
-    const creds = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT!);
-    jwt = new JWT({ email: creds.client_email, key: creds.private_key, scopes: ['https://www.googleapis.com/auth/calendar'] });
+
+export const googleEnabled = () => !!key;
+export const serviceEmail = () => key?.client_email ?? null;
+
+function parseKey(json: string) {
+  const k = JSON.parse(json);
+  if (typeof k.client_email !== 'string' || typeof k.private_key !== 'string') throw new Error('That is not a service account key file');
+  return { client_email: k.client_email, private_key: k.private_key };
+}
+
+/** Loads the key at startup: env var first, then the one saved from the Family page. */
+export async function loadGoogleKey(db: Db) {
+  const json = process.env.GOOGLE_SERVICE_ACCOUNT || (await getSetting(db, 'google:serviceAccount'));
+  if (!json) return;
+  try {
+    key = parseKey(json);
+    jwt = null;
+  } catch (e) {
+    console.error('google key:', (e as Error).message);
   }
+}
+
+/** Checks a pasted key against Google and saves it. */
+export async function saveGoogleKey(db: Db, json: string) {
+  const candidate = parseKey(json);
+  const test = new JWT({ email: candidate.client_email, key: candidate.private_key, scopes: ['https://www.googleapis.com/auth/calendar'] });
+  await test.getAccessToken(); // throws if Google rejects it
+  await setSetting(db, 'google:serviceAccount', JSON.stringify(candidate));
+  key = candidate;
+  jwt = test;
+}
+
+export async function googleStatus(db: Db) {
+  const cal = key ? await getSetting(db, 'google:calendarId') : null;
+  const shared = (await db.select().from(settings)).filter((r) => r.key.startsWith('google:shared:')).map((r) => r.key.slice(14));
+  const lastSync = await getSetting(db, 'google:lastSync');
+  const lastError = await getSetting(db, 'google:lastError');
+  return { connected: !!key, serviceEmail: key?.client_email ?? null, calendarId: cal, sharedWith: shared, lastSync, lastError };
+}
+
+async function call<T = any>(method: string, path: string, body?: unknown): Promise<{ status: number; data: T }> {
+  if (!key) throw new Error('Google is not connected');
+  if (!jwt) jwt = new JWT({ email: key.client_email, key: key.private_key, scopes: ['https://www.googleapis.com/auth/calendar'] });
   const { token } = await jwt.getAccessToken();
   const res = await fetch(API + path, {
     method,
@@ -212,7 +251,10 @@ export async function syncRound(db: Db) {
     await shareWithParents(db);
     await pushUnsynced(db);
     await pull(db);
+    await setSetting(db, 'google:lastSync', new Date().toISOString());
+    await setSetting(db, 'google:lastError', null);
   } catch (e) {
     console.error('google sync:', (e as Error).message);
+    await setSetting(db, 'google:lastError', (e as Error).message.slice(0, 300)).catch(() => {});
   }
 }

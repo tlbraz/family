@@ -24,7 +24,7 @@ Install it on a phone with *Share → Add to Home Screen*.
 - **Telegram** (`TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`): 20:00 "tomorrow" message with what to bring,
   Sunday 19:00 week ahead. `POST /api/digest?kind=tomorrow|week` sends one now.
 - **Photo or sentence → event** (`ANTHROPIC_API_KEY`): Claude fills the form; the parent confirms.
-- **Google Calendar** (`GOOGLE_SERVICE_ACCOUNT`): a shared "Family" calendar owned by a service account,
+- **Google Calendar** (key pasted on the Family page, or `GOOGLE_SERVICE_ACCOUNT`): a shared "Family" calendar owned by a service account,
   shared with each parent's Google address; app events are pushed, events added in Google are pulled in.
 
 One container for the app plus one for Postgres. When the app grows, add feature folders under

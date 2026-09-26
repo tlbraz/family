@@ -1,6 +1,6 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import type { Member, Role } from '../../../shared/types';
-import { api } from '../api';
+import { api, type GoogleStatus } from '../api';
 import { Avatar } from './Avatar';
 import { Icon } from './Icon';
 import { Sheet } from './Sheet';
@@ -49,6 +49,7 @@ export function FamilyView({ members, canEdit, googleOn, onChanged }: { members:
         </button>
       )}
       {!canEdit && <p className="muted">Sign in as a parent to edit the family.</p>}
+      {canEdit && <GoogleCard members={members} onChanged={onChanged} />}
       {editing && (
         <MemberSheet
           member={editing === 'new' ? null : editing}
@@ -142,5 +143,57 @@ function MemberSheet({ member, onClose, onSaved }: { member: Member | null; onCl
         </div>
       </form>
     </Sheet>
+  );
+}
+
+function GoogleCard({ members, onChanged }: { members: Member[]; onChanged: () => void }) {
+  const [status, setStatus] = useState<GoogleStatus | null>(null);
+  const [key, setKey] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    api.googleStatus().then(setStatus).catch(() => {});
+  }, [members]);
+
+  async function connect(e: FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      setStatus(await api.connectGoogle(key.trim()));
+      setKey('');
+      onChanged();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (!status) return null;
+  const parentsWithout = members.filter((m) => m.role === 'parent' && !m.googleEmail);
+  return (
+    <section className="card google">
+      <h2>Google Calendar</h2>
+      {status.connected ? (
+        <>
+          <p className="muted small">
+            Connected. Everything here is copied to a shared <b>Family</b> calendar, and events added there show up here.
+          </p>
+          {status.sharedWith.length > 0 && <p className="small">Shared with {status.sharedWith.join(', ')}: accept the invite email, then set notifications for "Family" in Google Calendar.</p>}
+          {parentsWithout.length > 0 && <p className="small muted">Add a Google address for {parentsWithout.map((p) => p.name).join(' and ')} to share it with them too.</p>}
+          {status.lastError && <p className="error small">Last sync failed: {status.lastError}</p>}
+          {status.lastSync && <p className="muted small">Last sync {new Date(status.lastSync).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}</p>}
+        </>
+      ) : (
+        <form className="event-form" onSubmit={connect}>
+          <p className="muted small">Paste the service account key (the JSON file from Google Cloud) to connect. It stays on the home server.</p>
+          <textarea id="googleKey" className="key-input" value={key} onChange={(e) => setKey(e.target.value)} rows={4} placeholder='{ "type": "service_account", … }' spellCheck={false} autoComplete="off" />
+          {error && <p className="error">{error}</p>}
+          <button type="submit" className="primary" disabled={busy || !key.trim()}>{busy ? 'Connecting…' : 'Connect'}</button>
+        </form>
+      )}
+    </section>
   );
 }

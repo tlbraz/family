@@ -3,7 +3,7 @@ import { serveStatic } from '@hono/node-server/serve-static';
 import { connect, runMigrations } from './db';
 import { createApp } from './app';
 import { runDigests } from './lib/digest';
-import { deleteGoogleEvent, googleEnabled, pushEvent, shareWithParents, syncRound } from './lib/google';
+import { deleteGoogleEvent, googleEnabled, loadGoogleKey, pushEvent, shareWithParents, syncRound } from './lib/google';
 import { seed } from './seed';
 
 const url = process.env.DATABASE_URL;
@@ -12,6 +12,7 @@ if (!url) throw new Error('DATABASE_URL is not set');
 const { db, close } = connect(url);
 await runMigrations(db);
 await seed(db);
+await loadGoogleKey(db);
 
 const logErr = (what: string) => (e: Error) => console.error(`${what}:`, e.message);
 const app = createApp(db, {

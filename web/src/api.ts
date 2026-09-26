@@ -1,5 +1,14 @@
 import type { AppConfig, CalendarEvent, EventDraft, EventInput, Health, Member, Note, Occurrence } from '../../shared/types';
 
+export interface GoogleStatus {
+  connected: boolean;
+  serviceEmail: string | null;
+  calendarId: string | null;
+  sharedWith: string[];
+  lastSync: string | null;
+  lastError: string | null;
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`/api${path}`, {
     ...init,
@@ -33,6 +42,9 @@ export const api = {
     request<void>(`/events/${id}${occurrence ? `?occurrence=${encodeURIComponent(occurrence)}` : ''}`, json('DELETE')),
   toggleBring: (id: string, index: number) => request<{ bring: CalendarEvent['bring'] }>(`/events/${id}/bring/${index}`, json('POST')),
   draft: (text: string, image?: { mediaType: string; data: string }) => request<EventDraft>('/ai/event', json('POST', { text, image })),
+
+  googleStatus: () => request<GoogleStatus>('/google'),
+  connectGoogle: (key: string) => request<GoogleStatus>('/google', json('POST', { key })),
 
   notes: () => request<Note[]>('/notes'),
   addNote: (text: string, author: string) => request<Note>('/notes', json('POST', { text, author })),

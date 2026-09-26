@@ -265,3 +265,8 @@ legend { font-weight: 800; font-size: 0.8rem; text-transform: uppercase; letter-
 .note-meta { font-size: 0.8rem; color: var(--muted); }
 .note-list .x { position: absolute; top: 4px; right: 4px; }
 .empty { margin: 0; color: var(--muted); }
+
+.card.google { margin-top: 20px; display: flex; flex-direction: column; gap: 8px; }
+.card.google h2 { font-size: 1.05rem; font-weight: 800; }
+.card.google p { margin: 0; }
+.key-input { width: 100%; font-family: ui-monospace, monospace; font-size: 0.8rem; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--bg); }

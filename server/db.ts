@@ -4,7 +4,7 @@ import postgres from 'postgres';
 import * as schema from './schema';
 
 export function connect(url: string) {
-  const client = postgres(url, { max: 10 });
+  const client = postgres(url, { max: 10, onnotice: () => {} });
   const db = drizzle(client, { schema });
   return { db, close: () => client.end({ timeout: 5 }) };
 }

@@ -5,7 +5,7 @@ import type { Db } from './db';
 import { draftEvent, aiEnabled, type ImageInput } from './lib/ai';
 import { type AuthEnv, loadMember, requireParent } from './lib/auth';
 import { tomorrowDigest, weekDigest } from './lib/digest';
-import { googleEnabled } from './lib/google';
+import { googleEnabled, googleStatus, saveGoogleKey, syncRound } from './lib/google';
 import { sendTelegram, telegramEnabled } from './lib/telegram';
 import { authRoutes } from './routes/auth';
 import { type EventHooks, eventRoutes } from './routes/events';
@@ -77,6 +77,22 @@ export function createApp(db: Db, hooks: AppHooks = noop) {
       console.error('ai draft:', (e as Error).message);
       return c.json({ error: (e as Error).message.startsWith("Couldn't") ? (e as Error).message : 'Reading that failed. Try again in a moment.' }, 502);
     }
+  });
+
+  api.get('/google', requireParent, async (c) => c.json(await googleStatus(db)));
+
+  // A parent pastes the service account key once; it is checked with Google and kept in the database.
+  api.post('/google', requireParent, async (c) => {
+    const body = await c.req.json().catch(() => ({}));
+    if (typeof body.key !== 'string' || body.key.length > 10_000) return c.json({ error: 'Paste the whole key file (JSON)' }, 400);
+    try {
+      await saveGoogleKey(db, body.key);
+    } catch (e) {
+      const msg = (e as Error).message;
+      return c.json({ error: msg.includes('JSON') ? 'That is not valid JSON — paste the whole file' : `Google did not accept that key: ${msg}` }, 400);
+    }
+    await syncRound(db);
+    return c.json(await googleStatus(db));
   });
 
   // Send the Telegram digests now (for testing): ?kind=tomorrow|week
