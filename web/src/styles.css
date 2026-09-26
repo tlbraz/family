@@ -261,6 +261,12 @@ legend { font-weight: 800; font-size: 0.8rem; text-transform: uppercase; letter-
 .photo-pick { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .photo-pick input { display: none; }
 .photo-pick label { cursor: pointer; }
+.cropper { display: flex; flex-direction: column; align-items: center; gap: 14px; }
+.cropper .form-actions { align-self: stretch; }
+.crop-view { position: relative; overflow: hidden; border-radius: 16px; background: #000; touch-action: none; cursor: grab; user-select: none; }
+.crop-view img { position: absolute; left: 0; top: 0; max-width: none; transform-origin: 0 0; pointer-events: none; }
+.crop-ring { position: absolute; inset: 0; border-radius: 50%; box-shadow: 0 0 0 999px rgb(0 0 0 / 0.5); border: 2px solid rgb(255 255 255 / 0.9); pointer-events: none; }
+.crop-zoom { width: 260px; accent-color: var(--accent); }
 
 /* Fridge notes */
 .note-form { display: flex; gap: 8px; margin: 0 0 12px; flex-wrap: wrap; }

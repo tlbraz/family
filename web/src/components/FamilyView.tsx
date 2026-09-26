@@ -3,6 +3,7 @@ import type { Member, Role } from '../../../shared/types';
 import { api, type GoogleStatus } from '../api';
 import { Avatar } from './Avatar';
 import { Icon } from './Icon';
+import { PhotoCropper } from './PhotoCropper';
 import { Sheet } from './Sheet';
 
 const COLORS = ['#4c7be8', '#d9548a', '#1f9a71', '#8a5cd6', '#c97714', '#0e8fa3', '#c2413b', '#5e6b2f'];
@@ -65,17 +66,6 @@ export function FamilyView({ members, canEdit, googleOn, onChanged }: { members:
   );
 }
 
-// Crop to a centred square and shrink, so the upload is a few tens of KB.
-async function squarePhoto(file: File, size = 256): Promise<string> {
-  const img = await createImageBitmap(file);
-  const side = Math.min(img.width, img.height);
-  const canvas = document.createElement('canvas');
-  canvas.width = canvas.height = size;
-  canvas.getContext('2d')!.drawImage(img, (img.width - side) / 2, (img.height - side) / 2, side, side, 0, 0, size, size);
-  img.close();
-  return canvas.toDataURL('image/jpeg', 0.85);
-}
-
 function MemberSheet({ member, onClose, onSaved }: { member: Member | null; onClose: () => void; onSaved: () => void }) {
   const [name, setName] = useState(member?.name ?? '');
   const [role, setRole] = useState<Role>(member?.role ?? 'kid');
@@ -83,6 +73,7 @@ function MemberSheet({ member, onClose, onSaved }: { member: Member | null; onCl
   const [birthday, setBirthday] = useState(member?.birthday ?? '');
   const [googleEmail, setGoogleEmail] = useState(member?.googleEmail ?? '');
   const [photo, setPhoto] = useState<string | null>(member?.photo ?? null); // URL or a new data: URL
+  const [cropping, setCropping] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [confirm, setConfirm] = useState(false);
 
@@ -99,16 +90,6 @@ function MemberSheet({ member, onClose, onSaved }: { member: Member | null; onCl
     }
   }
 
-  async function pick(file: File | undefined) {
-    if (!file) return;
-    try {
-      setPhoto(await squarePhoto(file));
-      setError(null);
-    } catch {
-      setError("Couldn't read that picture");
-    }
-  }
-
   async function remove() {
     try {
       await api.deleteMember(member!.id);
@@ -116,6 +97,21 @@ function MemberSheet({ member, onClose, onSaved }: { member: Member | null; onCl
     } catch (err) {
       setError((err as Error).message);
     }
+  }
+
+  if (cropping) {
+    return (
+      <Sheet title="Picture" onClose={() => setCropping(null)}>
+        <PhotoCropper
+          file={cropping}
+          onCancel={() => setCropping(null)}
+          onDone={(p) => {
+            setPhoto(p);
+            setCropping(null);
+          }}
+        />
+      </Sheet>
+    );
   }
 
   return (
@@ -129,7 +125,11 @@ function MemberSheet({ member, onClose, onSaved }: { member: Member | null; onCl
           <Avatar member={{ name: name || '?', color, photo }} size={64} />
           <label className="chip">
             <Icon name="camera" size={16} /> {photo ? 'Change picture' : 'Add picture'}
-            <input type="file" accept="image/*" onChange={(e) => pick(e.target.files?.[0])} />
+            <input type="file" accept="image/*" onChange={(e) => {
+                const f = e.target.files?.[0];
+                e.target.value = ''; // so picking the same file again still fires
+                if (f) setCropping(f);
+              }} />
           </label>
           {photo && (
             <button type="button" className="chip" onClick={() => setPhoto(null)}>
