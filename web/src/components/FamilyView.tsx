@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import type { Member, Role } from '../../../shared/types';
-import { api, type GoogleStatus, type TelegramStatus } from '../api';
+import { api, type GoogleStatus } from '../api';
 import { Avatar } from './Avatar';
 import { Icon } from './Icon';
 import { PhotoCropper } from './PhotoCropper';
@@ -18,7 +18,7 @@ function age(birthday: string | null): string {
   return `${a} years`;
 }
 
-export function FamilyView({ members, canEdit, googleOn, telegramOn, onChanged }: { members: Member[]; canEdit: boolean; googleOn: boolean; telegramOn: boolean; onChanged: () => void }) {
+export function FamilyView({ members, canEdit, googleOn, onChanged }: { members: Member[]; canEdit: boolean; googleOn: boolean; onChanged: () => void }) {
   const [editing, setEditing] = useState<Member | 'new' | null>(null);
   return (
     <div className="family">
@@ -52,7 +52,6 @@ export function FamilyView({ members, canEdit, googleOn, telegramOn, onChanged }
       )}
       {!canEdit && <p className="muted">Sign in as a parent to edit the family.</p>}
       {canEdit && <GoogleCard members={members} onChanged={onChanged} />}
-      {canEdit && telegramOn && <TelegramCard />}
       {editing && (
         <MemberSheet
           member={editing === 'new' ? null : editing}
@@ -231,66 +230,6 @@ function GoogleCard({ members, onChanged }: { members: Member[]; onChanged: () =
           <button type="submit" className="primary" disabled={busy || !key.trim()}>{busy ? 'Connecting…' : 'Connect'}</button>
         </form>
       )}
-    </section>
-  );
-}
-
-function TelegramCard() {
-  const [status, setStatus] = useState<TelegramStatus | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [note, setNote] = useState<string | null>(null);
-
-  const load = () => api.telegram().then(setStatus).catch((e) => setNote((e as Error).message));
-  useEffect(() => void load(), []);
-
-  async function run(action: () => Promise<TelegramStatus>, done?: (s: TelegramStatus) => string | null) {
-    setBusy(true);
-    setNote(null);
-    try {
-      const s = await action();
-      setStatus(s);
-      setNote(done?.(s) ?? null);
-    } catch (e) {
-      setNote((e as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  if (!status) return note ? <section className="card google"><h2>Telegram</h2><p className="error small">{note}</p></section> : null;
-  const link = status.bot ? `https://t.me/${status.bot}` : null;
-  return (
-    <section className="card google">
-      <h2>Telegram</h2>
-      <p className="muted small">The morning, evening and Sunday messages go to:</p>
-      <ul className="tg-list">
-        {status.recipients.map((r) => (
-          <li key={r.id}>
-            <span>{r.name}</span>
-            {!r.fixed && (
-              <button className="chip" disabled={busy} onClick={() => run(() => api.removeTelegram(r.id))}>Remove</button>
-            )}
-          </li>
-        ))}
-      </ul>
-      {status.waiting.length > 0 && (
-        <>
-          <p className="muted small">Opened the bot, not getting messages yet:</p>
-          <ul className="tg-list">
-            {status.waiting.map((w) => (
-              <li key={w.id}>
-                <span>{w.name}</span>
-                <button className="chip" disabled={busy} onClick={() => run(() => api.addTelegram(w.id, w.name), (s) => (s.sent ? `Added — ${w.name} got a hello message.` : `Added, but the hello message didn't go through.`))}>Add</button>
-              </li>
-            ))}
-          </ul>
-        </>
-      )}
-      <p className="small">
-        To add someone: send them {link ? <a href={link} target="_blank" rel="noreferrer">{link.replace('https://', '')}</a> : 'the bot'}, they tap <b>Start</b>, then{' '}
-        <button className="link" disabled={busy} onClick={() => void load()}>refresh</button> and tap Add. (Only shows people who wrote to the bot in the last day.)
-      </p>
-      {note && <p className="small">{note}</p>}
     </section>
   );
 }

@@ -78,7 +78,7 @@ export function App() {
             <FridgeNotes />
           </div>
         )}
-        {tab === 'family' && <FamilyView members={members} canEdit={canEdit} googleOn={!!config?.features.google} telegramOn={!!config?.features.telegram} onChanged={loadAll} />}
+        {tab === 'family' && <FamilyView members={members} canEdit={canEdit} googleOn={!!config?.features.google} onChanged={loadAll} />}
 
         <footer className="footer">
           {health ? (
