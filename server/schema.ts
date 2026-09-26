@@ -51,6 +51,7 @@ export const events = pgTable(
     location: text('location'),
     notes: text('notes'),
     bring: jsonb('bring').$type<BringItem[]>().notNull().default([]),
+    reminders: jsonb('reminders').$type<number[]>().notNull().default([]), // minutes before start → Telegram
     rrule: text('rrule'), // e.g. FREQ=WEEKLY;BYDAY=SA — null = one-off
     exdates: jsonb('exdates').$type<string[]>().notNull().default([]), // ISO starts of skipped occurrences
     source: text('source').$type<'app' | 'google'>().notNull().default('app'),

@@ -1,0 +1,2 @@
+.reminders { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.reminders-label { display: inline-flex; align-items: center; gap: 6px; width: 100%; font-size: 0.8rem; font-weight: 700; color: var(--muted); }

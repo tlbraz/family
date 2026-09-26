@@ -262,7 +262,7 @@ function TelegramCard() {
   return (
     <section className="card google">
       <h2>Telegram</h2>
-      <p className="muted small">The morning, evening and Sunday messages go to:</p>
+      <p className="muted small">Reminders and the morning, evening and Sunday messages go to:</p>
       {status.recipients.length === 0 && <p className="small"><b>Nobody yet</b> — add yourself below.</p>}
       <ul className="tg-list">
         {status.recipients.map((r) => (

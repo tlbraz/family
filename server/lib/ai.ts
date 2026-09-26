@@ -43,8 +43,9 @@ export async function draftEvent(input: { text?: string; image?: ImageInput }, f
   let response;
   try {
     response = await client.messages.parse({
-      model: 'claude-opus-5',
-      max_tokens: 16000,
+      // Pulling one event out of a note or screenshot is simple extraction: the small model is plenty.
+      model: 'claude-haiku-4-5',
+      max_tokens: 4096,
       output_config: { format: zodOutputFormat(Draft) },
       messages: [{ role: 'user', content }],
     });
