@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { AppConfig, Health, Member, Occurrence } from '../../shared/types';
 import { api } from './api';
+import { useBack } from './back';
 import { dateKey } from './dates';
 import { Avatar, setFamily } from './components/Avatar';
 import { CalendarView } from './components/CalendarView';
@@ -21,6 +22,7 @@ export function App() {
   const [open, setOpen] = useState<Open>(null);
   const [signIn, setSignIn] = useState(false);
   const [refresh, setRefresh] = useState(0);
+  useBack(() => setTab('calendar'), tab !== 'calendar');
 
   const loadAll = useCallback(() => {
     api.config().then(setConfig).catch(() => setConfig({ me: null, features: { ai: false, google: false, telegram: false } }));

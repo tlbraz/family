@@ -1,8 +1,10 @@
 import { useEffect, type ReactNode } from 'react';
+import { useBack } from '../back';
 import { Icon } from './Icon';
 
 /** Bottom sheet on phones, centred dialog on wider screens. */
 export function Sheet({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
+  useBack(onClose);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
     document.addEventListener('keydown', onKey);
