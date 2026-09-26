@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Member, Occurrence } from '../../../shared/types';
 import { api } from '../api';
 import { addDays, dateKey, dayLabel, fromKey, monthName, onDay, startOfWeek, timeOf, weekdayShort } from '../dates';
@@ -103,6 +103,27 @@ export function CalendarView({ members, refreshKey, onOpen, onAdd, canEdit }: Pr
       setSelected(dateKey(sameMonth ? today : next));
     }
   }
+  // Swipe left/right on the calendar to move a week or a month. Ignored on the person chips
+  // (they scroll sideways themselves) and when the gesture is mostly vertical (scrolling).
+  const touch = useRef<{ x: number; y: number; t: number } | null>(null);
+  const [slide, setSlide] = useState<'' | 'from-left' | 'from-right'>('');
+  function onTouchStart(e: React.TouchEvent) {
+    const target = e.target as HTMLElement;
+    if (e.touches.length !== 1 || target.closest('.people')) return;
+    touch.current = { x: e.touches[0]!.clientX, y: e.touches[0]!.clientY, t: Date.now() };
+  }
+  function onTouchEnd(e: React.TouchEvent) {
+    const start = touch.current;
+    touch.current = null;
+    if (!start) return;
+    const dx = e.changedTouches[0]!.clientX - start.x;
+    const dy = e.changedTouches[0]!.clientY - start.y;
+    if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.5 || Date.now() - start.t > 800) return;
+    const dir = dx < 0 ? 1 : -1;
+    shift(dir);
+    setSlide(dir > 0 ? 'from-right' : 'from-left');
+  }
+
   function goToday() {
     setAnchor(new Date());
     setSelected(todayKey);
@@ -123,7 +144,7 @@ export function CalendarView({ members, refreshKey, onOpen, onAdd, canEdit }: Pr
   const dayProps = { visible, members, todayKey, today, canEdit, onOpen, onAdd };
 
   return (
-    <div className="calendar">
+    <div className="calendar" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
       <header className="cal-head">
         <div className="cal-title">
           <span className="eyebrow">{eyebrow}</span>
@@ -172,6 +193,7 @@ export function CalendarView({ members, refreshKey, onOpen, onAdd, canEdit }: Pr
         ))}
       </div>
 
+      <div key={dateKey(from)} className={`slide ${slide}`} onAnimationEnd={() => setSlide('')}>
       {mode === 'week' && (
         <div className="week-strip">
           {days.map((d) => {
@@ -212,6 +234,7 @@ export function CalendarView({ members, refreshKey, onOpen, onAdd, canEdit }: Pr
           <DayAgenda day={fromKey(selected)} {...dayProps} />
         </div>
       )}
+      </div>
     </div>
   );
 }

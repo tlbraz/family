@@ -307,3 +307,11 @@ legend { font-weight: 800; font-size: 0.8rem; text-transform: uppercase; letter-
   }
   .cell-more { font-size: 0.68rem; font-weight: 700; color: var(--muted); text-align: left; padding-left: 5px; }
 }
+
+/* Swipe between weeks/months */
+.calendar { touch-action: pan-y; }
+.slide.from-right { animation: from-right 0.22s ease-out; }
+.slide.from-left { animation: from-left 0.22s ease-out; }
+@keyframes from-right { from { transform: translateX(40px); opacity: 0.3; } }
+@keyframes from-left { from { transform: translateX(-40px); opacity: 0.3; } }
+@media (prefers-reduced-motion: reduce) { .slide.from-right, .slide.from-left { animation: none; } }
