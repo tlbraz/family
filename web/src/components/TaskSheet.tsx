@@ -1,7 +1,6 @@
 import { useState, type FormEvent } from 'react';
-import type { Member, Task } from '../../../shared/types';
+import type { Task } from '../../../shared/types';
 import { api } from '../api';
-import { Avatar } from './Avatar';
 import { Icon } from './Icon';
 import { Sheet } from './Sheet';
 import { VoiceButton } from './VoiceButton';
@@ -17,7 +16,6 @@ export function KindSwitch({ kind, onSwitch }: { kind: 'event' | 'task'; onSwitc
 }
 
 interface Props {
-  members: Member[];
   task: Task | null; // null = new
   day: string;
   onClose: () => void;
@@ -25,10 +23,9 @@ interface Props {
   onEvent?: () => void; // switch to adding an event instead
 }
 
-export function TaskSheet({ members, task, day, onClose, onSaved, onEvent }: Props) {
+export function TaskSheet({ task, day, onClose, onSaved, onEvent }: Props) {
   const [title, setTitle] = useState(task?.title ?? '');
   const [due, setDue] = useState(task?.due ?? day);
-  const [memberId, setMemberId] = useState<number | null>(task?.memberId ?? null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -39,7 +36,8 @@ export function TaskSheet({ members, task, day, onClose, onSaved, onEvent }: Pro
     setBusy(true);
     setError(null);
     try {
-      const input = { title: title.trim(), due, memberId };
+      // To-dos are for the whole family for now; an older one keeps whoever it was for.
+      const input = { title: title.trim(), due, memberId: task?.memberId ?? null };
       if (task) await api.updateTask(task.id, input);
       else await api.addTask(input);
       onSaved();
@@ -70,18 +68,6 @@ export function TaskSheet({ members, task, day, onClose, onSaved, onEvent }: Pro
           <input id="task-title" className="title-input" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Sign the permission slip…" aria-label="What needs doing" maxLength={120} autoFocus={!task} />
           <VoiceButton onText={(t) => setTitle(t.slice(0, 120))} onDone={(t) => setTitle(t.slice(0, 120))} onError={setError} />
         </div>
-
-        <fieldset>
-          <legend>For</legend>
-          <div className="who">
-            {members.map((m) => (
-              <button type="button" key={m.id} className={`who-btn ${memberId === m.id ? 'on' : ''}`} style={{ '--c': m.color } as React.CSSProperties} onClick={() => setMemberId(memberId === m.id ? null : m.id)} aria-pressed={memberId === m.id}>
-                <Avatar member={m} size={30} />
-                {m.name}
-              </button>
-            ))}
-          </div>
-        </fieldset>
 
         <fieldset>
           <legend>Due by</legend>

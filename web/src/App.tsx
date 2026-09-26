@@ -14,7 +14,7 @@ import { SignIn } from './components/SignIn';
 import { TaskSheet } from './components/TaskSheet';
 
 type Tab = 'calendar' | 'notes' | 'family';
-type Open = { kind: 'event'; occurrence: Occurrence | null; day: string; shared?: Shared } | { kind: 'task'; task: Task | null; day: string } | null;
+type Open = { kind: 'event'; occurrence: Occurrence | null; day: string; shared?: Shared; fromDay?: boolean } | { kind: 'task'; task: Task | null; day: string; fromDay?: boolean } | null;
 
 export function App() {
   const [tab, setTab] = useState<Tab>('calendar');
@@ -80,7 +80,7 @@ export function App() {
             canEdit={canEdit}
             onOpen={(occurrence) => setOpen({ kind: 'event', occurrence, day: dateKey(new Date(occurrence.start)) })}
             onOpenTask={(task) => setOpen({ kind: 'task', task, day: task.due })}
-            onAdd={(day) => setOpen({ kind: 'event', occurrence: null, day })}
+            onAdd={(day) => setOpen({ kind: 'event', occurrence: null, day, fromDay: true })}
           />
         )}
         {tab === 'notes' && (
@@ -108,10 +108,16 @@ export function App() {
       </main>
 
       {tab === 'calendar' && canEdit && (
-        <button className="fab" onClick={() => setOpen({ kind: 'event', occurrence: null, day: dateKey(new Date()) })}>
-          <Icon name="plus" size={20} stroke={2.5} />
-          Add
-        </button>
+        <div className="fabs">
+          <button className="fab" onClick={() => setOpen({ kind: 'task', task: null, day: dateKey(new Date()) })}>
+            <Icon name="plus" size={20} stroke={2.5} />
+            To-do
+          </button>
+          <button className="fab" onClick={() => setOpen({ kind: 'event', occurrence: null, day: dateKey(new Date()) })}>
+            <Icon name="plus" size={20} stroke={2.5} />
+            Event
+          </button>
+        </div>
       )}
 
       <nav className="tabs" aria-label="Sections">
@@ -131,11 +137,10 @@ export function App() {
 
       {open?.kind === 'task' && (
         <TaskSheet
-          members={members}
           task={open.task}
           day={open.day}
           onClose={() => setOpen(null)}
-          onEvent={open.task ? undefined : () => setOpen({ kind: 'event', occurrence: null, day: open.day })}
+          onEvent={open.fromDay ? () => setOpen({ kind: 'event', occurrence: null, day: open.day, fromDay: true }) : undefined}
           onSaved={() => {
             setOpen(null);
             setRefresh((r) => r + 1);
@@ -151,7 +156,7 @@ export function App() {
           day={open.day}
           shared={open.shared}
           onClose={() => setOpen(null)}
-          onTodo={open.occurrence ? undefined : () => setOpen({ kind: 'task', task: null, day: open.day })}
+          onTodo={open.fromDay ? () => setOpen({ kind: 'task', task: null, day: open.day, fromDay: true }) : undefined}
           onSaved={() => {
             setOpen(null);
             setRefresh((r) => r + 1);

@@ -124,7 +124,7 @@ export function CalendarView({ members, refreshKey, onOpen, onOpenTask, onAdd, c
     (o) => who === null || o.kind === 'holiday' || o.kind === 'school' || o.participants.includes(who),
   );
   const todayKey = dateKey(today);
-  const myTasks = tasks.filter((t) => who === null || t.memberId === who);
+  const myTasks = tasks.filter((t) => who === null || t.memberId === null || t.memberId === who);
   const visibleTasks = showTasks ? myTasks : [];
   const hiddenTasks = showTasks ? 0 : myTasks.filter((t) => !t.done && t.due <= todayKey).length; // due today or late
   const toggleTask = (t: Task) => {
