@@ -18,7 +18,8 @@ Install it on a phone with *Share → Add to Home Screen*.
 - **Calendar**: week agenda or month grid (tap a day for its list), coloured by person, person filter, events with type, participants, driver,
   "bring" checklist, repeats (weekly / every 2 weeks / monthly / yearly, with an end date and skipped dates).
 - **To-dos** ("sign the permission slip by Friday"): a title, a due date and who it's for. Shown on the due day
-  (and on today once late); anyone can tick them off. Add one from the Add button → To-do.
+  (and on today once late); anyone can tick them off, and ticked ones drop off the next day. The "To-dos" switch
+  next to Week/Month hides them on that device. Add one from the Add button → To-do.
 - **Family**: members with colour, role and birthday (birthdays show up every year with the age).
 - **Portuguese holidays** (incl. Carnival and Almada's São João) and the **public school calendar**
   (`shared/school-calendar.ts`, update it each summer from the new Despacho).

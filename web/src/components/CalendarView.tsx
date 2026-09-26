@@ -16,6 +16,27 @@ interface Props {
 
 type Mode = 'week' | 'month';
 const MODE_KEY = 'family.calendarMode';
+const TASKS_KEY = 'family.showTasks';
+
+function readShowTasks(): boolean {
+  try {
+    return localStorage.getItem(TASKS_KEY) !== 'off';
+  } catch {
+    return true;
+  }
+}
+
+/**
+ * The to-dos listed on day `key`: on their due day, except that open ones past their day move to
+ * today. Ticked ones stay (crossed out) until the end of the day they were ticked, then drop off.
+ */
+function tasksOn(tasks: Task[], key: string, todayKey: string): Task[] {
+  if (key < todayKey) return [];
+  return tasks.filter((t) => {
+    if (t.done && (!t.doneAt || dateKey(new Date(t.doneAt)) !== todayKey)) return false;
+    return key === todayKey ? t.due <= key : t.due === key;
+  });
+}
 
 function readMode(): Mode {
   try {
@@ -36,7 +57,17 @@ export function CalendarView({ members, refreshKey, onOpen, onOpenTask, onAdd, c
   const [items, setItems] = useState<Occurrence[] | null>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [who, setWho] = useState<number | null>(null);
+  const [showTasks, setShowTasksState] = useState(readShowTasks);
   const [error, setError] = useState<string | null>(null);
+
+  const setShowTasks = (on: boolean) => {
+    setShowTasksState(on);
+    try {
+      localStorage.setItem(TASKS_KEY, on ? 'on' : 'off');
+    } catch {
+      /* private mode: fine */
+    }
+  };
 
   const setMode = (m: Mode) => {
     setModeState(m);
@@ -91,9 +122,11 @@ export function CalendarView({ members, refreshKey, onOpen, onOpenTask, onAdd, c
     (o) => who === null || o.kind === 'holiday' || o.kind === 'school' || o.participants.includes(who),
   );
   const todayKey = dateKey(today);
-  const visibleTasks = tasks.filter((t) => who === null || t.memberId === who);
+  const myTasks = tasks.filter((t) => who === null || t.memberId === who);
+  const visibleTasks = showTasks ? myTasks : [];
+  const hiddenTasks = showTasks ? 0 : myTasks.filter((t) => !t.done && t.due <= todayKey).length; // due today or late
   const toggleTask = (t: Task) => {
-    setTasks((list) => list.map((x) => (x.id === t.id ? { ...x, done: !x.done } : x)));
+    setTasks((list) => list.map((x) => (x.id === t.id ? { ...x, done: !x.done, doneAt: x.done ? null : new Date().toISOString() } : x)));
     api.toggleTask(t.id).catch((e: Error) => {
       setError(e.message);
       load();
@@ -151,7 +184,7 @@ export function CalendarView({ members, refreshKey, onOpen, onOpenTask, onAdd, c
     eyebrow = current ? 'This week' : `Week of ${first.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}`;
   }
 
-  const dayProps = { visible, tasks: visibleTasks, members, todayKey, today, canEdit, onOpen, onOpenTask, onToggleTask: toggleTask, onAdd };
+  const dayProps = { visible, tasks: visibleTasks, hiddenTasks, onShowTasks: () => setShowTasks(true), members, todayKey, today, canEdit, onOpen, onOpenTask, onToggleTask: toggleTask, onAdd };
 
   return (
     <div className="calendar" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
@@ -183,6 +216,10 @@ export function CalendarView({ members, refreshKey, onOpen, onOpenTask, onAdd, c
             Today
           </button>
         )}
+        <button className={`tasks-toggle ${showTasks ? 'on' : ''}`} onClick={() => setShowTasks(!showTasks)} aria-pressed={showTasks} title={showTasks ? 'Hide to-dos' : 'Show to-dos'}>
+          <span className="box">{showTasks && <Icon name="check" size={12} stroke={3.5} />}</span>
+          To-dos
+        </button>
       </div>
 
       <div className={`people ${who !== null ? 'filtered' : ''}`} role="group" aria-label="Show events for">
@@ -211,7 +248,7 @@ export function CalendarView({ members, refreshKey, onOpen, onOpenTask, onAdd, c
             const key = dateKey(d);
             const dots = visible.filter((o) => isThing(o) && onDay(o.start, o.end, key));
             const off = visible.some((o) => isOff(o) && onDay(o.start, o.end, key));
-            const due = visibleTasks.some((t) => !t.done && t.due === key);
+            const due = tasksOn(visibleTasks, key, todayKey).some((t) => !t.done);
             return (
               <a key={key} href={`#d-${key}`} className={`day-pill ${key === todayKey ? 'today' : ''} ${off ? 'off' : ''}`}>
                 <span className="dow">{weekdayShort(d)}</span>
@@ -277,7 +314,7 @@ function MonthGrid({ days, month, visible, tasks, members, todayKey, selected, o
           const here = visible.filter((o) => onDay(o.start, o.end, key));
           const things = here.filter(isThing);
           const off = here.find(isOff);
-          const due = tasks.filter((t) => !t.done && t.due === key);
+          const due = tasksOn(tasks, key, todayKey).filter((t) => !t.done);
           const cls = ['cell', d.getMonth() !== month && 'other', key === todayKey && 'today', key === selected && 'selected', off && 'off'].filter(Boolean).join(' ');
           return (
             <button
@@ -316,10 +353,12 @@ function MonthGrid({ days, month, visible, tasks, members, todayKey, selected, o
   );
 }
 
-function DayAgenda({ day, visible, tasks, members, todayKey, today, canEdit, onOpen, onOpenTask, onToggleTask, onAdd, hidePastEmpty }: {
+function DayAgenda({ day, visible, tasks, hiddenTasks, onShowTasks, members, todayKey, today, canEdit, onOpen, onOpenTask, onToggleTask, onAdd, hidePastEmpty }: {
   day: Date;
   visible: Occurrence[];
   tasks: Task[];
+  hiddenTasks: number;
+  onShowTasks: () => void;
   onOpenTask: (t: Task) => void;
   onToggleTask: (t: Task) => void;
   members: Member[];
@@ -334,8 +373,8 @@ function DayAgenda({ day, visible, tasks, members, todayKey, today, canEdit, onO
   const dayItems = visible.filter((o) => onDay(o.start, o.end, key));
   const banners = dayItems.filter((o) => o.kind === 'holiday' || o.kind === 'school');
   const things = dayItems.filter(isThing);
-  // To-dos due this day. Ones still open after their day move to today (as late).
-  const due = tasks.filter((t) => (key === todayKey ? t.due <= key && (t.due === key || !t.done) : t.due === key && (key > todayKey || t.done)));
+  const due = tasksOn(tasks, key, todayKey);
+  const hidden = key === todayKey ? hiddenTasks : 0;
   const past = key < todayKey;
   if (hidePastEmpty && past && things.length === 0 && banners.length === 0 && due.length === 0) return null; // skip empty days already gone
   return (
@@ -355,6 +394,12 @@ function DayAgenda({ day, visible, tasks, members, todayKey, today, canEdit, onO
         </div>
       ))}
       {things.length === 0 && banners.length === 0 && due.length === 0 && <p className="nothing">Nothing planned</p>}
+      {hidden > 0 && (
+        <button className="tasks-hidden" onClick={onShowTasks}>
+          <Icon name="check" size={14} stroke={2.5} />
+          {hidden} to-do{hidden > 1 ? 's' : ''} hidden · show
+        </button>
+      )}
       {due.map((t) => (
         <TaskRow key={t.id} t={t} members={members} dayKey={key} canEdit={canEdit} onOpen={() => onOpenTask(t)} onToggle={() => onToggleTask(t)} />
       ))}

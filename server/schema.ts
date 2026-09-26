@@ -91,6 +91,7 @@ export const tasks = pgTable(
     due: date('due').notNull(), // YYYY-MM-DD
     memberId: integer('member_id').references(() => members.id, { onDelete: 'set null' }), // who it's for; null = the family
     done: boolean('done').notNull().default(false),
+    doneAt: timestamp('done_at', { withTimezone: true }), // when it was ticked; the calendar hides it the day after
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => [index('tasks_due_idx').on(t.due)],

@@ -1,4 +1,4 @@
-import { and, asc, eq, gte, lt, not, or } from 'drizzle-orm';
+import { and, asc, eq, gte, lt, not, or, sql } from 'drizzle-orm';
 import { Hono } from 'hono';
 import type { Task } from '../../shared/types';
 import type { Db } from '../db';
@@ -42,7 +42,7 @@ export function taskRoutes(db: Db) {
   r.post('/:id/done', async (c) => {
     const id = Number(c.req.param('id'));
     if (!Number.isInteger(id)) return c.json({ error: 'Bad id' }, 400);
-    const [row] = await db.update(tasks).set({ done: not(tasks.done) }).where(eq(tasks.id, id)).returning();
+    const [row] = await db.update(tasks).set({ done: not(tasks.done), doneAt: sql`case when ${tasks.done} then null else now() end` }).where(eq(tasks.id, id)).returning();
     return row ? c.json(toTask(row)) : c.json({ error: 'Not found' }, 404);
   });
 
@@ -57,5 +57,5 @@ export function taskRoutes(db: Db) {
 }
 
 export function toTask(row: typeof tasks.$inferSelect): Task {
-  return { id: row.id, title: row.title, due: row.due, memberId: row.memberId, done: row.done };
+  return { id: row.id, title: row.title, due: row.due, memberId: row.memberId, done: row.done, doneAt: row.doneAt?.toISOString() ?? null };
 }

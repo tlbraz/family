@@ -86,6 +86,7 @@ export interface Task {
   due: string; // YYYY-MM-DD
   memberId: number | null; // who it's for; null = the family
   done: boolean;
+  doneAt: string | null; // ISO
 }
 
 export type TaskInput = Pick<Task, 'title' | 'due' | 'memberId'>;
