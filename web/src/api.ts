@@ -1,4 +1,4 @@
-import type { AppConfig, CalendarEvent, EventDraft, EventInput, Health, Member, Note, Occurrence } from '../../shared/types';
+import type { AppConfig, CalendarEvent, EventDraft, EventInput, Health, Member, MemberInput, Note, Occurrence } from '../../shared/types';
 
 export interface GoogleStatus {
   connected: boolean;
@@ -30,8 +30,10 @@ export const api = {
   logout: () => request('/auth/logout', json('POST')),
 
   members: () => request<Member[]>('/members'),
-  addMember: (m: Omit<Member, 'id' | 'hasPassword'>) => request<Member>('/members', json('POST', m)),
-  updateMember: (id: number, m: Omit<Member, 'id' | 'hasPassword'>) => request<Member>(`/members/${id}`, json('PATCH', m)),
+  addMember: (m: MemberInput) => request<Member>('/members', json('POST', m)),
+  updateMember: (id: number, m: MemberInput) => request<Member>(`/members/${id}`, json('PATCH', m)),
+  setPhoto: (id: number, photo: string) => request<Member>(`/members/${id}/photo`, json('PUT', { photo })),
+  removePhoto: (id: number) => request<Member>(`/members/${id}/photo`, json('DELETE')),
   deleteMember: (id: number) => request<void>(`/members/${id}`, json('DELETE')),
 
   calendar: (from: string, to: string) => request<Occurrence[]>(`/calendar?from=${from}&to=${to}`),

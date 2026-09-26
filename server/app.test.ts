@@ -32,6 +32,11 @@ describe('permissions', () => {
     delete process.env.OPS_TOKEN;
   });
 
+  it('only lets signed-in parents change a picture', async () => {
+    const res = await up().request('/api/members/1/photo', { method: 'PUT', body: JSON.stringify({ photo: 'data:image/jpeg;base64,AAAA' }), headers: { 'content-type': 'application/json' } });
+    expect(res.status).toBe(401);
+  });
+
   it('rejects an empty note', async () => {
     const res = await up().request('/api/notes', {
       method: 'POST',

@@ -3,8 +3,8 @@ import { Hono } from 'hono';
 import type { Member } from '../../shared/types';
 import type { Db } from '../db';
 import { type AuthEnv, type MemberRow, requireParent } from '../lib/auth';
-import { members } from '../schema';
-import { MemberInputSchema, problem } from './validation';
+import { memberPhotos, members } from '../schema';
+import { MemberInputSchema, PhotoSchema, problem } from './validation';
 
 export const toMember = (m: MemberRow): Member => ({
   id: m.id,
@@ -14,6 +14,7 @@ export const toMember = (m: MemberRow): Member => ({
   birthday: m.birthday,
   googleEmail: m.googleEmail,
   hasPassword: !!m.passwordHash,
+  photo: m.photoAt ? `/api/members/${m.id}/photo?v=${m.photoAt.getTime()}` : null,
 });
 
 export function memberRoutes(db: Db, onChange: () => void) {
@@ -38,6 +39,35 @@ export function memberRoutes(db: Db, onChange: () => void) {
     const [row] = await db.update(members).set(parsed.data).where(eq(members.id, Number(c.req.param('id')))).returning();
     if (!row) return c.json({ error: 'Not found' }, 404);
     onChange();
+    return c.json(toMember(row));
+  });
+
+  // The URL carries a version (?v=), so the picture can be cached for good.
+  r.get('/:id/photo', async (c) => {
+    const [row] = await db.select().from(memberPhotos).where(eq(memberPhotos.memberId, Number(c.req.param('id'))));
+    if (!row) return c.json({ error: 'Not found' }, 404);
+    return c.body(Buffer.from(row.data, 'base64'), 200, { 'content-type': row.mime, 'cache-control': 'public, max-age=31536000, immutable' });
+  });
+
+  r.put('/:id/photo', requireParent, async (c) => {
+    const parsed = PhotoSchema.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json({ error: problem(parsed.error) }, 400);
+    const [, mime, data] = parsed.data.photo.match(/^data:([^;]+);base64,(.+)$/)!;
+    const id = Number(c.req.param('id'));
+    const [row] = await db.update(members).set({ photoAt: new Date() }).where(eq(members.id, id)).returning();
+    if (!row) return c.json({ error: 'Not found' }, 404);
+    await db
+      .insert(memberPhotos)
+      .values({ memberId: id, mime: mime!, data: data! })
+      .onConflictDoUpdate({ target: memberPhotos.memberId, set: { mime: mime!, data: data! } });
+    return c.json(toMember(row));
+  });
+
+  r.delete('/:id/photo', requireParent, async (c) => {
+    const id = Number(c.req.param('id'));
+    await db.delete(memberPhotos).where(eq(memberPhotos.memberId, id));
+    const [row] = await db.update(members).set({ photoAt: null }).where(eq(members.id, id)).returning();
+    if (!row) return c.json({ error: 'Not found' }, 404);
     return c.json(toMember(row));
   });
 

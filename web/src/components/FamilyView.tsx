@@ -65,12 +65,24 @@ export function FamilyView({ members, canEdit, googleOn, onChanged }: { members:
   );
 }
 
+// Crop to a centred square and shrink, so the upload is a few tens of KB.
+async function squarePhoto(file: File, size = 256): Promise<string> {
+  const img = await createImageBitmap(file);
+  const side = Math.min(img.width, img.height);
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = size;
+  canvas.getContext('2d')!.drawImage(img, (img.width - side) / 2, (img.height - side) / 2, side, side, 0, 0, size, size);
+  img.close();
+  return canvas.toDataURL('image/jpeg', 0.85);
+}
+
 function MemberSheet({ member, onClose, onSaved }: { member: Member | null; onClose: () => void; onSaved: () => void }) {
   const [name, setName] = useState(member?.name ?? '');
   const [role, setRole] = useState<Role>(member?.role ?? 'kid');
   const [color, setColor] = useState(member?.color ?? COLORS[5]!);
   const [birthday, setBirthday] = useState(member?.birthday ?? '');
   const [googleEmail, setGoogleEmail] = useState(member?.googleEmail ?? '');
+  const [photo, setPhoto] = useState<string | null>(member?.photo ?? null); // URL or a new data: URL
   const [error, setError] = useState<string | null>(null);
   const [confirm, setConfirm] = useState(false);
 
@@ -78,11 +90,22 @@ function MemberSheet({ member, onClose, onSaved }: { member: Member | null; onCl
     e.preventDefault();
     const body = { name: name.trim(), role, color, birthday: birthday || null, googleEmail: googleEmail.trim() || null };
     try {
-      if (member) await api.updateMember(member.id, body);
-      else await api.addMember(body);
+      const saved = member ? await api.updateMember(member.id, body) : await api.addMember(body);
+      if (photo?.startsWith('data:')) await api.setPhoto(saved.id, photo);
+      else if (!photo && member?.photo) await api.removePhoto(saved.id);
       onSaved();
     } catch (err) {
       setError((err as Error).message);
+    }
+  }
+
+  async function pick(file: File | undefined) {
+    if (!file) return;
+    try {
+      setPhoto(await squarePhoto(file));
+      setError(null);
+    } catch {
+      setError("Couldn't read that picture");
     }
   }
 
@@ -102,6 +125,18 @@ function MemberSheet({ member, onClose, onSaved }: { member: Member | null; onCl
           <span>Name</span>
           <input id="name" value={name} onChange={(e) => setName(e.target.value)} required maxLength={40} />
         </label>
+        <div className="photo-pick">
+          <Avatar member={{ name: name || '?', color, photo }} size={64} />
+          <label className="chip">
+            <Icon name="camera" size={16} /> {photo ? 'Change picture' : 'Add picture'}
+            <input type="file" accept="image/*" onChange={(e) => pick(e.target.files?.[0])} />
+          </label>
+          {photo && (
+            <button type="button" className="chip" onClick={() => setPhoto(null)}>
+              Remove picture
+            </button>
+          )}
+        </div>
         <div className="types" role="group" aria-label="Role">
           {(['parent', 'kid'] as const).map((r) => (
             <button type="button" key={r} className={`type ${role === r ? 'on' : ''}`} aria-pressed={role === r} onClick={() => setRole(r)}>

@@ -154,6 +154,7 @@ h1, h2, h3 { margin: 0; text-wrap: balance; }
 .bring-line { display: flex; align-items: center; gap: 6px; font-size: 0.8rem; font-weight: 700; background: var(--card); border-radius: 10px; padding: 6px 10px; }
 
 .avatar { border-radius: 50%; color: #fff; font-weight: 800; display: inline-flex; align-items: center; justify-content: center; flex: none; }
+img.avatar { object-fit: cover; }
 .stack { display: inline-flex; }
 .stack .avatar { box-shadow: 0 0 0 2px var(--card); }
 .stack .avatar + .avatar { margin-left: -8px; }
@@ -254,6 +255,9 @@ legend { font-weight: 800; font-size: 0.8rem; text-transform: uppercase; letter-
 .swatches { display: flex; gap: 8px; flex-wrap: wrap; }
 .swatch { width: 36px; height: 36px; border-radius: 18px; border: 3px solid transparent; }
 .swatch.on { border-color: var(--ink); }
+.photo-pick { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.photo-pick input { display: none; }
+.photo-pick label { cursor: pointer; }
 
 /* Fridge notes */
 .note-form { display: flex; gap: 8px; margin: 0 0 12px; flex-wrap: wrap; }

@@ -24,7 +24,10 @@ export interface Member {
   birthday: string | null; // YYYY-MM-DD
   googleEmail: string | null;
   hasPassword: boolean;
+  photo: string | null; // URL of the profile picture
 }
+
+export type MemberInput = Omit<Member, 'id' | 'hasPassword' | 'photo'>;
 
 export const EVENT_TYPES = ['medical', 'sports', 'school', 'party', 'family', 'work', 'holiday', 'other'] as const;
 export type EventType = (typeof EVENT_TYPES)[number];

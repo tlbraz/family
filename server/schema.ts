@@ -18,7 +18,17 @@ export const members = pgTable('members', {
   googleEmail: text('google_email'),
   passwordHash: text('password_hash'),
   sort: integer('sort').notNull().default(0),
+  photoAt: timestamp('photo_at', { withTimezone: true }), // when the photo last changed; null = no photo
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+});
+
+// Profile pictures, kept apart so the member rows loaded on every request stay small.
+export const memberPhotos = pgTable('member_photos', {
+  memberId: integer('member_id')
+    .primaryKey()
+    .references(() => members.id, { onDelete: 'cascade' }),
+  mime: text('mime').notNull(),
+  data: text('data').notNull(), // base64
 });
 
 export const sessions = pgTable('sessions', {

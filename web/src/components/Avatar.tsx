@@ -9,7 +9,8 @@ export function initials(name: string): string {
   return clash ? first + name.slice(1, 2).toLowerCase() : first;
 }
 
-export function Avatar({ member, size = 28 }: { member: Member; size?: number }) {
+export function Avatar({ member, size = 28 }: { member: Pick<Member, 'name' | 'color' | 'photo'>; size?: number }) {
+  if (member.photo) return <img className="avatar" src={member.photo} alt={member.name} title={member.name} style={{ background: member.color, width: size, height: size }} />;
   const text = initials(member.name);
   return (
     <span className="avatar" style={{ background: member.color, width: size, height: size, fontSize: size * (text.length > 1 ? 0.36 : 0.42) }} title={member.name}>

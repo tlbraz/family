@@ -34,6 +34,14 @@ export const MemberInputSchema = z.object({
   googleEmail: z.string().trim().email().nullable(),
 });
 
+// A small picture, already cropped and shrunk by the browser.
+export const PhotoSchema = z.object({
+  photo: z
+    .string()
+    .max(400_000, 'The picture is too big')
+    .regex(/^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/]+=*$/, 'Not a picture'),
+});
+
 export const RangeSchema = z.object({ from: date, to: date });
 
 /** First validation message, phrased for people. */
