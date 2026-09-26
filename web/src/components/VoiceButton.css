@@ -1,0 +1,8 @@
+.voice { display: inline-flex; align-items: center; gap: 4px; flex: none; }
+.voice .mic { width: 40px; height: 40px; border-radius: 20px; border: 0; background: var(--soft); color: var(--ink); display: inline-flex; align-items: center; justify-content: center; }
+.voice .mic.listening { background: var(--danger); color: #fff; animation: pulse 1.2s ease-in-out infinite; }
+.voice .lang { border: 0; background: none; color: var(--muted); font-weight: 800; font-size: 0.72rem; padding: 4px; min-width: 28px; }
+@keyframes pulse { 50% { box-shadow: 0 0 0 6px color-mix(in srgb, var(--danger) 25%, transparent); } }
+@media (prefers-reduced-motion: reduce) { .voice .mic.listening { animation: none; } }
+.title-row { display: flex; align-items: center; gap: 8px; }
+.title-row .title-input { flex: 1; min-width: 0; }
