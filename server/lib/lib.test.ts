@@ -49,10 +49,10 @@ describe('recurrence', () => {
 describe('to-dos in the evening message', () => {
   const who = new Map([[3, 'Gonçalo']]);
   const task = (due: string, memberId: number | null = 3) => ({ id: 1, title: 'Sign the slip', due, memberId, done: false, doneAt: null });
-  it('says when each one is due, from the evening before 2026-10-02 (a Friday)', () => {
-    expect(taskLine(task('2026-10-02'), '2026-10-02', who)).toBe('☐ Sign the slip — Gonçalo · due tomorrow');
-    expect(taskLine(task('2026-10-01'), '2026-10-02', who)).toBe('☐ Sign the slip — Gonçalo · <b>due today</b>');
-    expect(taskLine(task('2026-09-29', null), '2026-10-02', who)).toBe('☐ Sign the slip · <b>overdue</b> (was Tuesday)');
-    expect(taskLine(task('2026-10-04'), '2026-10-02', who)).toBe('☐ Sign the slip — Gonçalo · due Sunday');
+  it('says when each one is due, as read on Thursday 2026-10-01', () => {
+    expect(taskLine(task('2026-10-02'), '2026-10-01', who)).toBe('☐ Sign the slip — Gonçalo · due tomorrow');
+    expect(taskLine(task('2026-10-01'), '2026-10-01', who)).toBe('☐ Sign the slip — Gonçalo · <b>due today</b>');
+    expect(taskLine(task('2026-09-29', null), '2026-10-01', who)).toBe('☐ Sign the slip · <b>overdue</b> (was Tuesday)');
+    expect(taskLine(task('2026-10-04'), '2026-10-01', who)).toBe('☐ Sign the slip — Gonçalo · due Sunday');
   });
 });

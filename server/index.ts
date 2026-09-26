@@ -5,6 +5,7 @@ import { createApp } from './app';
 import { runDigests } from './lib/digest';
 import { deleteGoogleEvent, googleEnabled, loadGoogleKey, pushEvent, shareWithParents, syncRound } from './lib/google';
 import { runReminders } from './lib/reminders';
+import { loadTelegramChats } from './lib/telegram';
 import { seed } from './seed';
 
 const url = process.env.DATABASE_URL;
@@ -14,6 +15,7 @@ const { db, close } = connect(url);
 await runMigrations(db);
 await seed(db);
 await loadGoogleKey(db);
+await loadTelegramChats(db);
 
 const logErr = (what: string) => (e: Error) => console.error(`${what}:`, e.message);
 const app = createApp(db, {

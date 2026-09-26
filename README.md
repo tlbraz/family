@@ -24,9 +24,12 @@ Install it on a phone with *Share → Add to Home Screen*.
 - **Portuguese holidays** (incl. Carnival and Almada's São João) and the **public school calendar**
   (`shared/school-calendar.ts`, update it each summer from the new Despacho).
 - **Parents sign in** (first sign-in sets the password); everyone else can look and tick "bring" items and to-dos.
-- **Telegram** (`TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`): 20:00 "tomorrow" message with what to bring
-  and open to-dos (late, or due within the next three days),
-  Sunday 19:00 week ahead. `POST /api/digest?kind=tomorrow|week` sends one now.
+- **Telegram** (`TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`): 07:30 "today" message, 20:00 "tomorrow" message with
+  what to bring, both with open to-dos (late, or due within three days), Sunday 19:00 week ahead (day messages only
+  when something is on). `POST /api/digest?kind=today|tomorrow|week` sends one now.
+  Use a bot just for the family (the app reads its incoming messages to find who tapped Start). Every message goes to
+  each chat in `TELEGRAM_CHAT_ID` (optional, comma-separated) plus the people added on the Family page's Telegram card
+  (they open the bot and tap Start, then a parent taps Add).
 - **Photo or sentence → event** (`ANTHROPIC_API_KEY`): Claude fills the form; the parent confirms.
 - **Google Calendar** (key pasted on the Family page, or `GOOGLE_SERVICE_ACCOUNT`): a shared "Family" calendar owned by a service account,
   shared with each parent's Google address; app events are pushed, events added in Google are pulled in.

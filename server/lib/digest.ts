@@ -36,31 +36,38 @@ async function openTasks(db: Db, to: string): Promise<Task[]> {
   return rows.map(toTask);
 }
 
-/** "☐ Sign the permission slip — Gonçalo · due tomorrow", relative to the evening before `tomorrow`. */
-export function taskLine(t: Task, tomorrow: string, who: Map<number, string>): string {
+/** "☐ Sign the permission slip — Gonçalo · due tomorrow", as read on `today` (YYYY-MM-DD). */
+export function taskLine(t: Task, today: string, who: Map<number, string>): string {
   const name = t.memberId !== null ? who.get(t.memberId) : undefined;
   const weekday = parseDateKey(t.due).toLocaleDateString('en-GB', { weekday: 'long' });
-  const today = dateKey(addDays(parseDateKey(tomorrow), -1));
+  const tomorrow = dateKey(addDays(parseDateKey(today), 1));
   const when =
     t.due < today ? `<b>overdue</b> (was ${weekday})` : t.due === today ? '<b>due today</b>' : t.due === tomorrow ? 'due tomorrow' : `due ${weekday}`;
   return `☐ ${esc(t.title)}${name ? ` — ${esc(name)}` : ''} · ${when}`;
 }
 
-/** The evening message: what happens tomorrow and what to pack. Null when nothing is on. */
-export async function tomorrowDigest(db: Db, now = new Date()): Promise<string | null> {
-  const day = addDays(new Date(now.getFullYear(), now.getMonth(), now.getDate()), 1);
+/** One day's events (plus open to-dos) as a message sent on `today`, or null when there's nothing. */
+async function dayDigest(db: Db, day: Date, label: string, today: Date): Promise<string | null> {
   const items = await listOccurrences(db, dateKey(day), dateKey(addDays(day, 1)));
   const real = items.filter((o) => o.kind === 'event' || o.kind === 'birthday');
   // To-dos still open that are late or due in the next few days, so there's time to act.
-  const todo = await openTasks(db, dateKey(addDays(day, 3)));
+  const todo = await openTasks(db, dateKey(addDays(today, 4)));
   if (!real.length && !todo.length) return null;
   const who = await names(db);
   const other = items.filter((o) => o.kind === 'holiday' || o.kind === 'school').map((o) => esc(o.title));
-  const lines = [`<b>Tomorrow · ${dayName(day)}</b>`, ...other.map((t) => `ℹ️ ${t}`), ...real.map((o) => line(o, who))];
+  const lines = [`<b>${label} · ${dayName(day)}</b>`, ...other.map((t) => `ℹ️ ${t}`), ...real.map((o) => line(o, who))];
   if (!real.length) lines.push('Nothing planned.');
-  if (todo.length) lines.push('', '<b>To do</b>', ...todo.map((t) => taskLine(t, dateKey(day), who)));
+  if (todo.length) lines.push('', '<b>To do</b>', ...todo.map((t) => taskLine(t, dateKey(today), who)));
   return lines.join('\n');
 }
+
+const startOfDay = (now: Date) => new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+/** The morning message: what's on today and open to-dos. Null when there's nothing. */
+export const todayDigest = (db: Db, now = new Date()) => dayDigest(db, startOfDay(now), 'Good morning ☀️ Today', startOfDay(now));
+
+/** The evening message: what happens tomorrow, what to pack, open to-dos. Null when there's nothing. */
+export const tomorrowDigest = (db: Db, now = new Date()) => dayDigest(db, addDays(startOfDay(now), 1), 'Tomorrow', startOfDay(now));
 
 /** The Sunday message: the coming week, day by day. */
 export async function weekDigest(db: Db, now = new Date()): Promise<string> {
@@ -95,10 +102,18 @@ async function onceFor(db: Db, key: string, send: () => Promise<boolean>) {
   if (await send()) await db.insert(settings).values({ key, value: new Date().toISOString() }).onConflictDoNothing();
 }
 
-/** Called every minute: 20:00 → tomorrow; Sunday 19:00 → the week ahead. */
+/** Called every minute: 07:30 → today; 20:00 → tomorrow; Sunday 19:00 → the week ahead. */
 export async function runDigests(db: Db, now = new Date()) {
   if (!telegramEnabled()) return;
   const today = dateKey(now);
+  const minutes = now.getHours() * 60 + now.getMinutes();
+  // Only in the morning: a restart later in the day shouldn't send a stale "good morning".
+  if (minutes >= 7 * 60 + 30 && now.getHours() < 11) {
+    await onceFor(db, `digest:today:${today}`, async () => {
+      const msg = await todayDigest(db, now);
+      return msg ? sendTelegram(msg) : true;
+    });
+  }
   if (now.getHours() >= 20) {
     await onceFor(db, `digest:tomorrow:${today}`, async () => {
       const msg = await tomorrowDigest(db, now);
