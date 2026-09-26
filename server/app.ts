@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { asc, sql } from 'drizzle-orm';
 import type { AppConfig, Health } from '../shared/types';
 import type { Db } from './db';
-import { draftEvent, aiEnabled, type ImageInput } from './lib/ai';
+import { AiError, draftEvent, aiEnabled, type ImageInput } from './lib/ai';
 import { type AuthEnv, loadMember, requireParent } from './lib/auth';
 import { tomorrowDigest, weekDigest } from './lib/digest';
 import { googleEnabled, googleStatus, saveGoogleKey, syncRound } from './lib/google';
@@ -74,8 +74,8 @@ export function createApp(db: Db, hooks: AppHooks = noop) {
     try {
       return c.json(await draftEvent({ text: text || undefined, image }, family));
     } catch (e) {
-      console.error('ai draft:', (e as Error).message);
-      return c.json({ error: (e as Error).message.startsWith("Couldn't") ? (e as Error).message : 'Reading that failed. Try again in a moment.' }, 502);
+      if (!(e instanceof AiError)) console.error('ai draft:', (e as Error).message);
+      return c.json({ error: e instanceof AiError ? e.message : 'Reading that failed. Try again in a moment.' }, 502);
     }
   });
 

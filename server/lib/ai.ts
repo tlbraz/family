@@ -40,14 +40,35 @@ export async function draftEvent(input: { text?: string; image?: ImageInput }, f
     ].filter(Boolean).join('\n'),
   });
 
-  const response = await client.messages.parse({
-    model: 'claude-opus-5',
-    max_tokens: 16000,
-    output_config: { format: zodOutputFormat(Draft) },
-    messages: [{ role: 'user', content }],
-  });
+  let response;
+  try {
+    response = await client.messages.parse({
+      model: 'claude-opus-5',
+      max_tokens: 16000,
+      output_config: { format: zodOutputFormat(Draft) },
+      messages: [{ role: 'user', content }],
+    });
+  } catch (e) {
+    throw new AiError(friendly(e));
+  }
   if (response.stop_reason === 'refusal' || !response.parsed_output) {
-    throw new Error("Couldn't read an event from that. Try a clearer photo or type it in.");
+    throw new AiError("Couldn't read an event from that. Try a clearer photo or type it in.");
   }
   return response.parsed_output;
+}
+
+/** An error whose message can be shown to the parent as is. */
+export class AiError extends Error {}
+
+function friendly(e: unknown): string {
+  if (e instanceof Anthropic.BadRequestError && /credit balance/i.test(e.message)) {
+    return 'No Claude credit left: add credit at console.anthropic.com (Plans & Billing), then try again.';
+  }
+  if (e instanceof Anthropic.AuthenticationError || e instanceof Anthropic.PermissionDeniedError) {
+    return 'The Claude API key was refused: it may have been revoked. Set a new one on ops.';
+  }
+  if (e instanceof Anthropic.RateLimitError) return 'Claude is busy right now. Try again in a minute.';
+  if (e instanceof Anthropic.APIConnectionError) return "Couldn't reach Claude. Check the internet connection and try again.";
+  console.error('ai draft:', e instanceof Error ? e.message : e);
+  return 'Reading that failed. Try again in a moment.';
 }
