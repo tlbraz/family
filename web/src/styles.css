@@ -240,6 +240,9 @@ legend { font-weight: 800; font-size: 0.8rem; text-transform: uppercase; letter-
 .detail { display: flex; flex-direction: column; gap: 14px; }
 .detail-when { margin: 0; font-weight: 800; font-size: 1.05rem; }
 .detail-meta { display: flex; flex-wrap: wrap; gap: 8px 16px; color: var(--muted); font-weight: 700; }
+.directions { display: flex; flex-direction: column; gap: 8px; color: var(--muted); font-weight: 700; }
+.directions-links { display: flex; gap: 8px; flex-wrap: wrap; }
+.directions .chip { color: var(--ink); text-decoration: none; }
 .detail-notes { margin: 0; white-space: pre-wrap; background: var(--card); border-radius: 14px; padding: 12px 14px; }
 .bring { display: flex; flex-direction: column; gap: 6px; }
 .bring h3 { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }

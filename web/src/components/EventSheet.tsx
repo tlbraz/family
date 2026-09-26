@@ -219,8 +219,16 @@ export function EventSheet({ members, canEdit, aiEnabled, occurrence, day, onClo
           <div className="detail-meta">
             <span className="meta-item"><Icon name={occurrence.type} />{TYPE_LABEL[occurrence.type]}</span>
             {occurrence.repeats && <span className="meta-item"><Icon name="repeat" />Repeats</span>}
-            {occurrence.location && <span className="meta-item"><Icon name="pin" />{occurrence.location}</span>}
           </div>
+          {occurrence.location && (
+            <div className="directions">
+              <span className="meta-item"><Icon name="pin" />{occurrence.location}</span>
+              <span className="directions-links">
+                <a className="chip" href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(occurrence.location)}`} target="_blank" rel="noreferrer">Google Maps</a>
+                <a className="chip" href={`https://waze.com/ul?q=${encodeURIComponent(occurrence.location)}&navigate=yes`} target="_blank" rel="noreferrer">Waze</a>
+              </span>
+            </div>
+          )}
           {occurrence.participants.length > 0 && <AvatarStack ids={occurrence.participants} members={members} size={32} />}
           {event?.notes && <p className="detail-notes">{event.notes}</p>}
           {(event?.bring.length ?? 0) > 0 && (
