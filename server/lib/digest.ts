@@ -6,6 +6,8 @@ import { listOccurrences } from './calendar';
 import { esc, sendTelegram, telegramEnabled } from './telegram';
 import { addDays, dateKey } from './time';
 
+const PUBLIC_URL = process.env.PUBLIC_URL || 'https://family.home.tbraz.pt';
+
 const TYPE_EMOJI: Record<string, string> = {
   medical: '🩺', sports: '⚽', school: '🎒', party: '🎉', family: '🏠', work: '💼', holiday: '🌴', other: '📌', birthday: '🎂',
 };
@@ -58,7 +60,7 @@ export async function weekDigest(db: Db, now = new Date()): Promise<string> {
     for (const o of real) lines.push(line(o, who));
   }
   if (!count) lines.push('', 'Nothing planned yet.');
-  lines.push('', '<a href="http://family.lan">family.lan</a>');
+  lines.push('', `<a href="${PUBLIC_URL}">Open the calendar</a>`);
   return lines.join('\n');
 }
 

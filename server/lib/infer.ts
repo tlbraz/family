@@ -66,7 +66,7 @@ export function extractBring(description: string | null): { bring: BringItem[]; 
     if (m === null) keep.push(line);
     else for (const item of m.split(/[,;·•]|\s+e\s+|\s+and\s+/)) if (item.trim()) bring.push({ text: item.trim().slice(0, 80), done: false });
   }
-  const notes = keep.join('\n').replace(/— family\.lan/g, '').trim();
+  const notes = keep.join('\n').replace(/— (?:family\.lan|https?:\/\/\S+)$/gm, '').trim();
   return { bring: bring.slice(0, 30), notes: notes || null };
 }
 

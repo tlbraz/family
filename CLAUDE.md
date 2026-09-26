@@ -8,5 +8,5 @@ Tiago steers, Claude builds. Keep it simple; this is a family tool, not a produc
 - Deploying = pushing to `main` (the ops container autodeploys within ~1 min and verifies `/api/health`). From ops: `/root/homelab/apps/deploy.py family` deploys now, `--status` shows remote vs live commit.
 - Timezone: the server runs with `TZ=Europe/Lisbon` and treats local time as Lisbon; repeats are expanded in "floating" time (`server/lib/time.ts`) so they keep their wall-clock time across DST. Tests run with the same TZ.
 - Auth: parents only (scrypt passwords, session cookie); reads are open, writes need `requireParent`.
-- Production: Coolify application on apps.lan, domain http://family.lan, Postgres volume `family-pgdata`. LAN/Tailscale only. Never add public exposure without asking.
+- Production: Coolify application on apps.lan, domains https://family.home.tbraz.pt (wildcard cert *.home.tbraz.pt, DNS only in Pi-hole) + http://family.lan (redirects, /api stays), Postgres volume `family-pgdata`. LAN/Tailscale only. Never add public exposure without asking.
 - UI: mobile-first, works as an installed PWA, light + dark via CSS variables in `web/src/styles.css`.
