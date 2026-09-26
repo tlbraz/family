@@ -6,7 +6,7 @@ import { AiError, draftEvent, aiEnabled, type ImageInput } from './lib/ai';
 import { type AuthEnv, loadMember, requireParent } from './lib/auth';
 import { todayDigest, tomorrowDigest, weekDigest } from './lib/digest';
 import { googleEnabled, googleStatus, saveGoogleKey, syncRound } from './lib/google';
-import { addTelegramChat, removeTelegramChat, sendTelegram, telegramEnabled, telegramStatus } from './lib/telegram';
+import { addTelegramChat, removeTelegramChat, sendTelegram, telegramStatus } from './lib/telegram';
 import { authRoutes } from './routes/auth';
 import { type EventHooks, eventRoutes } from './routes/events';
 import { memberRoutes, toMember } from './routes/members';
@@ -46,7 +46,7 @@ export function createApp(db: Db, hooks: AppHooks = noop) {
     const me = c.get('me');
     const body: AppConfig = {
       me: me ? toMember(me) : null,
-      features: { ai: aiEnabled(), google: googleEnabled(), telegram: telegramEnabled() },
+      features: { ai: aiEnabled(), google: googleEnabled(), telegram: !!process.env.TELEGRAM_BOT_TOKEN },
     };
     return c.json(body);
   });

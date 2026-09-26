@@ -5,7 +5,7 @@ import { settings } from '../schema';
 /**
  * Telegram messages from the family bot. Every message goes to every recipient:
  * the chats in TELEGRAM_CHAT_ID (comma-separated) plus the ones added on the Family page.
- * Disabled unless the bot token and at least one recipient are set.
+ * Only TELEGRAM_BOT_TOKEN is needed to start: the Family page card can add everyone, including the first person.
  */
 export interface TelegramChat {
   id: string;
@@ -76,6 +76,7 @@ export async function telegramStatus() {
     names.set(String(chat.id), name);
   }
   const env = envChats();
+  // Nobody left to message = digests are paused (telegramEnabled is false) until someone is added.
   const recipients = [
     ...env.map((id) => ({ id, name: names.get(id) ?? 'Set on the server', fixed: true })),
     ...saved.filter((c) => !env.includes(c.id)).map((c) => ({ ...c, fixed: false })),
