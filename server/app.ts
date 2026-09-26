@@ -1,15 +1,28 @@
 import { Hono } from 'hono';
-import { desc, eq, sql } from 'drizzle-orm';
+import { asc, sql } from 'drizzle-orm';
+import type { AppConfig, Health } from '../shared/types';
 import type { Db } from './db';
-import { notes } from './schema';
-import type { Health, Note } from '../shared/types';
+import { draftEvent, aiEnabled, type ImageInput } from './lib/ai';
+import { type AuthEnv, loadMember, requireParent } from './lib/auth';
+import { tomorrowDigest, weekDigest } from './lib/digest';
+import { googleEnabled } from './lib/google';
+import { sendTelegram, telegramEnabled } from './lib/telegram';
+import { authRoutes } from './routes/auth';
+import { type EventHooks, eventRoutes } from './routes/events';
+import { memberRoutes, toMember } from './routes/members';
+import { noteRoutes } from './routes/notes';
+import { members } from './schema';
 import pkg from '../package.json';
 
-const MAX_NOTE = 280;
-const MAX_NOTES = 50;
+export interface AppHooks extends EventHooks {
+  membersChanged: () => void;
+}
 
-export function createApp(db: Db) {
-  const api = new Hono();
+const noop: AppHooks = { changed: () => {}, removed: () => {}, membersChanged: () => {} };
+const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+
+export function createApp(db: Db, hooks: AppHooks = noop) {
+  const api = new Hono<AuthEnv>();
 
   api.get('/health', async (c) => {
     let dbUp = true;
@@ -27,32 +40,51 @@ export function createApp(db: Db) {
     return c.json(body, dbUp ? 200 : 503);
   });
 
-  api.get('/notes', async (c) => {
-    const rows = await db.select().from(notes).orderBy(desc(notes.createdAt)).limit(MAX_NOTES);
-    return c.json(rows.map(toNote));
+  api.use('*', loadMember(db));
+
+  api.get('/config', (c) => {
+    const me = c.get('me');
+    const body: AppConfig = {
+      me: me ? toMember(me) : null,
+      features: { ai: aiEnabled(), google: googleEnabled(), telegram: telegramEnabled() },
+    };
+    return c.json(body);
   });
 
-  api.post('/notes', async (c) => {
-    const body = await c.req.json().catch(() => null);
-    const text = typeof body?.text === 'string' ? body.text.trim() : '';
-    const author = typeof body?.author === 'string' ? body.author.trim().slice(0, 40) || null : null;
-    if (!text || text.length > MAX_NOTE) {
-      return c.json({ error: `Note must be 1–${MAX_NOTE} characters` }, 400);
+  api.route('/auth', authRoutes(db));
+  api.route('/members', memberRoutes(db, hooks.membersChanged));
+  api.route('/notes', noteRoutes(db));
+  api.route('/', eventRoutes(db, hooks));
+
+  // Photo or sentence → a draft event for the form (nothing is saved here).
+  api.post('/ai/event', requireParent, async (c) => {
+    if (!aiEnabled()) return c.json({ error: 'Reading photos is not set up yet' }, 503);
+    const body = await c.req.json().catch(() => ({}));
+    const text = typeof body.text === 'string' ? body.text.trim().slice(0, 1000) : '';
+    let image: ImageInput | undefined;
+    if (body.image) {
+      if (!IMAGE_TYPES.includes(body.image.mediaType) || typeof body.image.data !== 'string') {
+        return c.json({ error: 'Use a JPEG, PNG or WebP photo' }, 400);
+      }
+      if (body.image.data.length > 7_000_000) return c.json({ error: 'That photo is too large (max 5 MB)' }, 400);
+      image = body.image;
     }
-    const [row] = await db.insert(notes).values({ text, author }).returning();
-    return c.json(toNote(row!), 201);
+    if (!text && !image) return c.json({ error: 'Type something or add a photo' }, 400);
+    const family = await db.select().from(members).orderBy(asc(members.sort));
+    try {
+      return c.json(await draftEvent({ text: text || undefined, image }, family));
+    } catch (e) {
+      console.error('ai draft:', (e as Error).message);
+      return c.json({ error: (e as Error).message.startsWith("Couldn't") ? (e as Error).message : 'Reading that failed. Try again in a moment.' }, 502);
+    }
   });
 
-  api.delete('/notes/:id', async (c) => {
-    const id = Number(c.req.param('id'));
-    if (!Number.isInteger(id)) return c.json({ error: 'Bad id' }, 400);
-    await db.delete(notes).where(eq(notes.id, id));
-    return c.body(null, 204);
+  // Send the Telegram digests now (for testing): ?kind=tomorrow|week
+  api.post('/digest', requireParent, async (c) => {
+    const msg = c.req.query('kind') === 'week' ? await weekDigest(db) : await tomorrowDigest(db);
+    if (!msg) return c.json({ sent: false, reason: 'Nothing on tomorrow' });
+    return c.json({ sent: await sendTelegram(msg) });
   });
 
   return new Hono().route('/api', api);
-}
-
-function toNote(row: typeof notes.$inferSelect): Note {
-  return { id: row.id, text: row.text, author: row.author, createdAt: row.createdAt.toISOString() };
 }

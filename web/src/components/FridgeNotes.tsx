@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import type { Note } from '../../shared/types';
-import { api } from './api';
+import type { Note } from '../../../shared/types';
+import { api } from '../api';
 
 const AUTHOR_KEY = 'family.author';
 
@@ -46,8 +46,7 @@ export function FridgeNotes() {
   }
 
   return (
-    <section className="card notes">
-      <h2>📌 Fridge notes</h2>
+    <section className="notes">
       <form onSubmit={add} className="note-form">
         <input
           value={text}

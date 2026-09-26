@@ -7,6 +7,7 @@ RUN npm run build && npm prune --omit=dev
 
 FROM node:22-alpine
 WORKDIR /app
+RUN apk add --no-cache tzdata
 # Coolify passes the git commit as a build arg; bake it in so /api/health can report it.
 ARG SOURCE_COMMIT=dev
 ENV NODE_ENV=production PORT=3000 SOURCE_COMMIT=$SOURCE_COMMIT

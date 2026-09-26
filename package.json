@@ -1,25 +1,31 @@
 {
   "name": "family",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "concurrently -k -n api,web \"npm:dev:api\" \"npm:dev:web\"",
-    "dev:api": "tsx watch server/index.ts",
+    "dev:api": "TZ=Europe/Lisbon tsx watch server/index.ts",
     "dev:web": "vite",
     "build": "vite build && esbuild server/index.ts --bundle --platform=node --format=esm --packages=external --outfile=dist/server/index.js",
     "start": "node dist/server/index.js",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run",
+    "test": "TZ=Europe/Lisbon vitest run",
     "db:generate": "drizzle-kit generate"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.128.0",
+    "@fontsource-variable/nunito": "^5.3.0",
     "@hono/node-server": "^2.1.1",
+    "date-fns": "^4.4.0",
     "drizzle-orm": "^0.45.3",
+    "google-auth-library": "^11.1.0",
     "hono": "^4.13.9",
     "postgres": "^3.4.9",
     "react": "^19.3.0",
-    "react-dom": "^19.3.0"
+    "react-dom": "^19.3.0",
+    "rrule": "^2.8.1",
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "@types/node": "^26.6.2",

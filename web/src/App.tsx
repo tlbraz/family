@@ -1,65 +1,141 @@
-import { useEffect, useState } from 'react';
-import type { Health } from '../../shared/types';
+import { useCallback, useEffect, useState } from 'react';
+import type { AppConfig, Health, Member, Occurrence } from '../../shared/types';
 import { api } from './api';
-import { FridgeNotes } from './FridgeNotes';
+import { dateKey } from './dates';
+import { Avatar, setFamily } from './components/Avatar';
+import { CalendarView } from './components/CalendarView';
+import { EventSheet } from './components/EventSheet';
+import { FamilyView } from './components/FamilyView';
+import { FridgeNotes } from './components/FridgeNotes';
+import { Icon } from './components/Icon';
+import { SignIn } from './components/SignIn';
 
-const COMING = [
-  { icon: '📅', title: 'Calendar', text: 'Who is where, this week' },
-  { icon: '✅', title: 'Chores', text: 'Jobs, turns and streaks' },
-  { icon: '🛒', title: 'Shopping', text: 'One list, every phone' },
-  { icon: '🍲', title: 'Meals', text: 'Plan the week, fill the list' },
-];
-
-function greeting(hour: number) {
-  if (hour < 6) return 'Good night';
-  if (hour < 12) return 'Good morning';
-  if (hour < 19) return 'Good afternoon';
-  return 'Good evening';
-}
+type Tab = 'calendar' | 'notes' | 'family';
+type Open = { occurrence: Occurrence | null; day: string } | null;
 
 export function App() {
-  const [now, setNow] = useState(() => new Date());
+  const [tab, setTab] = useState<Tab>('calendar');
+  const [config, setConfig] = useState<AppConfig | null>(null);
+  const [members, setMembers] = useState<Member[]>([]);
   const [health, setHealth] = useState<Health | null>(null);
+  const [open, setOpen] = useState<Open>(null);
+  const [signIn, setSignIn] = useState(false);
+  const [refresh, setRefresh] = useState(0);
 
-  useEffect(() => {
-    const t = setInterval(() => setNow(new Date()), 60_000);
-    api.health().then(setHealth).catch(() => setHealth(null));
-    return () => clearInterval(t);
+  const loadAll = useCallback(() => {
+    api.config().then(setConfig).catch(() => setConfig({ me: null, features: { ai: false, google: false, telegram: false } }));
+    api.members().then((list) => {
+      setFamily(list);
+      setMembers(list);
+    }).catch(() => {});
   }, []);
 
-  return (
-    <div className="page">
-      <header className="hero">
-        <p className="date">
-          {now.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' })}
-        </p>
-        <h1>{greeting(now.getHours())}</h1>
-      </header>
+  useEffect(() => {
+    loadAll();
+    api.health().then(setHealth).catch(() => setHealth(null));
+  }, [loadAll]);
 
-      <main className="grid">
-        <FridgeNotes />
-        {COMING.map((m) => (
-          <section key={m.title} className="card soon">
-            <span className="icon" aria-hidden>{m.icon}</span>
-            <div>
-              <h2>{m.title}</h2>
-              <p>{m.text}</p>
-            </div>
-            <span className="badge">soon</span>
-          </section>
-        ))}
+  const me = config?.me ?? null;
+  const canEdit = me?.role === 'parent';
+
+  return (
+    <div className="shell">
+      <div className="topbar">
+        <span className="brand">
+          <img src="/icon.svg" alt="" width={26} height={26} />
+          Family
+        </span>
+        {me ? (
+          <button className="me" onClick={() => api.logout().then(loadAll)} title="Sign out">
+            <Avatar member={members.find((m) => m.id === me.id) ?? me} size={30} />
+            <span className="small">Sign out</span>
+          </button>
+        ) : (
+          <button className="chip" onClick={() => setSignIn(true)}>Sign in</button>
+        )}
+      </div>
+
+      <main className="page">
+        {tab === 'calendar' && (
+          <CalendarView
+            members={members}
+            refreshKey={refresh}
+            canEdit={canEdit}
+            onOpen={(occurrence) => setOpen({ occurrence, day: dateKey(new Date(occurrence.start)) })}
+            onAdd={(day) => setOpen({ occurrence: null, day })}
+          />
+        )}
+        {tab === 'notes' && (
+          <div>
+            <header className="cal-head">
+              <div className="cal-title">
+                <span className="eyebrow">For everyone</span>
+                <h1>Fridge notes</h1>
+              </div>
+            </header>
+            <FridgeNotes />
+          </div>
+        )}
+        {tab === 'family' && <FamilyView members={members} canEdit={canEdit} googleOn={!!config?.features.google} onChanged={loadAll} />}
+
+        <footer className="footer">
+          {health ? (
+            <>
+              v{health.version} · {health.commit} · <span className={health.db === 'up' ? 'up' : 'down'}>db {health.db}</span>
+            </>
+          ) : (
+            <span className="down">server unreachable</span>
+          )}
+        </footer>
       </main>
 
-      <footer className="footer">
-        {health ? (
-          <>
-            v{health.version} · {health.commit} ·{' '}
-            <span className={health.db === 'up' ? 'up' : 'down'}>db {health.db}</span>
-          </>
-        ) : (
-          <span className="down">server unreachable</span>
-        )}
-      </footer>
+      {tab === 'calendar' && canEdit && (
+        <button className="fab" onClick={() => setOpen({ occurrence: null, day: dateKey(new Date()) })}>
+          <Icon name="plus" size={20} stroke={2.5} />
+          Add event
+        </button>
+      )}
+
+      <nav className="tabs" aria-label="Sections">
+        {(
+          [
+            ['calendar', 'calendar', 'Calendar'],
+            ['notes', 'notes', 'Notes'],
+            ['family', 'people', 'Family'],
+          ] as const
+        ).map(([id, icon, label]) => (
+          <button key={id} className={tab === id ? 'on' : ''} aria-current={tab === id ? 'page' : undefined} onClick={() => setTab(id)}>
+            <Icon name={icon} size={22} />
+            <span>{label}</span>
+          </button>
+        ))}
+      </nav>
+
+      {open && (
+        <EventSheet
+          members={members}
+          canEdit={canEdit}
+          aiEnabled={!!config?.features.ai}
+          occurrence={open.occurrence}
+          day={open.day}
+          onClose={() => setOpen(null)}
+          onSaved={() => {
+            setOpen(null);
+            setRefresh((r) => r + 1);
+          }}
+        />
+      )}
+      {signIn && (
+        <SignIn
+          members={members}
+          onClose={() => setSignIn(false)}
+          onDone={() => {
+            setSignIn(false);
+            loadAll();
+            setRefresh((r) => r + 1);
+          }}
+        />
+      )}
     </div>
   );
 }

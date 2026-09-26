@@ -6,6 +6,12 @@ services:
     environment:
       DATABASE_URL: postgres://family:${SERVICE_PASSWORD_POSTGRES}@db:5432/family
       TZ: Europe/Lisbon
+      # Optional features, each off until its value is set in Coolify:
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}          # evening + Sunday digests
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}            # event from a photo or sentence
+      GOOGLE_SERVICE_ACCOUNT: ${GOOGLE_SERVICE_ACCOUNT:-}  # shared "Family" Google Calendar (key JSON)
+      GOOGLE_CALENDAR_ID: ${GOOGLE_CALENDAR_ID:-}          # optional; created automatically if empty
     depends_on:
       db:
         condition: service_healthy

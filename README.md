@@ -13,6 +13,20 @@ Install it on a phone with *Share → Add to Home Screen*.
 | Shared types | `shared/` (imported by both sides) |
 | Deploy | `docker-compose.yml` (app + db) → Coolify on the home server |
 
+## Features (v0.2)
+
+- **Calendar**: week agenda coloured by person, person filter, events with type, participants, driver,
+  "bring" checklist, repeats (weekly / every 2 weeks / monthly / yearly, with an end date and skipped dates).
+- **Family**: members with colour, role and birthday (birthdays show up every year with the age).
+- **Portuguese holidays** (incl. Carnival and Almada's São João) and the **public school calendar**
+  (`shared/school-calendar.ts`, update it each summer from the new Despacho).
+- **Parents sign in** (first sign-in sets the password); everyone else can look and tick "bring" items.
+- **Telegram** (`TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`): 20:00 "tomorrow" message with what to bring,
+  Sunday 19:00 week ahead. `POST /api/digest?kind=tomorrow|week` sends one now.
+- **Photo or sentence → event** (`ANTHROPIC_API_KEY`): Claude fills the form; the parent confirms.
+- **Google Calendar** (`GOOGLE_SERVICE_ACCOUNT`): a shared "Family" calendar owned by a service account,
+  shared with each parent's Google address; app events are pushed, events added in Google are pulled in.
+
 One container for the app plus one for Postgres. When the app grows, add feature folders under
 `server/` and `web/src/`; nothing about the layout needs to change.
 
