@@ -270,3 +270,40 @@ legend { font-weight: 800; font-size: 0.8rem; text-transform: uppercase; letter-
 .card.google h2 { font-size: 1.05rem; font-weight: 800; }
 .card.google p { margin: 0; }
 .key-input { width: 100%; font-family: ui-monospace, monospace; font-size: 0.8rem; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--bg); }
+
+/* Week / Month switch */
+.view-row { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+.segmented { display: inline-flex; padding: 3px; border-radius: 20px; background: var(--soft); }
+.segmented button { height: 32px; padding: 0 16px; border: 0; border-radius: 16px; background: transparent; color: var(--muted); font-weight: 800; font-size: 0.9rem; }
+.segmented button.on { background: var(--card); color: var(--ink); box-shadow: 0 1px 3px rgba(38, 33, 58, 0.12); }
+
+/* Month grid */
+.month { margin: 12px 0 4px; background: var(--card); border-radius: 20px; padding: 10px 6px 8px; }
+.month-head, .month-body { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); }
+.month-head span { text-align: center; font-size: 0.72rem; font-weight: 800; color: var(--muted); padding-bottom: 6px; }
+.month-body { row-gap: 4px; }
+.cell {
+  min-height: 52px; margin: 0 2px; padding: 5px 2px 4px; border: 0; border-radius: 12px; background: transparent;
+  display: flex; flex-direction: column; align-items: center; gap: 4px; overflow: hidden;
+}
+.cell-num { width: 28px; height: 28px; border-radius: 14px; display: inline-flex; align-items: center; justify-content: center; font-weight: 800; font-size: 0.92rem; font-variant-numeric: tabular-nums; }
+.cell.other .cell-num { color: var(--muted); opacity: 0.55; }
+.cell.off { background: var(--holiday); }
+.cell.today .cell-num { background: var(--accent); color: var(--on-accent); }
+.cell.selected { box-shadow: inset 0 0 0 2px var(--ink); }
+.cell-dots { display: flex; gap: 3px; height: 6px; align-items: center; }
+.cell-dots span { width: 6px; height: 6px; border-radius: 3px; }
+.cell-dots .more { width: auto; height: auto; font-size: 0.6rem; line-height: 1; font-weight: 800; color: var(--muted); background: none; }
+.cell-chips { display: none; }
+@media (min-width: 640px) {
+  .cell { min-height: 96px; align-items: stretch; padding: 6px 4px; }
+  .cell-num { align-self: flex-start; }
+  .cell-dots { display: none; }
+  .cell-chips { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .cell-chip {
+    font-size: 0.7rem; font-weight: 700; text-align: left; padding: 2px 5px; border-radius: 6px;
+    background: color-mix(in srgb, var(--c) var(--tint), var(--card)); color: var(--ink);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .cell-more { font-size: 0.68rem; font-weight: 700; color: var(--muted); text-align: left; padding-left: 5px; }
+}

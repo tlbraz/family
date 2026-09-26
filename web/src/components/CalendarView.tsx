@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { Member, Occurrence } from '../../../shared/types';
 import { api } from '../api';
-import { addDays, dateKey, dayLabel, monthName, onDay, startOfWeek, timeOf, weekdayShort } from '../dates';
+import { addDays, dateKey, dayLabel, fromKey, monthName, onDay, startOfWeek, timeOf, weekdayShort } from '../dates';
 import { AvatarStack } from './Avatar';
 import { Icon, TYPE_LABEL } from './Icon';
 
@@ -13,24 +13,62 @@ interface Props {
   canEdit: boolean;
 }
 
+type Mode = 'week' | 'month';
+const MODE_KEY = 'family.calendarMode';
+
+function readMode(): Mode {
+  try {
+    return localStorage.getItem(MODE_KEY) === 'month' ? 'month' : 'week';
+  } catch {
+    return 'week';
+  }
+}
+
+const isOff = (o: Occurrence) => o.kind === 'holiday' || (o.kind === 'school' && o.title.startsWith('No school'));
+const isThing = (o: Occurrence) => o.kind === 'event' || o.kind === 'birthday';
+
 export function CalendarView({ members, refreshKey, onOpen, onAdd, canEdit }: Props) {
   const [today, setToday] = useState(() => new Date());
-  const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date()));
+  const [mode, setModeState] = useState<Mode>(readMode);
+  const [anchor, setAnchor] = useState(() => new Date());
+  const [selected, setSelected] = useState(() => dateKey(new Date()));
   const [items, setItems] = useState<Occurrence[] | null>(null);
   const [who, setWho] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const days = useMemo(() => Array.from({ length: 7 }, (_, i) => addDays(weekStart, i)), [weekStart]);
+  const setMode = (m: Mode) => {
+    setModeState(m);
+    try {
+      localStorage.setItem(MODE_KEY, m);
+    } catch {
+      /* private mode: fine */
+    }
+  };
+
+  // Week: Monday–Sunday around the anchor. Month: whole weeks covering the anchor's month.
+  const { from, days } = useMemo(() => {
+    if (mode === 'week') {
+      const s = startOfWeek(anchor);
+      return { from: s, days: Array.from({ length: 7 }, (_, i) => addDays(s, i)) };
+    }
+    const first = new Date(anchor.getFullYear(), anchor.getMonth(), 1);
+    const last = new Date(anchor.getFullYear(), anchor.getMonth() + 1, 0);
+    const s = startOfWeek(first);
+    const n = Math.round((addDays(startOfWeek(last), 7).getTime() - s.getTime()) / 86_400_000);
+    return { from: s, days: Array.from({ length: n }, (_, i) => addDays(s, i)) };
+  }, [mode, anchor]);
+  const to = addDays(days[days.length - 1]!, 1);
 
   const load = useCallback(() => {
     api
-      .calendar(dateKey(weekStart), dateKey(addDays(weekStart, 7)))
+      .calendar(dateKey(from), dateKey(to))
       .then((x) => {
         setItems(x);
         setError(null);
       })
       .catch((e: Error) => setError(e.message));
-  }, [weekStart]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dateKey(from), dateKey(to)]);
 
   useEffect(load, [load, refreshKey]);
   useEffect(() => {
@@ -51,31 +89,70 @@ export function CalendarView({ members, refreshKey, onOpen, onAdd, canEdit }: Pr
     (o) => who === null || o.kind === 'holiday' || o.kind === 'school' || o.participants.includes(who) || o.driverId === who,
   );
   const todayKey = dateKey(today);
-  const thisWeek = dateKey(startOfWeek(today)) === dateKey(weekStart);
-  const lastDay = days[6]!;
-  const title = weekStart.getMonth() === lastDay.getMonth() ? monthName(weekStart) : `${monthName(weekStart).slice(0, 3)} – ${monthName(lastDay).slice(0, 3)}`;
+  const current =
+    mode === 'week'
+      ? dateKey(startOfWeek(today)) === dateKey(startOfWeek(anchor))
+      : today.getFullYear() === anchor.getFullYear() && today.getMonth() === anchor.getMonth();
+
+  function shift(n: number) {
+    if (mode === 'week') setAnchor(addDays(anchor, 7 * n));
+    else {
+      const next = new Date(anchor.getFullYear(), anchor.getMonth() + n, 1);
+      setAnchor(next);
+      const sameMonth = today.getFullYear() === next.getFullYear() && today.getMonth() === next.getMonth();
+      setSelected(dateKey(sameMonth ? today : next));
+    }
+  }
+  function goToday() {
+    setAnchor(new Date());
+    setSelected(todayKey);
+  }
+
+  let title: string;
+  let eyebrow: string;
+  if (mode === 'month') {
+    title = monthName(anchor);
+    eyebrow = current ? 'This month' : String(anchor.getFullYear());
+  } else {
+    const first = days[0]!;
+    const last = days[6]!;
+    title = first.getMonth() === last.getMonth() ? monthName(first) : `${monthName(first).slice(0, 3)} – ${monthName(last).slice(0, 3)}`;
+    eyebrow = current ? 'This week' : `Week of ${first.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}`;
+  }
+
+  const dayProps = { visible, members, todayKey, today, canEdit, onOpen, onAdd };
 
   return (
     <div className="calendar">
       <header className="cal-head">
         <div className="cal-title">
-          <span className="eyebrow">{thisWeek ? 'This week' : `Week of ${weekStart.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}`}</span>
+          <span className="eyebrow">{eyebrow}</span>
           <h1>{title}</h1>
         </div>
         <div className="cal-nav">
-          {!thisWeek && (
-            <button className="chip" onClick={() => setWeekStart(startOfWeek(new Date()))}>
-              Today
-            </button>
-          )}
-          <button className="round" aria-label="Previous week" onClick={() => setWeekStart(addDays(weekStart, -7))}>
+          <button className="round" aria-label={`Previous ${mode}`} onClick={() => shift(-1)}>
             <Icon name="left" />
           </button>
-          <button className="round" aria-label="Next week" onClick={() => setWeekStart(addDays(weekStart, 7))}>
+          <button className="round" aria-label={`Next ${mode}`} onClick={() => shift(1)}>
             <Icon name="right" />
           </button>
         </div>
       </header>
+
+      <div className="view-row">
+        <div className="segmented" role="group" aria-label="View">
+          {(['week', 'month'] as const).map((m) => (
+            <button key={m} className={mode === m ? 'on' : ''} aria-pressed={mode === m} onClick={() => setMode(m)}>
+              {m === 'week' ? 'Week' : 'Month'}
+            </button>
+          ))}
+        </div>
+        {!current && (
+          <button className="chip" onClick={goToday}>
+            Today
+          </button>
+        )}
+      </div>
 
       <div className="people" role="group" aria-label="Show events for">
         <button className={`person-all ${who === null ? 'on' : ''}`} onClick={() => setWho(null)} aria-pressed={who === null}>
@@ -95,63 +172,146 @@ export function CalendarView({ members, refreshKey, onOpen, onAdd, canEdit }: Pr
         ))}
       </div>
 
-      <div className="week-strip">
-        {days.map((d) => {
-          const key = dateKey(d);
-          const dots = visible.filter((o) => (o.kind === 'event' || o.kind === 'birthday') && onDay(o.start, o.end, key));
-          const off = visible.some((o) => (o.kind === 'holiday' || (o.kind === 'school' && o.title.startsWith('No school'))) && onDay(o.start, o.end, key));
-          return (
-            <a key={key} href={`#d-${key}`} className={`day-pill ${key === todayKey ? 'today' : ''} ${off ? 'off' : ''}`}>
-              <span className="dow">{weekdayShort(d)}</span>
-              <span className="num">{d.getDate()}</span>
-              <span className="dots">
-                {dots.slice(0, 4).map((o) => (
-                  <span key={o.key} style={{ background: members.find((m) => m.id === o.participants[0])?.color ?? 'var(--muted)' }} />
-                ))}
-              </span>
-            </a>
-          );
-        })}
-      </div>
-
-      {error && <p className="error">{error}</p>}
-      {!items && !error && <p className="muted pad">Loading…</p>}
-
-      {items && (
-        <div className="agenda">
+      {mode === 'week' && (
+        <div className="week-strip">
           {days.map((d) => {
             const key = dateKey(d);
-            const dayItems = visible.filter((o) => onDay(o.start, o.end, key));
-            const banners = dayItems.filter((o) => o.kind === 'holiday' || o.kind === 'school');
-            const things = dayItems.filter((o) => o.kind === 'event' || o.kind === 'birthday');
-            const past = key < todayKey;
-            if (past && things.length === 0 && banners.length === 0) return null; // skip empty days already gone
+            const dots = visible.filter((o) => isThing(o) && onDay(o.start, o.end, key));
+            const off = visible.some((o) => isOff(o) && onDay(o.start, o.end, key));
             return (
-              <section key={key} id={`d-${key}`} className={`day ${past ? 'past' : ''}`}>
-                <div className="day-head">
-                  <h2>{dayLabel(d, today)}</h2>
-                  {canEdit && (
-                    <button className="add-mini" aria-label={`Add event on ${d.toDateString()}`} onClick={() => onAdd(key)}>
-                      <Icon name="plus" size={16} />
-                    </button>
-                  )}
-                </div>
-                {banners.map((b) => (
-                  <div key={b.key} className={`banner ${b.kind}`}>
-                    <Icon name={b.kind === 'holiday' ? 'holiday' : 'school'} size={15} />
-                    {b.title}
-                  </div>
-                ))}
-                {things.length === 0 && banners.length === 0 && <p className="nothing">Nothing planned</p>}
-                {things.map((o) => (
-                  <EventCard key={o.key} o={o} members={members} dayKey={key} onOpen={() => onOpen(o)} />
-                ))}
-              </section>
+              <a key={key} href={`#d-${key}`} className={`day-pill ${key === todayKey ? 'today' : ''} ${off ? 'off' : ''}`}>
+                <span className="dow">{weekdayShort(d)}</span>
+                <span className="num">{d.getDate()}</span>
+                <span className="dots">
+                  {dots.slice(0, 4).map((o) => (
+                    <span key={o.key} style={{ background: colorOf(o, members) }} />
+                  ))}
+                </span>
+              </a>
             );
           })}
         </div>
       )}
+
+      {mode === 'month' && (
+        <MonthGrid days={days} month={anchor.getMonth()} visible={visible} members={members} todayKey={todayKey} selected={selected} onSelect={setSelected} />
+      )}
+
+      {error && <p className="error">{error}</p>}
+      {!items && !error && <p className="muted pad">Loading…</p>}
+
+      {items && mode === 'week' && (
+        <div className="agenda">
+          {days.map((d) => (
+            <DayAgenda key={dateKey(d)} day={d} hidePastEmpty {...dayProps} />
+          ))}
+        </div>
+      )}
+      {items && mode === 'month' && (
+        <div className="agenda">
+          <DayAgenda day={fromKey(selected)} {...dayProps} />
+        </div>
+      )}
     </div>
+  );
+}
+
+const colorOf = (o: Occurrence, members: Member[]) => members.find((m) => m.id === o.participants[0])?.color ?? 'var(--muted)';
+
+function MonthGrid({ days, month, visible, members, todayKey, selected, onSelect }: {
+  days: Date[];
+  month: number;
+  visible: Occurrence[];
+  members: Member[];
+  todayKey: string;
+  selected: string;
+  onSelect: (key: string) => void;
+}) {
+  return (
+    <div className="month" role="grid" aria-label="Month">
+      <div className="month-head" role="row">
+        {days.slice(0, 7).map((d) => (
+          <span key={d.getDay()} role="columnheader">{weekdayShort(d).slice(0, 2)}</span>
+        ))}
+      </div>
+      <div className="month-body">
+        {days.map((d) => {
+          const key = dateKey(d);
+          const here = visible.filter((o) => onDay(o.start, o.end, key));
+          const things = here.filter(isThing);
+          const off = here.find(isOff);
+          const cls = ['cell', d.getMonth() !== month && 'other', key === todayKey && 'today', key === selected && 'selected', off && 'off'].filter(Boolean).join(' ');
+          return (
+            <button
+              key={key}
+              role="gridcell"
+              className={cls}
+              aria-selected={key === selected}
+              aria-label={`${d.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}: ${things.length ? `${things.length} event${things.length > 1 ? 's' : ''}` : 'nothing planned'}${off ? `, ${off.title}` : ''}`}
+              onClick={() => onSelect(key)}
+            >
+              <span className="cell-num">{d.getDate()}</span>
+              <span className="cell-dots">
+                {things.slice(0, 3).map((o) => (
+                  <span key={o.key} style={{ background: colorOf(o, members) }} />
+                ))}
+                {things.length > 3 && <span className="more">+</span>}
+              </span>
+              <span className="cell-chips">
+                {things.slice(0, 3).map((o) => (
+                  <span key={o.key} className="cell-chip" style={{ '--c': colorOf(o, members) } as React.CSSProperties}>
+                    {o.allDay ? '' : `${timeOf(o.start)} `}
+                    {o.title}
+                  </span>
+                ))}
+                {things.length > 3 && <span className="cell-more">+{things.length - 3} more</span>}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function DayAgenda({ day, visible, members, todayKey, today, canEdit, onOpen, onAdd, hidePastEmpty }: {
+  day: Date;
+  visible: Occurrence[];
+  members: Member[];
+  todayKey: string;
+  today: Date;
+  canEdit: boolean;
+  onOpen: (o: Occurrence) => void;
+  onAdd: (day: string) => void;
+  hidePastEmpty?: boolean;
+}) {
+  const key = dateKey(day);
+  const dayItems = visible.filter((o) => onDay(o.start, o.end, key));
+  const banners = dayItems.filter((o) => o.kind === 'holiday' || o.kind === 'school');
+  const things = dayItems.filter(isThing);
+  const past = key < todayKey;
+  if (hidePastEmpty && past && things.length === 0 && banners.length === 0) return null; // skip empty days already gone
+  return (
+    <section id={`d-${key}`} className={`day ${past && hidePastEmpty ? 'past' : ''}`}>
+      <div className="day-head">
+        <h2>{dayLabel(day, today)}{day.getMonth() !== today.getMonth() || day.getFullYear() !== today.getFullYear() ? ` ${monthName(day)}` : ''}</h2>
+        {canEdit && (
+          <button className="add-mini" aria-label={`Add event on ${day.toDateString()}`} onClick={() => onAdd(key)}>
+            <Icon name="plus" size={16} />
+          </button>
+        )}
+      </div>
+      {banners.map((b) => (
+        <div key={b.key} className={`banner ${b.kind}`}>
+          <Icon name={b.kind === 'holiday' ? 'holiday' : 'school'} size={15} />
+          {b.title}
+        </div>
+      ))}
+      {things.length === 0 && banners.length === 0 && <p className="nothing">Nothing planned</p>}
+      {things.map((o) => (
+        <EventCard key={o.key} o={o} members={members} dayKey={key} onOpen={() => onOpen(o)} />
+      ))}
+    </section>
   );
 }
 

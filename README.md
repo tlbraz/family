@@ -15,7 +15,7 @@ Install it on a phone with *Share → Add to Home Screen*.
 
 ## Features (v0.2)
 
-- **Calendar**: week agenda coloured by person, person filter, events with type, participants, driver,
+- **Calendar**: week agenda or month grid (tap a day for its list), coloured by person, person filter, events with type, participants, driver,
   "bring" checklist, repeats (weekly / every 2 weeks / monthly / yearly, with an end date and skipped dates).
 - **Family**: members with colour, role and birthday (birthdays show up every year with the age).
 - **Portuguese holidays** (incl. Carnival and Almada's São João) and the **public school calendar**
