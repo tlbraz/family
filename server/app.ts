@@ -6,7 +6,7 @@ import { AiError, draftEvent, aiEnabled, type ImageInput } from './lib/ai';
 import { type AuthEnv, loadMember, requireParent } from './lib/auth';
 import { todayDigest, tomorrowDigest, weekDigest } from './lib/digest';
 import { googleEnabled, googleStatus, saveGoogleKey, syncRound } from './lib/google';
-import { sendTelegram, telegramEnabled } from './lib/telegram';
+import { addTelegramChat, removeTelegramChat, sendTelegram, telegramEnabled, telegramStatus } from './lib/telegram';
 import { authRoutes } from './routes/auth';
 import { type EventHooks, eventRoutes } from './routes/events';
 import { memberRoutes, toMember } from './routes/members';
@@ -101,6 +101,25 @@ export function createApp(db: Db, hooks: AppHooks = noop) {
     const msg = kind === 'week' ? await weekDigest(db) : kind === 'today' ? await todayDigest(db) : await tomorrowDigest(db);
     if (!msg) return c.json({ sent: false, reason: `Nothing on ${kind === 'today' ? 'today' : 'tomorrow'}` });
     return c.json({ sent: await sendTelegram(msg) });
+  });
+
+  // Who gets the Telegram messages. Someone opens the bot and taps Start, then a parent adds them here.
+  api.get('/telegram', requireParent, async (c) => {
+    if (!process.env.TELEGRAM_BOT_TOKEN) return c.json({ error: 'Telegram is not set up on the server' }, 400);
+    return c.json(await telegramStatus());
+  });
+  api.post('/telegram/chats', requireParent, async (c) => {
+    const body = await c.req.json().catch(() => ({}));
+    const id = String(body.id ?? '').trim();
+    const name = String(body.name ?? '').trim().slice(0, 60);
+    if (!/^-?\d{1,20}$/.test(id) || !name) return c.json({ error: 'Pick someone from the list' }, 400);
+    await addTelegramChat(db, { id, name });
+    const sent = await sendTelegram(`👋 Hi ${name.replace(/[<>&]/g, '')}! You'll now get the family calendar messages here.`, id);
+    return c.json({ ...(await telegramStatus()), sent });
+  });
+  api.delete('/telegram/chats/:id', requireParent, async (c) => {
+    await removeTelegramChat(db, c.req.param('id'));
+    return c.json(await telegramStatus());
   });
 
   return new Hono().route('/api', api);

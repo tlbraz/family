@@ -9,6 +9,13 @@ export interface GoogleStatus {
   lastError: string | null;
 }
 
+export interface TelegramStatus {
+  bot: string | null;
+  recipients: { id: string; name: string; fixed: boolean }[];
+  waiting: { id: string; name: string }[];
+  sent?: boolean;
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`/api${path}`, {
     ...init,
@@ -47,6 +54,10 @@ export const api = {
 
   googleStatus: () => request<GoogleStatus>('/google'),
   connectGoogle: (key: string) => request<GoogleStatus>('/google', json('POST', { key })),
+
+  telegram: () => request<TelegramStatus>('/telegram'),
+  addTelegram: (id: string, name: string) => request<TelegramStatus>('/telegram/chats', json('POST', { id, name })),
+  removeTelegram: (id: string) => request<TelegramStatus>(`/telegram/chats/${encodeURIComponent(id)}`, json('DELETE')),
 
   notes: () => request<Note[]>('/notes'),
   addNote: (text: string, author: string) => request<Note>('/notes', json('POST', { text, author })),
