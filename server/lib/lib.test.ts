@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { easter, holidays } from './holidays';
+import { fold, pickOccurrence } from './calendar';
 import { expand, repeatToRrule, rruleToRepeat } from './recurrence';
 import { dateKey } from './time';
 
@@ -42,5 +43,34 @@ describe('recurrence', () => {
   it('round-trips the form model', () => {
     const r = rruleToRepeat('FREQ=WEEKLY;INTERVAL=2;BYDAY=MO,WE;UNTIL=20270630T235959Z');
     expect(r).toEqual({ freq: 'weekly', interval: 2, weekdays: [0, 2], until: '2027-06-30' });
+  });
+});
+
+describe('search', () => {
+  it('ignores case and accents', () => {
+    expect(fold('Gonçalo ESTÁDIO')).toBe('goncalo estadio');
+  });
+});
+
+describe('search: which date of a repeating event to show', () => {
+  const start = new Date(2026, 8, 5, 10, 0); // Sat 5 Sep 2026, 10:00
+  const hour = 60 * 60_000;
+
+  it('shows the next one', () => {
+    const rule = repeatToRrule({ freq: 'weekly', interval: 1 }, start);
+    const got = pickOccurrence(rule, start, hour, [], new Date(2026, 8, 26, 12, 0));
+    expect(dateKey(got!)).toBe('2026-10-03');
+  });
+
+  it('shows the one happening right now', () => {
+    const rule = repeatToRrule({ freq: 'weekly', interval: 1 }, start);
+    const got = pickOccurrence(rule, start, hour, [], new Date(2026, 8, 26, 10, 30));
+    expect(dateKey(got!)).toBe('2026-09-26');
+  });
+
+  it('shows the last one of a series that has ended', () => {
+    const rule = repeatToRrule({ freq: 'weekly', interval: 1, until: '2026-09-20' }, start);
+    const got = pickOccurrence(rule, start, hour, [], new Date(2026, 8, 26, 12, 0));
+    expect(dateKey(got!)).toBe('2026-09-19');
   });
 });

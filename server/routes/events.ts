@@ -3,7 +3,7 @@ import { eq } from 'drizzle-orm';
 import { Hono } from 'hono';
 import type { Db } from '../db';
 import { type AuthEnv, requireParent } from '../lib/auth';
-import { eventValues, getEvent, listOccurrences, setParticipants } from '../lib/calendar';
+import { eventValues, getEvent, listOccurrences, searchEvents, setParticipants } from '../lib/calendar';
 import { events } from '../schema';
 import { EventInputSchema, RangeSchema, problem } from './validation';
 
@@ -21,6 +21,12 @@ export function eventRoutes(db: Db, hooks: EventHooks) {
     const days = (Date.parse(range.data.to) - Date.parse(range.data.from)) / 86_400_000;
     if (days < 1 || days > 62) return c.json({ error: 'Ask for 1 to 62 days at a time' }, 400);
     return c.json(await listOccurrences(db, range.data.from, range.data.to));
+  });
+
+  r.get('/search', async (c) => {
+    const q = (c.req.query('q') ?? '').trim();
+    if (q.length < 2 || q.length > 100) return c.json({ error: 'Type at least 2 letters' }, 400);
+    return c.json(await searchEvents(db, q));
   });
 
   r.get('/events/:id', async (c) => {

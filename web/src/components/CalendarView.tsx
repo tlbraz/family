@@ -4,6 +4,7 @@ import { api } from '../api';
 import { addDays, dateKey, dayLabel, fromKey, monthName, onDay, startOfWeek, timeOf, weekdayShort } from '../dates';
 import { Avatar, AvatarStack } from './Avatar';
 import { Icon, TYPE_LABEL } from './Icon';
+import { SearchView } from './SearchView';
 
 interface Props {
   members: Member[];
@@ -35,6 +36,7 @@ export function CalendarView({ members, refreshKey, onOpen, onAdd, canEdit }: Pr
   const [items, setItems] = useState<Occurrence[] | null>(null);
   const [who, setWho] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [searching, setSearching] = useState(false);
 
   const setMode = (m: Mode) => {
     setModeState(m);
@@ -143,6 +145,8 @@ export function CalendarView({ members, refreshKey, onOpen, onAdd, canEdit }: Pr
 
   const dayProps = { visible, members, todayKey, today, canEdit, onOpen, onAdd };
 
+  if (searching) return <SearchView members={members} refreshKey={refreshKey} onOpen={onOpen} onClose={() => setSearching(false)} />;
+
   return (
     <div className="calendar" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
       <header className="cal-head">
@@ -151,6 +155,9 @@ export function CalendarView({ members, refreshKey, onOpen, onAdd, canEdit }: Pr
           <h1>{title}</h1>
         </div>
         <div className="cal-nav">
+          <button className="round" aria-label="Search events" onClick={() => setSearching(true)}>
+            <Icon name="search" />
+          </button>
           <button className="round" aria-label={`Previous ${mode}`} onClick={() => shift(-1)}>
             <Icon name="left" />
           </button>
@@ -339,7 +346,8 @@ function DayAgenda({ day, visible, members, todayKey, today, canEdit, onOpen, on
   );
 }
 
-function EventCard({ o, members, dayKey, onOpen }: { o: Occurrence; members: Member[]; dayKey: string; onOpen: () => void }) {
+/** One event in a list; `label` replaces the time column (search results show the date there). */
+export function EventCard({ o, members, dayKey, onOpen, label }: { o: Occurrence; members: Member[]; dayKey: string; onOpen: () => void; label?: string }) {
   const lead = members.find((m) => m.id === o.participants[0]);
   const multiDay = dateKey(new Date(o.start)) !== dateKey(new Date(new Date(o.end).getTime() - 1));
   const startsToday = dateKey(new Date(o.start)) === dayKey;
@@ -347,7 +355,7 @@ function EventCard({ o, members, dayKey, onOpen }: { o: Occurrence; members: Mem
   const todo = o.bring.filter((b) => !b.done);
   return (
     <div className="row">
-      <div className="time">{time}</div>
+      <div className="time">{label ?? time}</div>
       <button className={`card event ${o.kind}`} style={{ '--c': lead?.color ?? 'var(--muted)' } as React.CSSProperties} onClick={onOpen}>
         <span className="card-top">
           <span className="card-title">{o.title}</span>

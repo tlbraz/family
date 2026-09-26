@@ -19,6 +19,13 @@ describe('GET /api/health', () => {
   });
 });
 
+describe('GET /api/search', () => {
+  it('needs at least 2 letters', async () => {
+    const res = await up().request('/api/search?q=%20a%20');
+    expect(res.status).toBe(400);
+  });
+});
+
 describe('permissions', () => {
   it('only lets signed-in parents create events', async () => {
     const res = await up().request('/api/events', { method: 'POST', body: '{}', headers: { 'content-type': 'application/json' } });

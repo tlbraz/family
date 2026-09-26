@@ -79,6 +79,12 @@ export interface Occurrence {
   repeats: boolean;
 }
 
+/** Events matching a search; a repeating event shows up once, at its next (or last) date. */
+export interface SearchResults {
+  upcoming: Occurrence[];
+  past: Occurrence[];
+}
+
 export interface AppConfig {
   me: Member | null;
   features: { ai: boolean; google: boolean; telegram: boolean };

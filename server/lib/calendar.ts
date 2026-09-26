@@ -1,5 +1,5 @@
-import { and, eq, gte, inArray, isNotNull, isNull, lt, or } from 'drizzle-orm';
-import type { CalendarEvent, EventInput, Occurrence } from '../../shared/types';
+import { type AnyColumn, and, eq, gte, inArray, isNotNull, isNull, lt, or, sql } from 'drizzle-orm';
+import type { CalendarEvent, EventInput, Occurrence, SearchResults } from '../../shared/types';
 import { SCHOOL_BREAKS, SCHOOL_DAYS } from '../../shared/school-calendar';
 import type { Db } from '../db';
 import { eventParticipants, events, members } from '../schema';
@@ -141,6 +141,81 @@ export async function listOccurrences(db: Db, fromKey: string, toKey: string): P
   }
 
   return out.sort((a, b) => a.start.localeCompare(b.start) || Number(b.allDay) - Number(a.allDay));
+}
+
+/**
+ * The occurrence of a series to show in search results: the one happening now or next,
+ * or, once the series is over, its last one. Null if every date was removed.
+ */
+export function pickOccurrence(rrule: string, start: Date, duration: number, exdates: string[], now: Date): Date | null {
+  const next = expand(rrule, start, new Date(now.getTime() - duration), new Date(now.getTime() + 400 * 86_400_000), exdates)
+    .find((s) => s.getTime() + duration > now.getTime());
+  if (next) return next;
+  const until = seriesEnd(rrule);
+  if (!until) return null;
+  return expand(rrule, start, start, until < now ? until : now, exdates).at(-1) ?? null;
+}
+
+const SEARCH_LIMIT = 30;
+const ACCENTED = 'áàâãäçéèêëíìîïñóòôõöúùûü';
+const PLAIN = 'aaaaaceeeeiiiinooooouuuu';
+
+/** Lower case without accents, so "goncalo" finds Gonçalo. */
+export const fold = (s: string) => s.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
+/** Column contains the (already folded) text, ignoring case and accents. */
+const contains = (col: AnyColumn, folded: string) =>
+  sql`translate(lower(${col}), ${ACCENTED}, ${PLAIN}) like ${`%${folded.replace(/[\\%_]/g, (c) => `\\${c}`)}%`}`;
+
+/**
+ * Events whose title, place or notes contain `q`, or that involve a family member named `q`.
+ * Repeating events appear once (see pickOccurrence). Upcoming soonest first, past most recent first.
+ */
+export async function searchEvents(db: Db, q: string, now = new Date()): Promise<SearchResults> {
+  const text = fold(q);
+  const who = await db.select({ id: members.id }).from(members).where(contains(members.name, text));
+  const involving = who.length
+    ? (await db.select({ id: eventParticipants.eventId }).from(eventParticipants).where(inArray(eventParticipants.memberId, who.map((m) => m.id)))).map((r) => r.id)
+    : [];
+  const rows = await db
+    .select()
+    .from(events)
+    .where(
+      or(
+        contains(events.title, text),
+        contains(events.location, text),
+        contains(events.notes, text),
+        involving.length ? inArray(events.id, involving) : undefined,
+      ),
+    );
+  const people = await participantsOf(db, rows.map((r) => r.id));
+  const upcoming: Occurrence[] = [];
+  const past: Occurrence[] = [];
+
+  for (const row of rows) {
+    const duration = row.endAt.getTime() - row.startAt.getTime();
+    const start = row.rrule ? pickOccurrence(row.rrule, row.startAt, duration, row.exdates, now) : row.startAt;
+    if (!start) continue;
+    const end = new Date(start.getTime() + duration);
+    const o: Occurrence = {
+      key: row.rrule ? `${row.id}@${start.toISOString()}` : row.id,
+      eventId: row.id,
+      kind: 'event',
+      title: row.title,
+      type: row.type,
+      allDay: row.allDay,
+      start: start.toISOString(),
+      end: end.toISOString(),
+      location: row.location,
+      participants: people.get(row.id) ?? [],
+      bring: row.bring,
+      repeats: !!row.rrule,
+    };
+    (end > now ? upcoming : past).push(o);
+  }
+
+  upcoming.sort((a, b) => a.start.localeCompare(b.start));
+  past.sort((a, b) => b.start.localeCompare(a.start));
+  return { upcoming: upcoming.slice(0, SEARCH_LIMIT), past: past.slice(0, SEARCH_LIMIT) };
 }
 
 function generated(key: string, kind: Occurrence['kind'], title: string, start: Date, end: Date, participants: number[] = []): Occurrence {

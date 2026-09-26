@@ -1,4 +1,4 @@
-import type { AppConfig, CalendarEvent, EventDraft, EventInput, Health, Member, MemberInput, Note, Occurrence } from '../../shared/types';
+import type { AppConfig, CalendarEvent, EventDraft, EventInput, Health, Member, MemberInput, Note, Occurrence, SearchResults } from '../../shared/types';
 
 export interface GoogleStatus {
   connected: boolean;
@@ -37,6 +37,7 @@ export const api = {
   deleteMember: (id: number) => request<void>(`/members/${id}`, json('DELETE')),
 
   calendar: (from: string, to: string) => request<Occurrence[]>(`/calendar?from=${from}&to=${to}`),
+  search: (q: string) => request<SearchResults>(`/search?q=${encodeURIComponent(q)}`),
   event: (id: string) => request<CalendarEvent>(`/events/${id}`),
   createEvent: (e: EventInput) => request<CalendarEvent>('/events', json('POST', e)),
   updateEvent: (id: string, e: EventInput) => request<CalendarEvent>(`/events/${id}`, json('PATCH', e)),
