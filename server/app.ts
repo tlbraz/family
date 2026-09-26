@@ -4,7 +4,7 @@ import type { AppConfig, Health } from '../shared/types';
 import type { Db } from './db';
 import { AiError, draftEvent, aiEnabled, type ImageInput } from './lib/ai';
 import { type AuthEnv, loadMember, requireParent } from './lib/auth';
-import { tomorrowDigest, weekDigest } from './lib/digest';
+import { todayDigest, tomorrowDigest, weekDigest } from './lib/digest';
 import { googleEnabled, googleStatus, saveGoogleKey, syncRound } from './lib/google';
 import { sendTelegram, telegramEnabled } from './lib/telegram';
 import { authRoutes } from './routes/auth';
@@ -95,10 +95,11 @@ export function createApp(db: Db, hooks: AppHooks = noop) {
     return c.json(await googleStatus(db));
   });
 
-  // Send the Telegram digests now (for testing): ?kind=tomorrow|week
+  // Send the Telegram digests now (for testing): ?kind=today|tomorrow|week
   api.post('/digest', requireParent, async (c) => {
-    const msg = c.req.query('kind') === 'week' ? await weekDigest(db) : await tomorrowDigest(db);
-    if (!msg) return c.json({ sent: false, reason: 'Nothing on tomorrow' });
+    const kind = c.req.query('kind');
+    const msg = kind === 'week' ? await weekDigest(db) : kind === 'today' ? await todayDigest(db) : await tomorrowDigest(db);
+    if (!msg) return c.json({ sent: false, reason: `Nothing on ${kind === 'today' ? 'today' : 'tomorrow'}` });
     return c.json({ sent: await sendTelegram(msg) });
   });
 

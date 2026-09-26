@@ -29,16 +29,23 @@ function line(o: Occurrence, who: Map<number, string>): string {
   return s;
 }
 
-/** The evening message: what happens tomorrow and what to pack. Null when nothing is on. */
-export async function tomorrowDigest(db: Db, now = new Date()): Promise<string | null> {
-  const day = addDays(new Date(now.getFullYear(), now.getMonth(), now.getDate()), 1);
+/** One day's events as a message, or null when nothing is on that day. */
+async function dayDigest(db: Db, day: Date, label: string): Promise<string | null> {
   const items = await listOccurrences(db, dateKey(day), dateKey(addDays(day, 1)));
   const real = items.filter((o) => o.kind === 'event' || o.kind === 'birthday');
   if (!real.length) return null;
   const who = await names(db);
   const other = items.filter((o) => o.kind === 'holiday' || o.kind === 'school').map((o) => esc(o.title));
-  return [`<b>Tomorrow · ${dayName(day)}</b>`, ...other.map((t) => `ℹ️ ${t}`), ...real.map((o) => line(o, who))].join('\n');
+  return [`<b>${label} · ${dayName(day)}</b>`, ...other.map((t) => `ℹ️ ${t}`), ...real.map((o) => line(o, who))].join('\n');
 }
+
+const startOfDay = (now: Date) => new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+/** The morning message: what's on today. Null when nothing is on. */
+export const todayDigest = (db: Db, now = new Date()) => dayDigest(db, startOfDay(now), 'Good morning ☀️ Today');
+
+/** The evening message: what happens tomorrow and what to pack. Null when nothing is on. */
+export const tomorrowDigest = (db: Db, now = new Date()) => dayDigest(db, addDays(startOfDay(now), 1), 'Tomorrow');
 
 /** The Sunday message: the coming week, day by day. */
 export async function weekDigest(db: Db, now = new Date()): Promise<string> {
@@ -70,10 +77,18 @@ async function onceFor(db: Db, key: string, send: () => Promise<boolean>) {
   if (await send()) await db.insert(settings).values({ key, value: new Date().toISOString() }).onConflictDoNothing();
 }
 
-/** Called every minute: 20:00 → tomorrow; Sunday 19:00 → the week ahead. */
+/** Called every minute: 07:30 → today; 20:00 → tomorrow; Sunday 19:00 → the week ahead. */
 export async function runDigests(db: Db, now = new Date()) {
   if (!telegramEnabled()) return;
   const today = dateKey(now);
+  const minutes = now.getHours() * 60 + now.getMinutes();
+  // Only in the morning: a restart later in the day shouldn't send a stale "good morning".
+  if (minutes >= 7 * 60 + 30 && now.getHours() < 11) {
+    await onceFor(db, `digest:today:${today}`, async () => {
+      const msg = await todayDigest(db, now);
+      return msg ? sendTelegram(msg) : true;
+    });
+  }
   if (now.getHours() >= 20) {
     await onceFor(db, `digest:tomorrow:${today}`, async () => {
       const msg = await tomorrowDigest(db, now);
