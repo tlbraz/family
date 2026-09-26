@@ -5,6 +5,7 @@ import { addDays, dateKey, fromKey, pad, timeOf } from '../dates';
 import { Avatar, AvatarStack } from './Avatar';
 import { Icon, TYPE_LABEL } from './Icon';
 import { Sheet } from './Sheet';
+import { VoiceButton } from './VoiceButton';
 
 type RepeatChoice = 'none' | 'weekly' | 'biweekly' | 'monthly' | 'yearly';
 
@@ -146,16 +147,19 @@ export function EventSheet({ members, canEdit, aiEnabled, occurrence, day, onClo
   const set = <K extends keyof Form>(k: K, v: Form[K]) => setForm((f) => ({ ...f, [k]: v }));
   const toggle = (list: number[], id: number) => (list.includes(id) ? list.filter((x) => x !== id) : [...list, id]);
 
-  async function read(image?: File) {
-    if (!magic.trim() && !image) return;
+  async function read(image?: File, spoken?: string) {
+    const text = (spoken ?? magic).trim();
+    if (!text && !image) return;
     setReading(true);
     setError(null);
     try {
-      const draft = await api.draft(magic.trim(), image ? await photoToBase64(image) : undefined);
+      const draft = await api.draft(text, image ? await photoToBase64(image) : undefined);
       setForm((f) => applyDraft(f, draft, members));
       setMagic('');
     } catch (e) {
       setError((e as Error).message);
+      // Claude couldn't fill it in (e.g. no credit): at least keep what was said as the title.
+      if (spoken) setForm((f) => (f.title.trim() ? f : { ...f, title: spoken.slice(0, 120) }));
     } finally {
       setReading(false);
       if (fileRef.current) fileRef.current.value = '';
@@ -260,6 +264,7 @@ export function EventSheet({ members, canEdit, aiEnabled, occurrence, day, onClo
               aria-label="Describe the event"
               disabled={reading}
             />
+            <VoiceButton onText={setMagic} onDone={(t) => read(undefined, t)} onError={setError} />
             {magic.trim() ? (
               <button type="button" className="chip dark" onClick={() => read()} disabled={reading}>{reading ? 'Reading…' : 'Fill in'}</button>
             ) : (
@@ -271,7 +276,10 @@ export function EventSheet({ members, canEdit, aiEnabled, occurrence, day, onClo
           </div>
         )}
 
-        <input id="title" className="title-input" value={form.title} onChange={(e) => set('title', e.target.value)} placeholder="What's happening?" aria-label="Title" maxLength={120} />
+        <div className="title-row">
+          <input id="title" className="title-input" value={form.title} onChange={(e) => set('title', e.target.value)} placeholder="What's happening?" aria-label="Title" maxLength={120} />
+          {!(aiEnabled && isNew) && <VoiceButton onText={(t) => set('title', t.slice(0, 120))} onDone={(t) => set('title', t.slice(0, 120))} onError={setError} />}
+        </div>
 
         <div className="types" role="group" aria-label="Type">
           {EVENT_TYPES.map((t) => (
