@@ -4,6 +4,7 @@ CREATE TABLE "tasks" (
 	"due" date NOT NULL,
 	"member_id" integer,
 	"done" boolean DEFAULT false NOT NULL,
+	"done_at" timestamp with time zone,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint

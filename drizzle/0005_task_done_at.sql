@@ -1,1 +1,0 @@
-ALTER TABLE "tasks" ADD COLUMN "done_at" timestamp with time zone;

@@ -57,6 +57,7 @@ export interface CalendarEvent {
   notes: string | null;
   participants: number[];
   bring: BringItem[];
+  reminders: number[]; // minutes before the start (negative = after, e.g. -480 = 08:00 on an all-day event)
   repeat: Repeat | null;
   source: 'app' | 'google';
 }
@@ -76,6 +77,7 @@ export interface Occurrence {
   location: string | null;
   participants: number[];
   bring: BringItem[];
+  reminders: number[]; // minutes before the start (negative = after, e.g. -480 = 08:00 on an all-day event)
   repeats: boolean;
 }
 

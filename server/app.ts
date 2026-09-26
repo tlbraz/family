@@ -12,6 +12,7 @@ import { type EventHooks, eventRoutes } from './routes/events';
 import { memberRoutes, toMember } from './routes/members';
 import { noteRoutes } from './routes/notes';
 import { taskRoutes } from './routes/tasks';
+import { upcomingRoutes } from './routes/upcoming';
 import { members } from './schema';
 import pkg from '../package.json';
 
@@ -56,13 +57,14 @@ export function createApp(db: Db, hooks: AppHooks = noop) {
   api.route('/members', memberRoutes(db, hooks.membersChanged));
   api.route('/notes', noteRoutes(db));
   api.route('/tasks', taskRoutes(db));
+  api.route('/upcoming', upcomingRoutes(db));
   api.route('/', eventRoutes(db, hooks));
 
   // Photo or sentence → a draft event for the form (nothing is saved here).
   api.post('/ai/event', requireParent, async (c) => {
     if (!aiEnabled()) return c.json({ error: 'Reading photos is not set up yet' }, 503);
     const body = await c.req.json().catch(() => ({}));
-    const text = typeof body.text === 'string' ? body.text.trim().slice(0, 1000) : '';
+    const text = typeof body.text === 'string' ? body.text.trim().slice(0, 4000) : '';
     let image: ImageInput | undefined;
     if (body.image) {
       if (!IMAGE_TYPES.includes(body.image.mediaType) || typeof body.image.data !== 'string') {

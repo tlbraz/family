@@ -1,5 +1,5 @@
 {
-  "id": "71d76e53-cda9-48c1-929f-af6c21ce90cc",
+  "id": "008f06e2-3d26-4fac-a818-1801b4f7bd85",
   "prevId": "4dfdfa57-62b0-4f52-bd2e-724b33d9fadf",
   "version": "7",
   "dialect": "postgresql",
@@ -119,6 +119,13 @@
         },
         "bring": {
           "name": "bring",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'[]'::jsonb"
+        },
+        "reminders": {
+          "name": "reminders",
           "type": "jsonb",
           "primaryKey": false,
           "notNull": true,
@@ -452,87 +459,6 @@
       },
       "indexes": {},
       "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.tasks": {
-      "name": "tasks",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "serial",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "title": {
-          "name": "title",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "due": {
-          "name": "due",
-          "type": "date",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "member_id": {
-          "name": "member_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "done": {
-          "name": "done",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "tasks_due_idx": {
-          "name": "tasks_due_idx",
-          "columns": [
-            {
-              "expression": "due",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "tasks_member_id_members_id_fk": {
-          "name": "tasks_member_id_members_id_fk",
-          "tableFrom": "tasks",
-          "tableTo": "members",
-          "columnsFrom": [
-            "member_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        }
-      },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},

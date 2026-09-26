@@ -1,6 +1,6 @@
 {
-  "id": "ca487c16-a0cb-409f-a89d-72169d86bb41",
-  "prevId": "71d76e53-cda9-48c1-929f-af6c21ce90cc",
+  "id": "9aaea7cf-807e-45c1-9a89-78567d584606",
+  "prevId": "008f06e2-3d26-4fac-a818-1801b4f7bd85",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -119,6 +119,13 @@
         },
         "bring": {
           "name": "bring",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'[]'::jsonb"
+        },
+        "reminders": {
+          "name": "reminders",
           "type": "jsonb",
           "primaryKey": false,
           "notNull": true,

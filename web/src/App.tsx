@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import type { AppConfig, Health, Member, Occurrence, Task } from '../../shared/types';
 import { api } from './api';
 import { useBack } from './back';
+import { type Shared, takeShared } from './share';
 import { dateKey } from './dates';
 import { Avatar, setFamily } from './components/Avatar';
 import { CalendarView } from './components/CalendarView';
@@ -13,7 +14,7 @@ import { SignIn } from './components/SignIn';
 import { TaskSheet } from './components/TaskSheet';
 
 type Tab = 'calendar' | 'notes' | 'family';
-type Open = { kind: 'event'; occurrence: Occurrence | null; day: string } | { kind: 'task'; task: Task | null; day: string } | null;
+type Open = { kind: 'event'; occurrence: Occurrence | null; day: string; shared?: Shared } | { kind: 'task'; task: Task | null; day: string } | null;
 
 export function App() {
   const [tab, setTab] = useState<Tab>('calendar');
@@ -23,6 +24,7 @@ export function App() {
   const [open, setOpen] = useState<Open>(null);
   const [signIn, setSignIn] = useState(false);
   const [refresh, setRefresh] = useState(0);
+  const [shared, setShared] = useState<Shared | null>(null);
   useBack(() => setTab('calendar'), tab !== 'calendar');
 
   const loadAll = useCallback(() => {
@@ -40,6 +42,18 @@ export function App() {
 
   const me = config?.me ?? null;
   const canEdit = me?.role === 'parent';
+
+  // Something shared from another app: open "New event" with it (after signing in, if needed).
+  useEffect(() => {
+    takeShared().then((s) => s && setShared(s));
+  }, []);
+  useEffect(() => {
+    if (!shared || !config) return;
+    if (!canEdit) return setSignIn(true);
+    setTab('calendar');
+    setOpen({ kind: 'event', occurrence: null, day: dateKey(new Date()), shared });
+    setShared(null);
+  }, [shared, config, canEdit]);
 
   return (
     <div className="shell">
@@ -135,6 +149,7 @@ export function App() {
           aiEnabled={!!config?.features.ai}
           occurrence={open.occurrence}
           day={open.day}
+          shared={open.shared}
           onClose={() => setOpen(null)}
           onTodo={open.occurrence ? undefined : () => setOpen({ kind: 'task', task: null, day: open.day })}
           onSaved={() => {
@@ -146,7 +161,10 @@ export function App() {
       {signIn && (
         <SignIn
           members={members}
-          onClose={() => setSignIn(false)}
+          onClose={() => {
+            setSignIn(false);
+            setShared(null);
+          }}
           onDone={() => {
             setSignIn(false);
             loadAll();
