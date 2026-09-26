@@ -10,6 +10,7 @@ const COLORS = ['#4c7be8', '#d9548a', '#1f9a71', '#8a5cd6', '#c97714', '#0e8fa3'
 function age(birthday: string | null): string {
   if (!birthday) return '';
   const b = new Date(birthday);
+  if (b.getFullYear() <= 1904) return `birthday ${b.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}`; // year unknown
   const now = new Date();
   let a = now.getFullYear() - b.getFullYear();
   if (now < new Date(now.getFullYear(), b.getMonth(), b.getDate())) a--;
@@ -117,7 +118,7 @@ function MemberSheet({ member, onClose, onSaved }: { member: Member | null; onCl
           </div>
         </div>
         <label className="stacked">
-          <span>Birthday</span>
+          <span>Birthday (use the year 1904 to hide the age)</span>
           <input id="birthday" type="date" value={birthday} onChange={(e) => setBirthday(e.target.value)} />
         </label>
         {role === 'parent' && (

@@ -9,6 +9,9 @@ import { addDays, dateKey, parseDateKey } from './time';
 
 type EventRow = typeof events.$inferSelect;
 
+/** Birthdays stored with this year (or earlier) have no known year: no age is shown. */
+export const NO_YEAR = 1904;
+
 async function participantsOf(db: Db, ids: string[]): Promise<Map<string, number[]>> {
   const map = new Map<string, number[]>();
   if (!ids.length) return map;
@@ -119,7 +122,8 @@ export async function listOccurrences(db: Db, fromKey: string, toKey: string): P
     for (let y = from.getFullYear(); y <= to.getFullYear(); y++) {
       const day = new Date(y, bm! - 1, bd!);
       if (day < from || day >= to) continue;
-      out.push(generated(`bday-${m.id}-${y}`, 'birthday', `${m.name}'s birthday · ${y - by!}`, day, addDays(day, 1), [m.id]));
+      const title = by! > NO_YEAR ? `${m.name}'s birthday · ${y - by!}` : `${m.name}'s birthday`;
+      out.push(generated(`bday-${m.id}-${y}`, 'birthday', title, day, addDays(day, 1), [m.id]));
     }
   }
 
