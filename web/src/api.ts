@@ -1,4 +1,4 @@
-import type { AppConfig, CalendarEvent, EventDraft, EventInput, Health, Member, MemberInput, Note, Occurrence } from '../../shared/types';
+import type { AppConfig, CalendarEvent, EventDraft, EventInput, Health, Member, MemberInput, Note, Occurrence, Task, TaskInput } from '../../shared/types';
 
 export interface GoogleStatus {
   connected: boolean;
@@ -47,6 +47,12 @@ export const api = {
 
   googleStatus: () => request<GoogleStatus>('/google'),
   connectGoogle: (key: string) => request<GoogleStatus>('/google', json('POST', { key })),
+
+  tasks: (from: string, to: string) => request<Task[]>(`/tasks?from=${from}&to=${to}`),
+  addTask: (t: TaskInput) => request<Task>('/tasks', json('POST', t)),
+  updateTask: (id: number, t: TaskInput) => request<Task>(`/tasks/${id}`, json('PATCH', t)),
+  toggleTask: (id: number) => request<Task>(`/tasks/${id}/done`, json('POST')),
+  deleteTask: (id: number) => request<void>(`/tasks/${id}`, json('DELETE')),
 
   notes: () => request<Note[]>('/notes'),
   addNote: (text: string, author: string) => request<Note>('/notes', json('POST', { text, author })),

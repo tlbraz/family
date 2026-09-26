@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { Member, Occurrence } from '../../../shared/types';
+import type { Member, Occurrence, Task } from '../../../shared/types';
 import { api } from '../api';
 import { addDays, dateKey, dayLabel, fromKey, monthName, onDay, startOfWeek, timeOf, weekdayShort } from '../dates';
 import { Avatar, AvatarStack } from './Avatar';
@@ -9,6 +9,7 @@ interface Props {
   members: Member[];
   refreshKey: number;
   onOpen: (o: Occurrence) => void;
+  onOpenTask: (t: Task) => void;
   onAdd: (day: string) => void;
   canEdit: boolean;
 }
@@ -27,12 +28,13 @@ function readMode(): Mode {
 const isOff = (o: Occurrence) => o.kind === 'holiday' || (o.kind === 'school' && o.title.startsWith('No school'));
 const isThing = (o: Occurrence) => o.kind === 'event' || o.kind === 'birthday';
 
-export function CalendarView({ members, refreshKey, onOpen, onAdd, canEdit }: Props) {
+export function CalendarView({ members, refreshKey, onOpen, onOpenTask, onAdd, canEdit }: Props) {
   const [today, setToday] = useState(() => new Date());
   const [mode, setModeState] = useState<Mode>(readMode);
   const [anchor, setAnchor] = useState(() => new Date());
   const [selected, setSelected] = useState(() => dateKey(new Date()));
   const [items, setItems] = useState<Occurrence[] | null>(null);
+  const [tasks, setTasks] = useState<Task[]>([]);
   const [who, setWho] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -60,10 +62,10 @@ export function CalendarView({ members, refreshKey, onOpen, onAdd, canEdit }: Pr
   const to = addDays(days[days.length - 1]!, 1);
 
   const load = useCallback(() => {
-    api
-      .calendar(dateKey(from), dateKey(to))
-      .then((x) => {
+    Promise.all([api.calendar(dateKey(from), dateKey(to)), api.tasks(dateKey(from), dateKey(to))])
+      .then(([x, t]) => {
         setItems(x);
+        setTasks(t);
         setError(null);
       })
       .catch((e: Error) => setError(e.message));
@@ -89,6 +91,14 @@ export function CalendarView({ members, refreshKey, onOpen, onAdd, canEdit }: Pr
     (o) => who === null || o.kind === 'holiday' || o.kind === 'school' || o.participants.includes(who),
   );
   const todayKey = dateKey(today);
+  const visibleTasks = tasks.filter((t) => who === null || t.memberId === who);
+  const toggleTask = (t: Task) => {
+    setTasks((list) => list.map((x) => (x.id === t.id ? { ...x, done: !x.done } : x)));
+    api.toggleTask(t.id).catch((e: Error) => {
+      setError(e.message);
+      load();
+    });
+  };
   const current =
     mode === 'week'
       ? dateKey(startOfWeek(today)) === dateKey(startOfWeek(anchor))
@@ -141,7 +151,7 @@ export function CalendarView({ members, refreshKey, onOpen, onAdd, canEdit }: Pr
     eyebrow = current ? 'This week' : `Week of ${first.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}`;
   }
 
-  const dayProps = { visible, members, todayKey, today, canEdit, onOpen, onAdd };
+  const dayProps = { visible, tasks: visibleTasks, members, todayKey, today, canEdit, onOpen, onOpenTask, onToggleTask: toggleTask, onAdd };
 
   return (
     <div className="calendar" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
@@ -201,14 +211,16 @@ export function CalendarView({ members, refreshKey, onOpen, onAdd, canEdit }: Pr
             const key = dateKey(d);
             const dots = visible.filter((o) => isThing(o) && onDay(o.start, o.end, key));
             const off = visible.some((o) => isOff(o) && onDay(o.start, o.end, key));
+            const due = visibleTasks.some((t) => !t.done && t.due === key);
             return (
               <a key={key} href={`#d-${key}`} className={`day-pill ${key === todayKey ? 'today' : ''} ${off ? 'off' : ''}`}>
                 <span className="dow">{weekdayShort(d)}</span>
                 <span className="num">{d.getDate()}</span>
                 <span className="dots">
-                  {dots.slice(0, 4).map((o) => (
+                  {dots.slice(0, due ? 3 : 4).map((o) => (
                     <span key={o.key} style={{ background: colorOf(o, members) }} />
                   ))}
+                  {due && <span className="task-dot" />}
                 </span>
               </a>
             );
@@ -217,7 +229,7 @@ export function CalendarView({ members, refreshKey, onOpen, onAdd, canEdit }: Pr
       )}
 
       {mode === 'month' && (
-        <MonthGrid days={days} month={anchor.getMonth()} visible={visible} members={members} todayKey={todayKey} selected={selected} onSelect={setSelected} />
+        <MonthGrid days={days} month={anchor.getMonth()} visible={visible} tasks={visibleTasks} members={members} todayKey={todayKey} selected={selected} onSelect={setSelected} />
       )}
 
       {error && <p className="error">{error}</p>}
@@ -242,10 +254,11 @@ export function CalendarView({ members, refreshKey, onOpen, onAdd, canEdit }: Pr
 
 const colorOf = (o: Occurrence, members: Member[]) => members.find((m) => m.id === o.participants[0])?.color ?? 'var(--muted)';
 
-function MonthGrid({ days, month, visible, members, todayKey, selected, onSelect }: {
+function MonthGrid({ days, month, visible, tasks, members, todayKey, selected, onSelect }: {
   days: Date[];
   month: number;
   visible: Occurrence[];
+  tasks: Task[];
   members: Member[];
   todayKey: string;
   selected: string;
@@ -264,6 +277,7 @@ function MonthGrid({ days, month, visible, members, todayKey, selected, onSelect
           const here = visible.filter((o) => onDay(o.start, o.end, key));
           const things = here.filter(isThing);
           const off = here.find(isOff);
+          const due = tasks.filter((t) => !t.done && t.due === key);
           const cls = ['cell', d.getMonth() !== month && 'other', key === todayKey && 'today', key === selected && 'selected', off && 'off'].filter(Boolean).join(' ');
           return (
             <button
@@ -271,7 +285,7 @@ function MonthGrid({ days, month, visible, members, todayKey, selected, onSelect
               role="gridcell"
               className={cls}
               aria-selected={key === selected}
-              aria-label={`${d.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}: ${things.length ? `${things.length} event${things.length > 1 ? 's' : ''}` : 'nothing planned'}${off ? `, ${off.title}` : ''}`}
+              aria-label={`${d.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}: ${things.length ? `${things.length} event${things.length > 1 ? 's' : ''}` : 'nothing planned'}${due.length ? `, ${due.length} to-do${due.length > 1 ? 's' : ''}` : ''}${off ? `, ${off.title}` : ''}`}
               onClick={() => onSelect(key)}
             >
               <span className="cell-num">{d.getDate()}</span>
@@ -280,6 +294,7 @@ function MonthGrid({ days, month, visible, members, todayKey, selected, onSelect
                   <span key={o.key} style={{ background: colorOf(o, members) }} />
                 ))}
                 {things.length > 3 && <span className="more">+</span>}
+                {due.length > 0 && <span className="task-dot" />}
               </span>
               <span className="cell-chips">
                 {things.slice(0, 3).map((o) => (
@@ -289,6 +304,9 @@ function MonthGrid({ days, month, visible, members, todayKey, selected, onSelect
                   </span>
                 ))}
                 {things.length > 3 && <span className="cell-more">+{things.length - 3} more</span>}
+                {due.map((t) => (
+                  <span key={t.id} className="cell-chip task">☐ {t.title}</span>
+                ))}
               </span>
             </button>
           );
@@ -298,9 +316,12 @@ function MonthGrid({ days, month, visible, members, todayKey, selected, onSelect
   );
 }
 
-function DayAgenda({ day, visible, members, todayKey, today, canEdit, onOpen, onAdd, hidePastEmpty }: {
+function DayAgenda({ day, visible, tasks, members, todayKey, today, canEdit, onOpen, onOpenTask, onToggleTask, onAdd, hidePastEmpty }: {
   day: Date;
   visible: Occurrence[];
+  tasks: Task[];
+  onOpenTask: (t: Task) => void;
+  onToggleTask: (t: Task) => void;
   members: Member[];
   todayKey: string;
   today: Date;
@@ -313,8 +334,10 @@ function DayAgenda({ day, visible, members, todayKey, today, canEdit, onOpen, on
   const dayItems = visible.filter((o) => onDay(o.start, o.end, key));
   const banners = dayItems.filter((o) => o.kind === 'holiday' || o.kind === 'school');
   const things = dayItems.filter(isThing);
+  // To-dos due this day. Ones still open after their day move to today (as late).
+  const due = tasks.filter((t) => (key === todayKey ? t.due <= key && (t.due === key || !t.done) : t.due === key && (key > todayKey || t.done)));
   const past = key < todayKey;
-  if (hidePastEmpty && past && things.length === 0 && banners.length === 0) return null; // skip empty days already gone
+  if (hidePastEmpty && past && things.length === 0 && banners.length === 0 && due.length === 0) return null; // skip empty days already gone
   return (
     <section id={`d-${key}`} className={`day ${past && hidePastEmpty ? 'past' : ''}`}>
       <div className="day-head">
@@ -331,7 +354,10 @@ function DayAgenda({ day, visible, members, todayKey, today, canEdit, onOpen, on
           {b.title}
         </div>
       ))}
-      {things.length === 0 && banners.length === 0 && <p className="nothing">Nothing planned</p>}
+      {things.length === 0 && banners.length === 0 && due.length === 0 && <p className="nothing">Nothing planned</p>}
+      {due.map((t) => (
+        <TaskRow key={t.id} t={t} members={members} dayKey={key} canEdit={canEdit} onOpen={() => onOpenTask(t)} onToggle={() => onToggleTask(t)} />
+      ))}
       {things.map((o) => (
         <EventCard key={o.key} o={o} members={members} dayKey={key} onOpen={() => onOpen(o)} />
       ))}
@@ -374,6 +400,26 @@ function EventCard({ o, members, dayKey, onOpen }: { o: Occurrence; members: Mem
           </span>
         )}
       </button>
+    </div>
+  );
+}
+
+function TaskRow({ t, members, dayKey, canEdit, onOpen, onToggle }: { t: Task; members: Member[]; dayKey: string; canEdit: boolean; onOpen: () => void; onToggle: () => void }) {
+  const member = members.find((m) => m.id === t.memberId);
+  const late = t.due < dayKey;
+  return (
+    <div className="row">
+      <div className="time">{late ? 'Late' : 'Due'}</div>
+      <div className={`card task-card ${t.done ? 'done' : ''} ${late ? 'late' : ''}`} style={{ '--c': member?.color ?? 'var(--muted)' } as React.CSSProperties}>
+        <button className="tick" role="checkbox" aria-checked={t.done} aria-label={`${t.title}: ${t.done ? 'done' : 'not done'}`} onClick={onToggle}>
+          {t.done && <Icon name="check" size={16} stroke={3} />}
+        </button>
+        <button className="task-text" onClick={onOpen} disabled={!canEdit}>
+          <span className="card-title">{t.title}</span>
+          {late && <span className="meta">Was due {fromKey(t.due).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric' })}</span>}
+        </button>
+        {member && <Avatar member={member} size={26} />}
+      </div>
     </div>
   );
 }

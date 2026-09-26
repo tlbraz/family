@@ -79,6 +79,17 @@ export interface Occurrence {
   repeats: boolean;
 }
 
+/** A small to-do with a due date ("pay €10 for the trip by Friday"). */
+export interface Task {
+  id: number;
+  title: string;
+  due: string; // YYYY-MM-DD
+  memberId: number | null; // who it's for; null = the family
+  done: boolean;
+}
+
+export type TaskInput = Pick<Task, 'title' | 'due' | 'memberId'>;
+
 export interface AppConfig {
   me: Member | null;
   features: { ai: boolean; google: boolean; telegram: boolean };

@@ -11,6 +11,7 @@ import { authRoutes } from './routes/auth';
 import { type EventHooks, eventRoutes } from './routes/events';
 import { memberRoutes, toMember } from './routes/members';
 import { noteRoutes } from './routes/notes';
+import { taskRoutes } from './routes/tasks';
 import { members } from './schema';
 import pkg from '../package.json';
 
@@ -54,6 +55,7 @@ export function createApp(db: Db, hooks: AppHooks = noop) {
   api.route('/auth', authRoutes(db));
   api.route('/members', memberRoutes(db, hooks.membersChanged));
   api.route('/notes', noteRoutes(db));
+  api.route('/tasks', taskRoutes(db));
   api.route('/', eventRoutes(db, hooks));
 
   // Photo or sentence → a draft event for the form (nothing is saved here).

@@ -26,6 +26,12 @@ export const EventInputSchema = z
   })
   .refine((e) => new Date(e.end) > new Date(e.start), { message: 'The end must be after the start', path: ['end'] });
 
+export const TaskInputSchema = z.object({
+  title: z.string().trim().min(1).max(120),
+  due: date,
+  memberId: z.number().int().nullable(),
+});
+
 export const MemberInputSchema = z.object({
   name: z.string().trim().min(1).max(40),
   role: z.enum(['parent', 'kid']),

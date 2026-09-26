@@ -37,6 +37,11 @@ describe('permissions', () => {
     expect(res.status).toBe(401);
   });
 
+  it('only lets signed-in parents add a to-do', async () => {
+    const res = await up().request('/api/tasks', { method: 'POST', body: JSON.stringify({ title: 'Pay the trip', due: '2026-10-02', memberId: null }), headers: { 'content-type': 'application/json' } });
+    expect(res.status).toBe(401);
+  });
+
   it('rejects an empty note', async () => {
     const res = await up().request('/api/notes', {
       method: 'POST',

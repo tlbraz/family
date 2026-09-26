@@ -5,6 +5,7 @@ import { addDays, dateKey, fromKey, pad, timeOf } from '../dates';
 import { Avatar, AvatarStack } from './Avatar';
 import { Icon, TYPE_LABEL } from './Icon';
 import { Sheet } from './Sheet';
+import { KindSwitch } from './TaskSheet';
 import { VoiceButton } from './VoiceButton';
 
 type RepeatChoice = 'none' | 'weekly' | 'biweekly' | 'monthly' | 'yearly';
@@ -120,9 +121,10 @@ interface Props {
   day: string;
   onClose: () => void;
   onSaved: () => void;
+  onTodo?: () => void; // switch to adding a to-do instead
 }
 
-export function EventSheet({ members, canEdit, aiEnabled, occurrence, day, onClose, onSaved }: Props) {
+export function EventSheet({ members, canEdit, aiEnabled, occurrence, day, onClose, onSaved, onTodo }: Props) {
   const isNew = !occurrence;
   const [event, setEvent] = useState<CalendarEvent | null>(null);
   const [form, setForm] = useState<Form>(() => blank(day));
@@ -260,6 +262,8 @@ export function EventSheet({ members, canEdit, aiEnabled, occurrence, day, onClo
   return (
     <Sheet title={isNew ? 'New event' : 'Edit event'} onClose={onClose}>
       <form className="event-form" onSubmit={save}>
+        {isNew && onTodo && <KindSwitch kind="event" onSwitch={onTodo} />}
+
         {aiEnabled && isNew && (
           <div className="magic">
             <Icon name="sparkle" />
