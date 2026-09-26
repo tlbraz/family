@@ -42,7 +42,8 @@ export function eventRoutes(db: Db, hooks: EventHooks) {
     const id = c.req.param('id');
     const parsed = EventInputSchema.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json({ error: problem(parsed.error) }, 400);
-    const [row] = await db.update(events).set(eventValues(parsed.data)).where(eq(events.id, id)).returning();
+    // Edited here, so the app owns it from now on (even if it was first made in Google).
+    const [row] = await db.update(events).set({ ...eventValues(parsed.data), source: 'app' }).where(eq(events.id, id)).returning();
     if (!row) return c.json({ error: 'Not found' }, 404);
     await setParticipants(db, id, parsed.data.participants);
     hooks.changed(id);

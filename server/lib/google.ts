@@ -3,6 +3,7 @@ import { and, eq, gte, isNull, or, isNotNull } from 'drizzle-orm';
 import { JWT } from 'google-auth-library';
 import type { Db } from '../db';
 import { eventParticipants, events, members, settings } from '../schema';
+import { cleanTitle, extractBring, inferPeople, inferType } from './infer';
 import { dateKey, parseDateKey } from './time';
 
 // Two-way sync with one shared "Family" Google Calendar, owned by a Google service account
@@ -222,26 +223,36 @@ async function applyRemote(db: Db, item: any, byEmail: Map<string, number>) {
     return;
   }
   const rrule = (item.recurrence as string[] | undefined)?.find((r) => r.startsWith('RRULE:'))?.slice(6) ?? null;
+  // Made in Google (by hand or via the Claude app): read type, people and "Bring:" from the text.
+  const family = await db.select().from(members);
+  const title = cleanTitle(item.summary ?? '');
+  const { bring, notes } = extractBring(item.description ?? null);
+  const done = new Set((local?.bring ?? []).filter((b) => b.done).map((b) => b.text));
   const values = {
-    title: item.summary ?? '(no title)',
-    type: 'other' as const,
+    title,
+    type: inferType(title, notes),
     ...times,
     location: item.location ?? null,
-    notes: item.description ?? null,
+    notes,
+    bring: bring.map((b) => ({ ...b, done: done.has(b.text) })),
     rrule,
     source: 'google' as const,
     googleId: item.id,
     googleSyncedAt: updated,
     updatedAt: new Date(),
   };
+  let people = inferPeople(`${title}\n${notes ?? ''}`, family);
+  const id = local?.id ?? randomUUID();
   if (local) {
-    await db.update(events).set(values).where(eq(events.id, local.id));
+    await db.update(events).set(values).where(eq(events.id, id));
+    if (!people.length) return; // nobody named: keep whoever is attached
   } else {
-    const id = randomUUID();
     await db.insert(events).values({ id, ...values });
     const creator = byEmail.get(String(item.creator?.email ?? '').toLowerCase());
-    if (creator) await db.insert(eventParticipants).values({ eventId: id, memberId: creator });
+    if (!people.length && creator) people = [creator];
   }
+  await db.delete(eventParticipants).where(eq(eventParticipants.eventId, id));
+  if (people.length) await db.insert(eventParticipants).values(people.map((memberId) => ({ eventId: id, memberId })));
 }
 
 /** One sync round; errors are logged, never thrown. */
