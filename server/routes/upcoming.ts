@@ -26,7 +26,7 @@ export function upcomingRoutes(db: Db) {
       .filter((o) => (o.kind === 'event' || o.kind === 'birthday') && new Date(o.end) > now)
       .slice(0, limit)
       .map((o) => {
-        const who = o.kind === 'birthday' ? '' : o.participants.map((id) => names.get(id)).filter(Boolean).join(', ');
+        const who = o.kind === 'birthday' ? '' : o.participants.map((id) => names.get(id)).filter((n): n is string => !!n && !o.title.includes(n)).join(', ');
         const start = new Date(o.start);
         return { title: who ? `${o.title} · ${who}` : o.title, when: start < now && !o.allDay ? 'Now' : whenLabel(start, o.allDay, now) };
       });
