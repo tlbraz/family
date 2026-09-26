@@ -128,7 +128,6 @@ export async function pushEvent(db: Db, id: string) {
 
   const description = [
     people.length ? `Who: ${people.join(', ')}` : '',
-    row.driverId && name.get(row.driverId) ? `Driver: ${name.get(row.driverId)}` : '',
     row.bring.length ? `Bring: ${row.bring.map((b) => b.text).join(', ')}` : '',
     row.notes ?? '',
     '— family.lan',

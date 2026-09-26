@@ -22,7 +22,6 @@ function line(o: Occurrence, who: Map<number, string>): string {
   const time = o.allDay ? 'all day' : hhmm(o.start);
   let s = `${TYPE_EMOJI[o.type] ?? '📌'} <b>${time}</b> ${esc(o.title)}`;
   if (people) s += ` — ${esc(people)}`;
-  if (o.driverId && who.get(o.driverId)) s += ` · 🚗 ${esc(who.get(o.driverId)!)}`;
   const todo = o.bring.filter((b) => !b.done).map((b) => b.text);
   if (todo.length) s += `\n    🎒 Bring: ${esc(todo.join(', '))}`;
   return s;

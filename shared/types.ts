@@ -53,7 +53,6 @@ export interface CalendarEvent {
   location: string | null;
   notes: string | null;
   participants: number[];
-  driverId: number | null;
   bring: BringItem[];
   repeat: Repeat | null;
   source: 'app' | 'google';
@@ -73,7 +72,6 @@ export interface Occurrence {
   end: string;
   location: string | null;
   participants: number[];
-  driverId: number | null;
   bring: BringItem[];
   repeats: boolean;
 }

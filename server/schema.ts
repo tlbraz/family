@@ -40,7 +40,6 @@ export const events = pgTable(
     endAt: timestamp('end_at', { withTimezone: true }).notNull(),
     location: text('location'),
     notes: text('notes'),
-    driverId: integer('driver_id').references(() => members.id, { onDelete: 'set null' }),
     bring: jsonb('bring').$type<BringItem[]>().notNull().default([]),
     rrule: text('rrule'), // e.g. FREQ=WEEKLY;BYDAY=SA — null = one-off
     exdates: jsonb('exdates').$type<string[]>().notNull().default([]), // ISO starts of skipped occurrences

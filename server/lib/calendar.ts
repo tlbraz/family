@@ -31,7 +31,6 @@ export function toEvent(row: EventRow, participants: number[]): CalendarEvent {
     location: row.location,
     notes: row.notes,
     participants,
-    driverId: row.driverId,
     bring: row.bring,
     repeat: rruleToRepeat(row.rrule),
     source: row.source,
@@ -55,7 +54,6 @@ export function eventValues(input: EventInput) {
     endAt: new Date(input.end),
     location: input.location,
     notes: input.notes,
-    driverId: input.driverId,
     bring: input.bring,
     rrule: input.repeat ? repeatToRrule(input.repeat, start) : null,
     updatedAt: new Date(),
@@ -93,7 +91,6 @@ export async function listOccurrences(db: Db, fromKey: string, toKey: string): P
       allDay: row.allDay,
       location: row.location,
       participants: people.get(row.id) ?? [],
-      driverId: row.driverId,
       bring: row.bring,
       repeats: !!row.rrule,
     };
@@ -158,7 +155,6 @@ function generated(key: string, kind: Occurrence['kind'], title: string, start: 
     end: end.toISOString(),
     location: null,
     participants,
-    driverId: null,
     bring: [],
     repeats: kind !== 'school',
   };

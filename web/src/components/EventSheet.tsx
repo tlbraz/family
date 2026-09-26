@@ -19,7 +19,6 @@ interface Form {
   location: string;
   notes: string;
   participants: number[];
-  driverId: number | null;
   bring: { text: string; done: boolean }[];
   repeat: RepeatChoice;
   weekdays: number[];
@@ -34,7 +33,7 @@ function blank(day: string): Form {
   return {
     title: '', type: 'other', allDay: false, date: day, endDate: day,
     startTime: `${pad(hour)}:00`, endTime: `${pad(hour + 1)}:00`,
-    location: '', notes: '', participants: [], driverId: null, bring: [],
+    location: '', notes: '', participants: [], bring: [],
     repeat: 'none', weekdays: [], until: '',
   };
 }
@@ -48,7 +47,7 @@ function fromEvent(e: CalendarEvent): Form {
     date: dateKey(s), endDate: dateKey(e.allDay ? addDays(end, -1) : end),
     startTime: timeOf(e.start), endTime: timeOf(e.end),
     location: e.location ?? '', notes: e.notes ?? '',
-    participants: e.participants, driverId: e.driverId, bring: e.bring,
+    participants: e.participants, bring: e.bring,
     repeat: !r ? 'none' : r.freq === 'weekly' ? (r.interval === 2 ? 'biweekly' : 'weekly') : r.freq,
     weekdays: r?.weekdays ?? [], until: r?.until ?? '',
   };
@@ -75,7 +74,7 @@ function toInput(f: Form): EventInput {
     title: f.title.trim(), type: f.type, allDay: f.allDay,
     start: start.toISOString(), end: end.toISOString(),
     location: f.location.trim() || null, notes: f.notes.trim() || null,
-    participants: f.participants, driverId: f.driverId,
+    participants: f.participants,
     bring: f.bring.filter((b) => b.text.trim()), repeat,
   };
 }
@@ -146,7 +145,6 @@ export function EventSheet({ members, canEdit, aiEnabled, occurrence, day, onClo
 
   const set = <K extends keyof Form>(k: K, v: Form[K]) => setForm((f) => ({ ...f, [k]: v }));
   const toggle = (list: number[], id: number) => (list.includes(id) ? list.filter((x) => x !== id) : [...list, id]);
-  const parents = members.filter((m) => m.role === 'parent');
 
   async function read(image?: File) {
     if (!magic.trim() && !image) return;
@@ -210,7 +208,6 @@ export function EventSheet({ members, canEdit, aiEnabled, occurrence, day, onClo
   }
 
   if (!editing && occurrence) {
-    const driver = members.find((m) => m.id === occurrence.driverId);
     const s = new Date(occurrence.start);
     return (
       <Sheet title={occurrence.title} onClose={onClose}>
@@ -223,7 +220,6 @@ export function EventSheet({ members, canEdit, aiEnabled, occurrence, day, onClo
             <span className="meta-item"><Icon name={occurrence.type} />{TYPE_LABEL[occurrence.type]}</span>
             {occurrence.repeats && <span className="meta-item"><Icon name="repeat" />Repeats</span>}
             {occurrence.location && <span className="meta-item"><Icon name="pin" />{occurrence.location}</span>}
-            {driver && <span className="meta-item"><Icon name="car" />{driver.name} drives</span>}
           </div>
           {occurrence.participants.length > 0 && <AvatarStack ids={occurrence.participants} members={members} size={32} />}
           {event?.notes && <p className="detail-notes">{event.notes}</p>}
@@ -364,15 +360,6 @@ export function EventSheet({ members, canEdit, aiEnabled, occurrence, day, onClo
           <label className="stacked">
             <span>Where</span>
             <input id="location" value={form.location} onChange={(e) => set('location', e.target.value)} placeholder="Place or address" maxLength={200} />
-          </label>
-          <label className="stacked">
-            <span>Who drives</span>
-            <select id="driver" value={form.driverId ?? ''} onChange={(e) => set('driverId', e.target.value ? Number(e.target.value) : null)}>
-              <option value="">—</option>
-              {parents.map((p) => (
-                <option key={p.id} value={p.id}>{p.name}</option>
-              ))}
-            </select>
           </label>
           <div className="stacked">
             <span>Bring</span>

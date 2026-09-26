@@ -14,7 +14,6 @@ export const EventInputSchema = z
     location: z.string().trim().max(200).nullable(),
     notes: z.string().trim().max(2000).nullable(),
     participants: z.array(z.number().int()).max(20),
-    driverId: z.number().int().nullable(),
     bring: z.array(z.object({ text: z.string().trim().min(1).max(80), done: z.boolean() })).max(30),
     repeat: z
       .object({

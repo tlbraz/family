@@ -86,7 +86,7 @@ export function CalendarView({ members, refreshKey, onOpen, onAdd, canEdit }: Pr
   }, [load]);
 
   const visible = (items ?? []).filter(
-    (o) => who === null || o.kind === 'holiday' || o.kind === 'school' || o.participants.includes(who) || o.driverId === who,
+    (o) => who === null || o.kind === 'holiday' || o.kind === 'school' || o.participants.includes(who),
   );
   const todayKey = dateKey(today);
   const current =
@@ -321,7 +321,6 @@ function EventCard({ o, members, dayKey, onOpen }: { o: Occurrence; members: Mem
   const startsToday = dateKey(new Date(o.start)) === dayKey;
   const time = o.allDay ? 'All day' : startsToday ? timeOf(o.start) : 'cont.';
   const todo = o.bring.filter((b) => !b.done);
-  const driver = members.find((m) => m.id === o.driverId);
   return (
     <div className="row">
       <div className="time">{time}</div>
@@ -340,12 +339,6 @@ function EventCard({ o, members, dayKey, onOpen }: { o: Occurrence; members: Mem
             <span className="meta-item">
               <Icon name="pin" size={14} />
               {o.location}
-            </span>
-          )}
-          {driver && (
-            <span className="meta-item">
-              <Icon name="car" size={14} />
-              {driver.name}
             </span>
           )}
           {o.repeats && o.kind === 'event' && <Icon name="repeat" size={14} />}
