@@ -51,3 +51,25 @@ describe('permissions', () => {
     expect(res.status).toBe(400);
   });
 });
+
+describe('share target', () => {
+  it('keeps a share for the app to pick up once', async () => {
+    const app = up();
+    const form = new FormData();
+    form.set('title', 'Escola');
+    form.set('text', 'Escola\nReunião de pais sexta às 18h');
+    const res = await app.request('/api/share', { method: 'POST', body: form });
+    expect(res.status).toBe(303);
+    const id = new URL(res.headers.get('location')!, 'http://x').searchParams.get('share');
+    expect(id).toBeTruthy();
+    const got = await app.request(`/api/share/${id}`);
+    expect(await got.json()).toEqual({ text: 'Escola\nReunião de pais sexta às 18h', image: null });
+    expect((await app.request(`/api/share/${id}`)).status).toBe(404);
+  });
+
+  it('opens the app when nothing usable was shared', async () => {
+    const res = await up().request('/api/share', { method: 'POST', body: new FormData() });
+    expect(res.status).toBe(303);
+    expect(res.headers.get('location')).toBe('/');
+  });
+});

@@ -31,8 +31,8 @@ app.use('*', async (c, next) => {
   if (host === 'family.lan' && !c.req.path.startsWith('/api')) return c.redirect(PUBLIC_URL + c.req.path, 301);
   await next();
 });
-// Share → Family normally lands in the service worker; if it isn't running yet, just open the app.
-app.post('/share', (c) => c.redirect('/', 303));
+// Phones that installed the app before the share target moved to /api/share still post here.
+app.post('/share', (c) => app.fetch(new Request(new URL('/api/share', c.req.url), c.req.raw)));
 // The built web app; unknown paths fall back to index.html so client-side routes work.
 app.use('/*', serveStatic({ root: './dist/web' }));
 app.get('*', serveStatic({ path: './dist/web/index.html' }));
