@@ -29,6 +29,13 @@
       "when": 1790458526228,
       "tag": "0003_member_photos",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1790461376746,
+      "tag": "0004_event_reminders",
+      "breakpoints": true
     }
   ]
 }

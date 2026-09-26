@@ -4,6 +4,7 @@ import { connect, runMigrations } from './db';
 import { createApp } from './app';
 import { runDigests } from './lib/digest';
 import { deleteGoogleEvent, googleEnabled, loadGoogleKey, pushEvent, shareWithParents, syncRound } from './lib/google';
+import { runReminders } from './lib/reminders';
 import { seed } from './seed';
 
 const url = process.env.DATABASE_URL;
@@ -42,6 +43,7 @@ const server = serve({ fetch: app.fetch, port }, () =>
 const timers = [
   setInterval(() => void runDigests(db).catch(logErr('digest')), 60_000),
   setInterval(() => void syncRound(db), 2 * 60_000),
+  setInterval(() => void runReminders(db).catch(logErr('reminders')), 60_000),
 ];
 void syncRound(db);
 

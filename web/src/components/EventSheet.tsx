@@ -7,6 +7,7 @@ import { Icon, TYPE_LABEL } from './Icon';
 import type { Shared } from '../share';
 import { Sheet } from './Sheet';
 import { VoiceButton } from './VoiceButton';
+import './Reminders.css';
 
 type RepeatChoice = 'none' | 'weekly' | 'biweekly' | 'monthly' | 'yearly';
 
@@ -22,9 +23,17 @@ interface Form {
   notes: string;
   participants: number[];
   bring: { text: string; done: boolean }[];
+  reminders: number[];
   repeat: RepeatChoice;
   weekdays: number[];
   until: string;
+}
+
+/** Reminder choices: minutes before the start → label. All-day events count from midnight. */
+function reminderOptions(allDay: boolean): [number, string][] {
+  return allDay
+    ? [[360, 'Day before, 18:00'], [-480, 'On the day, 08:00']]
+    : [[15, '15 min before'], [60, '1 hour before'], [120, '2 hours before'], [1440, '1 day before']];
 }
 
 const WEEKDAYS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
@@ -35,7 +44,7 @@ function blank(day: string): Form {
   return {
     title: '', type: 'other', allDay: false, date: day, endDate: day,
     startTime: `${pad(hour)}:00`, endTime: `${pad(hour + 1)}:00`,
-    location: '', notes: '', participants: [], bring: [],
+    location: '', notes: '', participants: [], bring: [], reminders: [],
     repeat: 'none', weekdays: [], until: '',
   };
 }
@@ -49,7 +58,7 @@ function fromEvent(e: CalendarEvent): Form {
     date: dateKey(s), endDate: dateKey(e.allDay ? addDays(end, -1) : end),
     startTime: timeOf(e.start), endTime: timeOf(e.end),
     location: e.location ?? '', notes: e.notes ?? '',
-    participants: e.participants, bring: e.bring,
+    participants: e.participants, bring: e.bring, reminders: e.reminders ?? [],
     repeat: !r ? 'none' : r.freq === 'weekly' ? (r.interval === 2 ? 'biweekly' : 'weekly') : r.freq,
     weekdays: r?.weekdays ?? [], until: r?.until ?? '',
   };
@@ -78,6 +87,7 @@ function toInput(f: Form): EventInput {
     location: f.location.trim() || null, notes: f.notes.trim() || null,
     participants: f.participants,
     bring: f.bring.filter((b) => b.text.trim()), repeat,
+    reminders: f.reminders.filter((r) => reminderOptions(f.allDay).some(([m]) => m === r)),
   };
 }
 
@@ -235,6 +245,9 @@ export function EventSheet({ members, canEdit, aiEnabled, occurrence, day, share
           <div className="detail-meta">
             <span className="meta-item"><Icon name={occurrence.type} />{TYPE_LABEL[occurrence.type]}</span>
             {occurrence.repeats && <span className="meta-item"><Icon name="repeat" />Repeats</span>}
+            {occurrence.reminders.length > 0 && (
+              <span className="meta-item"><Icon name="bell" />{occurrence.reminders.map((r) => reminderOptions(occurrence.allDay).find(([m]) => m === r)?.[1] ?? `${r} min`).join(', ')}</span>
+            )}
           </div>
           {occurrence.location && (
             <div className="directions">
@@ -381,6 +394,14 @@ export function EventSheet({ members, canEdit, aiEnabled, occurrence, day, share
               })}
             </div>
           )}
+          <div className="reminders" role="group" aria-label="Remind on Telegram">
+            <span className="reminders-label"><Icon name="bell" size={15} /> Remind on Telegram</span>
+            {reminderOptions(form.allDay).map(([m, label]) => (
+              <button type="button" key={m} className={`type ${form.reminders.includes(m) ? 'on' : ''}`} aria-pressed={form.reminders.includes(m)} onClick={() => set('reminders', toggle(form.reminders, m))}>
+                {label}
+              </button>
+            ))}
+          </div>
         </fieldset>
 
         <fieldset>
