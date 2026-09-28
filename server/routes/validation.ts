@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { EVENT_TYPES } from '../../shared/types';
+import { DOCUMENT_KINDS, type DocumentKind, EVENT_TYPES } from '../../shared/types';
 
 const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const color = z.string().regex(/^#[0-9a-fA-F]{6}$/);
@@ -40,6 +40,23 @@ export const MemberInputSchema = z.object({
   birthday: date.nullable(),
   googleEmail: z.string().trim().email().nullable(),
 });
+
+const optional = (max: number) => z.string().trim().max(max).nullable().transform((s) => s || null);
+
+export const DocumentsSchema = z
+  .array(
+    z
+      .object({
+        kind: z.enum(Object.keys(DOCUMENT_KINDS) as [DocumentKind, ...DocumentKind[]]),
+        label: optional(40),
+        number: z.string().trim().max(60),
+        expires: date.nullable(),
+        link: optional(500).refine((l) => !l || /^https?:\/\/\S+$/.test(l), 'The link must start with http:// or https://'),
+        note: optional(200),
+      })
+      .refine((d) => d.number || d.link || d.expires || d.note, 'A document needs at least a number or a link'),
+  )
+  .max(30);
 
 // A small picture, already cropped and shrunk by the browser.
 export const PhotoSchema = z.object({

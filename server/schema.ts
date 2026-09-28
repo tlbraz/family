@@ -1,5 +1,5 @@
 import { boolean, date, index, integer, jsonb, pgTable, primaryKey, serial, text, timestamp } from 'drizzle-orm/pg-core';
-import type { BringItem, EventType, Role } from '../shared/types';
+import type { BringItem, DocumentKind, EventType, Role } from '../shared/types';
 
 // Fridge notes: short messages for the whole family.
 export const notes = pgTable('notes', {
@@ -21,6 +21,26 @@ export const members = pgTable('members', {
   photoAt: timestamp('photo_at', { withTimezone: true }), // when the photo last changed; null = no photo
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 });
+
+// ID numbers and documents. Kept out of the members table because members are readable by anyone;
+// these are only ever served to signed-in parents.
+export const memberDocuments = pgTable(
+  'member_documents',
+  {
+    id: serial('id').primaryKey(),
+    memberId: integer('member_id')
+      .notNull()
+      .references(() => members.id, { onDelete: 'cascade' }),
+    kind: text('kind').$type<DocumentKind>().notNull(),
+    label: text('label'),
+    number: text('number').notNull().default(''),
+    expires: date('expires'),
+    link: text('link'),
+    note: text('note'),
+    sort: integer('sort').notNull().default(0),
+  },
+  (t) => [index('member_documents_member_idx').on(t.memberId)],
+);
 
 // Profile pictures, kept apart so the member rows loaded on every request stay small.
 export const memberPhotos = pgTable('member_photos', {

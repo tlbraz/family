@@ -4,6 +4,7 @@ import { fold, pickOccurrence } from './calendar';
 import { expand, repeatToRrule, rruleToRepeat } from './recurrence';
 import { dateKey } from './time';
 import { taskLine } from './digest';
+import { DocumentsSchema } from '../routes/validation';
 
 describe('holidays', () => {
   it('computes Easter', () => {
@@ -84,5 +85,23 @@ describe('to-dos in the evening message', () => {
     expect(taskLine(task('2026-10-01'), '2026-10-01', who)).toBe('☐ Sign the slip — Gonçalo · <b>due today</b>');
     expect(taskLine(task('2026-09-29', null), '2026-10-01', who)).toBe('☐ Sign the slip · <b>overdue</b> (was Tuesday)');
     expect(taskLine(task('2026-10-04'), '2026-10-01', who)).toBe('☐ Sign the slip — Gonçalo · due Sunday');
+  });
+});
+
+describe('DocumentsSchema', () => {
+  const doc = { kind: 'cc', label: null, number: '12345678 9 ZZ1', expires: '2031-03-12', link: 'https://paperless.lan/documents/12', note: null };
+
+  it('accepts a document and tidies empty text to null', () => {
+    const r = DocumentsSchema.parse([{ ...doc, note: '  ' }]);
+    expect(r[0]).toMatchObject({ number: '12345678 9 ZZ1', note: null });
+  });
+
+  it('only accepts web links', () => {
+    expect(DocumentsSchema.safeParse([{ ...doc, link: 'javascript:alert(1)' }]).success).toBe(false);
+  });
+
+  it('rejects an empty document and unknown kinds', () => {
+    expect(DocumentsSchema.safeParse([{ ...doc, number: '', expires: null, link: null }]).success).toBe(false);
+    expect(DocumentsSchema.safeParse([{ ...doc, kind: 'bank' }]).success).toBe(false);
   });
 });

@@ -1,4 +1,4 @@
-import type { AppConfig, CalendarEvent, EventDraft, EventInput, Health, Member, MemberInput, Note, Occurrence, SearchResults, Task, TaskInput } from '../../shared/types';
+import type { AppConfig, CalendarEvent, EventDraft, EventInput, Health, Member, MemberDocument, MemberInput, Note, Occurrence, SearchResults, Task, TaskInput } from '../../shared/types';
 
 export interface GoogleStatus {
   connected: boolean;
@@ -41,6 +41,8 @@ export const api = {
   updateMember: (id: number, m: MemberInput) => request<Member>(`/members/${id}`, json('PATCH', m)),
   setPhoto: (id: number, photo: string) => request<Member>(`/members/${id}/photo`, json('PUT', { photo })),
   removePhoto: (id: number) => request<Member>(`/members/${id}/photo`, json('DELETE')),
+  documents: (id: number) => request<MemberDocument[]>(`/members/${id}/documents`),
+  saveDocuments: (id: number, docs: MemberDocument[]) => request<MemberDocument[]>(`/members/${id}/documents`, json('PUT', docs)),
   deleteMember: (id: number) => request<void>(`/members/${id}`, json('DELETE')),
 
   calendar: (from: string, to: string) => request<Occurrence[]>(`/calendar?from=${from}&to=${to}`),

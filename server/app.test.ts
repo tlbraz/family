@@ -80,3 +80,15 @@ describe('share target', () => {
     expect(res.headers.get('location')).toBe('/');
   });
 });
+
+describe('member documents', () => {
+  it('are only shown to signed-in parents', async () => {
+    const res = await up().request('/api/members/1/documents');
+    expect(res.status).toBe(401);
+  });
+
+  it('are only changed by signed-in parents', async () => {
+    const res = await up().request('/api/members/1/documents', { method: 'PUT', body: '[]', headers: { 'content-type': 'application/json' } });
+    expect(res.status).toBe(401);
+  });
+});
