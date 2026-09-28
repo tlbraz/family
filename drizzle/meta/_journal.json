@@ -50,6 +50,13 @@
       "when": 1790585100089,
       "tag": "0006_member_documents",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1790586673914,
+      "tag": "0007_groceries",
+      "breakpoints": true
     }
   ]
 }

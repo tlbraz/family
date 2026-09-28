@@ -117,3 +117,18 @@ export const tasks = pgTable(
   },
   (t) => [index('tasks_due_idx').on(t.due)],
 );
+
+// Grocery list. Ticked items stay (greyed) until "Clear ticked"; cleared rows are kept so the
+// app can suggest things the family buys often.
+export const groceries = pgTable(
+  'groceries',
+  {
+    id: serial('id').primaryKey(),
+    text: text('text').notNull(),
+    section: text('section').notNull(), // supermarket section, guessed from the words
+    done: boolean('done').notNull().default(false),
+    clearedAt: timestamp('cleared_at', { withTimezone: true }), // null = on the list
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [index('groceries_cleared_idx').on(t.clearedAt)],
+);

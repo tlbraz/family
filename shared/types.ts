@@ -140,3 +140,16 @@ export interface EventDraft {
   bring: string[];
   notes: string | null;
 }
+
+export interface GroceryItem {
+  id: number;
+  text: string;
+  section: string; // "Fruit & veg", "Dairy & eggs", … in shop order
+  done: boolean;
+}
+
+export interface GroceryList {
+  items: GroceryItem[];
+  sections: string[]; // walking order through the shop
+  suggestions: string[]; // bought often, not on the list now
+}

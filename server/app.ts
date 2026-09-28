@@ -10,6 +10,7 @@ import { addTelegramChat, removeTelegramChat, sendTelegram, telegramStatus } fro
 import { authRoutes } from './routes/auth';
 import { type EventHooks, eventRoutes } from './routes/events';
 import { memberRoutes, toMember } from './routes/members';
+import { groceryRoutes } from './routes/groceries';
 import { noteRoutes } from './routes/notes';
 import { shareRoutes } from './routes/share';
 import { taskRoutes } from './routes/tasks';
@@ -57,6 +58,7 @@ export function createApp(db: Db, hooks: AppHooks = noop) {
   api.route('/auth', authRoutes(db));
   api.route('/members', memberRoutes(db, hooks.membersChanged));
   api.route('/notes', noteRoutes(db));
+  api.route('/groceries', groceryRoutes(db));
   api.route('/share', shareRoutes());
   api.route('/tasks', taskRoutes(db));
   api.route('/upcoming', upcomingRoutes(db));

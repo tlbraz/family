@@ -9,11 +9,12 @@ import { CalendarView } from './components/CalendarView';
 import { EventSheet } from './components/EventSheet';
 import { FamilyView } from './components/FamilyView';
 import { FridgeNotes } from './components/FridgeNotes';
+import { Groceries } from './components/Groceries';
 import { Icon } from './components/Icon';
 import { SignIn } from './components/SignIn';
 import { TaskSheet } from './components/TaskSheet';
 
-type Tab = 'calendar' | 'notes' | 'family';
+type Tab = 'calendar' | 'groceries' | 'notes' | 'family';
 type Open = { kind: 'event'; occurrence: Occurrence | null; day: string; shared?: Shared; fromDay?: boolean } | { kind: 'task'; task: Task | null; day: string; fromDay?: boolean } | null;
 
 export function App() {
@@ -83,6 +84,7 @@ export function App() {
             onAdd={(day) => setOpen({ kind: 'event', occurrence: null, day, fromDay: true })}
           />
         )}
+        {tab === 'groceries' && <Groceries />}
         {tab === 'notes' && (
           <div>
             <header className="cal-head">
@@ -124,6 +126,7 @@ export function App() {
         {(
           [
             ['calendar', 'calendar', 'Calendar'],
+            ['groceries', 'cart', 'Groceries'],
             ['notes', 'notes', 'Notes'],
             ['family', 'people', 'Family'],
           ] as const

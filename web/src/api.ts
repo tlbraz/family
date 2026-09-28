@@ -1,4 +1,4 @@
-import type { AppConfig, CalendarEvent, EventDraft, EventInput, Health, Member, MemberDocument, MemberInput, Note, Occurrence, SearchResults, Task, TaskInput } from '../../shared/types';
+import type { GroceryList, AppConfig, CalendarEvent, EventDraft, EventInput, Health, Member, MemberDocument, MemberInput, Note, Occurrence, SearchResults, Task, TaskInput } from '../../shared/types';
 
 export interface GoogleStatus {
   connected: boolean;
@@ -67,6 +67,13 @@ export const api = {
   telegram: () => request<TelegramStatus>('/telegram'),
   addTelegram: (id: string, name: string) => request<TelegramStatus>('/telegram/chats', json('POST', { id, name })),
   removeTelegram: (id: string) => request<TelegramStatus>(`/telegram/chats/${encodeURIComponent(id)}`, json('DELETE')),
+
+  groceries: () => request<GroceryList>('/groceries'),
+  addGroceries: (text: string) => request<GroceryList>('/groceries', json('POST', { text })),
+  toggleGrocery: (id: number) => request<GroceryList>(`/groceries/${id}/toggle`, json('POST')),
+  moveGrocery: (id: number, section: string) => request<GroceryList>(`/groceries/${id}`, json('PATCH', { section })),
+  deleteGrocery: (id: number) => request<GroceryList>(`/groceries/${id}`, json('DELETE')),
+  clearGroceries: () => request<GroceryList>('/groceries/clear', json('POST')),
 
   notes: () => request<Note[]>('/notes'),
   addNote: (text: string, author: string) => request<Note>('/notes', json('POST', { text, author })),
