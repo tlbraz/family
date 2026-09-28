@@ -1,10 +1,10 @@
 import { asc, eq } from 'drizzle-orm';
 import { Hono } from 'hono';
-import type { Member } from '../../shared/types';
+import type { Member, MemberDocument } from '../../shared/types';
 import type { Db } from '../db';
 import { type AuthEnv, type MemberRow, requireParent } from '../lib/auth';
-import { memberPhotos, members } from '../schema';
-import { MemberInputSchema, PhotoSchema, problem } from './validation';
+import { memberDocuments, memberPhotos, members } from '../schema';
+import { DocumentsSchema, MemberInputSchema, PhotoSchema, problem } from './validation';
 
 export const toMember = (m: MemberRow): Member => ({
   id: m.id,
@@ -69,6 +69,27 @@ export function memberRoutes(db: Db, onChange: () => void) {
     const [row] = await db.update(members).set({ photoAt: null }).where(eq(members.id, id)).returning();
     if (!row) return c.json({ error: 'Not found' }, 404);
     return c.json(toMember(row));
+  });
+
+  // Documents are for parents' eyes only (the member list above is open to everyone).
+  const documentsOf = async (memberId: number): Promise<MemberDocument[]> =>
+    (await db.select().from(memberDocuments).where(eq(memberDocuments.memberId, memberId)).orderBy(asc(memberDocuments.sort), asc(memberDocuments.id)))
+      .map(({ kind, label, number, expires, link, note }) => ({ kind, label, number, expires, link, note }));
+
+  r.get('/:id/documents', requireParent, async (c) => c.json(await documentsOf(Number(c.req.param('id')))));
+
+  // Replaces the whole list: the edit form always sends everything.
+  r.put('/:id/documents', requireParent, async (c) => {
+    const parsed = DocumentsSchema.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json({ error: problem(parsed.error) }, 400);
+    const id = Number(c.req.param('id'));
+    const [member] = await db.select({ id: members.id }).from(members).where(eq(members.id, id));
+    if (!member) return c.json({ error: 'Not found' }, 404);
+    await db.transaction(async (tx) => {
+      await tx.delete(memberDocuments).where(eq(memberDocuments.memberId, id));
+      if (parsed.data.length) await tx.insert(memberDocuments).values(parsed.data.map((d, sort) => ({ ...d, memberId: id, sort })));
+    });
+    return c.json(await documentsOf(id));
   });
 
   r.delete('/:id', requireParent, async (c) => {
