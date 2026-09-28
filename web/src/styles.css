@@ -391,3 +391,5 @@ button.link { border: 0; padding: 0; background: none; color: var(--accent, inhe
 @keyframes from-right { from { transform: translateX(40px); opacity: 0.3; } }
 @keyframes from-left { from { transform: translateX(-40px); opacity: 0.3; } }
 @media (prefers-reduced-motion: reduce) { .slide.from-right, .slide.from-left { animation: none; } }
+.me-row { display: flex; align-items: center; gap: 4px; }
+.bp-quick { width: 38px; height: 38px; color: #c2413b; }

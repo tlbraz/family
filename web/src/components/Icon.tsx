@@ -20,6 +20,7 @@ const PATHS: Record<string, string> = {
   repeat: 'M4 12a8 8 0 0 1 14-5.3M20 4v4h-4M20 12a8 8 0 0 1-14 5.3M4 20v-4h4',
   pin: 'M12 21s-7-6.5-7-12a7 7 0 0 1 14 0c0 5.5-7 12-7 12zM12 6.5a2.5 2.5 0 1 0 0 5a2.5 2.5 0 1 0 0-5',
   bag: 'M5 8h14l-1 13H6zM9 8V6a3 3 0 0 1 6 0v2',
+  heart: 'M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z',
   check: 'M5 12.5l4.5 4.5L19 7.5',
   calendar: 'M4 6h16v14H4zM4 10h16M8 3v4M16 3v4',
   notes: 'M6 3h9l4 4v14H6zM14 3v5h5M9 13h7M9 17h5',

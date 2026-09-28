@@ -124,6 +124,7 @@ export type TaskInput = Pick<Task, 'title' | 'due' | 'memberId'>;
 
 export interface AppConfig {
   me: Member | null;
+  meTracksBp: boolean; // show the quick "log blood pressure" button
   features: { ai: boolean; google: boolean; telegram: boolean };
 }
 

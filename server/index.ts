@@ -5,7 +5,8 @@ import { createApp } from './app';
 import { runDigests } from './lib/digest';
 import { deleteGoogleEvent, googleEnabled, loadGoogleKey, pushEvent, shareWithParents, syncRound } from './lib/google';
 import { runReminders } from './lib/reminders';
-import { loadTelegramChats } from './lib/telegram';
+import { bpFromTelegram } from './lib/bp';
+import { loadTelegramChats, pollTelegram } from './lib/telegram';
 import { seed } from './seed';
 
 const url = process.env.DATABASE_URL;
@@ -48,10 +49,13 @@ const timers = [
   setInterval(() => void runReminders(db).catch(logErr('reminders')), 60_000),
 ];
 void syncRound(db);
+// Messages people send the bot (for now: blood pressure readings).
+const inbox = process.env.TELEGRAM_BOT_TOKEN ? pollTelegram(db, (m) => bpFromTelegram(db, m)) : null;
 
 for (const signal of ['SIGTERM', 'SIGINT']) {
   process.on(signal, () => {
     timers.forEach(clearInterval);
+    inbox?.stop();
     server.close();
     close().finally(() => process.exit(0));
   });

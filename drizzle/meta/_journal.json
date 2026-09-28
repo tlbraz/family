@@ -57,6 +57,13 @@
       "when": 1790586673914,
       "tag": "0007_groceries",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1790610096097,
+      "tag": "0008_blood_pressure",
+      "breakpoints": true
     }
   ]
 }

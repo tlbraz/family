@@ -9,6 +9,8 @@ export interface GoogleStatus {
   lastError: string | null;
 }
 
+import type { BpInput, BpLog, BpReading } from '../../shared/bp';
+
 export interface TelegramStatus {
   bot: string | null;
   recipients: { id: string; name: string; fixed: boolean }[];
@@ -63,6 +65,12 @@ export const api = {
   updateTask: (id: number, t: TaskInput) => request<Task>(`/tasks/${id}`, json('PATCH', t)),
   toggleTask: (id: number) => request<Task>(`/tasks/${id}/done`, json('POST')),
   deleteTask: (id: number) => request<void>(`/tasks/${id}`, json('DELETE')),
+
+  bp: (memberId: number) => request<BpLog>(`/bp/${memberId}`),
+  bpSettings: (memberId: number, s: { tracking: boolean; telegramId: string | null }) => request<BpLog>(`/bp/${memberId}/settings`, json('PUT', s)),
+  addBp: (memberId: number, r: BpInput) => request<BpReading>(`/bp/${memberId}`, json('POST', r)),
+  deleteBp: (memberId: number, id: number) => request<void>(`/bp/${memberId}/readings/${id}`, json('DELETE')),
+  bpReportUrl: (memberId: number, from: string, to: string) => `/api/bp/${memberId}/report?from=${from}&to=${to}`,
 
   telegram: () => request<TelegramStatus>('/telegram'),
   addTelegram: (id: string, name: string) => request<TelegramStatus>('/telegram/chats', json('POST', { id, name })),

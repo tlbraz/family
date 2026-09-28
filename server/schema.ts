@@ -132,3 +132,31 @@ export const groceries = pgTable(
   },
   (t) => [index('groceries_cleared_idx').on(t.clearedAt)],
 );
+
+// Blood pressure log, for the adults who turn it on (only ever served to signed-in parents).
+// A settings row means "this person tracks blood pressure"; telegram_id lets them log by messaging the bot.
+export const bpSettings = pgTable('bp_settings', {
+  memberId: integer('member_id')
+    .primaryKey()
+    .references(() => members.id, { onDelete: 'cascade' }),
+  telegramId: text('telegram_id'), // their private chat with the bot
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const bpReadings = pgTable(
+  'bp_readings',
+  {
+    id: serial('id').primaryKey(),
+    memberId: integer('member_id')
+      .notNull()
+      .references(() => members.id, { onDelete: 'cascade' }),
+    at: timestamp('at', { withTimezone: true }).notNull(),
+    systolic: integer('systolic').notNull(),
+    diastolic: integer('diastolic').notNull(),
+    tags: jsonb('tags').$type<string[]>().notNull().default([]),
+    note: text('note'),
+    source: text('source').$type<'app' | 'telegram'>().notNull().default('app'),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [index('bp_readings_member_at_idx').on(t.memberId, t.at)],
+);

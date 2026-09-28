@@ -66,6 +66,18 @@ export const PhotoSchema = z.object({
     .regex(/^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/]+=*$/, 'Not a picture'),
 });
 
+export const BpInputSchema = z
+  .object({
+    at: z.string().datetime({ offset: true }),
+    systolic: z.number().int().min(60).max(260),
+    diastolic: z.number().int().min(30).max(160),
+    tags: z.array(z.string().trim().min(1).max(30)).max(12),
+    note: z.string().trim().max(300).nullable(),
+  })
+  .refine((r) => r.systolic > r.diastolic, { message: 'The top number must be higher than the bottom one', path: ['systolic'] });
+
+export const BpSettingsSchema = z.object({ tracking: z.boolean(), telegramId: z.string().trim().max(40).nullable() });
+
 export const RangeSchema = z.object({ from: date, to: date });
 
 /** First validation message, phrased for people. */

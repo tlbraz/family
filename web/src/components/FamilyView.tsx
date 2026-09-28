@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { DOCUMENT_KINDS, type DocumentKind, type Member, type MemberDocument, type Role } from '../../../shared/types';
 import { api, type GoogleStatus, type TelegramStatus } from '../api';
 import { Avatar } from './Avatar';
+import { BpSection } from './BloodPressure';
 import { Icon } from './Icon';
 import { PhotoCropper } from './PhotoCropper';
 import { Sheet } from './Sheet';
@@ -55,7 +56,7 @@ export function FamilyView({ members, canEdit, googleOn, telegramOn, onChanged }
       {!canEdit && <p className="muted">Sign in as a parent to edit the family.</p>}
       {canEdit && <GoogleCard members={members} onChanged={onChanged} />}
       {canEdit && telegramOn && <TelegramCard />}
-      {viewed && !editing && <MemberView member={viewed} canEdit={canEdit} onClose={() => setViewing(null)} onEdit={() => setEditing(viewed)} />}
+      {viewed && !editing && <MemberView member={viewed} canEdit={canEdit} telegramOn={telegramOn} onClose={() => setViewing(null)} onEdit={() => setEditing(viewed)} />}
       {editing && (
         <MemberSheet
           member={editing === 'new' ? null : editing}
@@ -205,7 +206,7 @@ function expiry(expires: string) {
 }
 
 /** What you see when you tap someone: their details and, for parents, their documents. */
-function MemberView({ member, canEdit, onClose, onEdit }: { member: Member; canEdit: boolean; onClose: () => void; onEdit: () => void }) {
+function MemberView({ member, canEdit, telegramOn, onClose, onEdit }: { member: Member; canEdit: boolean; telegramOn: boolean; onClose: () => void; onEdit: () => void }) {
   const [docs, setDocs] = useState<MemberDocument[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState<number | null>(null);
@@ -269,6 +270,7 @@ function MemberView({ member, canEdit, onClose, onEdit }: { member: Member; canE
           })}
         </ul>
       )}
+      {canEdit && member.role === 'parent' && <BpSection member={member} telegramOn={telegramOn} />}
     </Sheet>
   );
 }

@@ -1,0 +1,46 @@
+/* Blood pressure: entry sheet and the profile section */
+.bp-numbers { display: flex; align-items: flex-start; justify-content: center; gap: 8px; padding: 6px 0 2px; }
+.bp-numbers label { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.bp-numbers input {
+  width: 3.4ch; font-size: 3rem; font-weight: 800; text-align: center; font-variant-numeric: tabular-nums;
+  border: 0; border-bottom: 3px solid var(--line); background: none; color: var(--ink); padding: 0 0 2px; outline: none;
+}
+.bp-numbers input:focus { border-bottom-color: var(--ink); }
+.bp-numbers label span { font-size: 0.75rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+.bp-slash { font-size: 2.6rem; font-weight: 300; color: var(--muted); line-height: 1.3; }
+.bp-unit { align-self: center; margin-top: -18px; font-weight: 700; color: var(--muted); font-size: 0.85rem; }
+
+.bp-tags { display: flex; flex-wrap: wrap; gap: 8px; }
+.bp-tag {
+  display: inline-flex; align-items: center; gap: 5px; height: 38px; padding: 0 14px; border-radius: 19px;
+  border: 2px solid var(--line); background: var(--card); color: var(--ink); font-weight: 700; font-size: 0.9rem;
+}
+.bp-tag.on { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.bp-tag.add { border-style: dashed; color: var(--muted); }
+.bp-tag-input { height: 38px; width: 140px; padding: 0 12px; border-radius: 19px; border: 2px solid var(--ink); background: var(--card); color: var(--ink); font: inherit; font-weight: 700; }
+
+.bp-saved { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 12px 0 18px; text-align: center; }
+.bp-saved-check { width: 52px; height: 52px; border-radius: 26px; background: var(--ok); color: #fff; display: grid; place-items: center; }
+.bp-saved-value { font-size: 2.4rem; font-weight: 800; font-variant-numeric: tabular-nums; }
+
+.bp { display: flex; flex-direction: column; gap: 10px; margin-top: 22px; padding-top: 16px; border-top: 1px solid var(--line); }
+.bp-off { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; margin-top: 22px; }
+.bp-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.bp-title { display: inline-flex; align-items: center; gap: 8px; font-weight: 800; font-size: 1.05rem; }
+.bp-title svg { color: #c2413b; }
+.bp-avg { margin: 0; }
+.bp-avg b { font-size: 1.4rem; font-variant-numeric: tabular-nums; }
+.bp-high { color: var(--danger); }
+.bp-up { font-size: 0.65rem; margin-left: 3px; vertical-align: 0.3em; }
+.bp-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.bp-list li { display: flex; align-items: center; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.bp-value { width: 5.2em; flex: none; font-weight: 800; font-size: 1.05rem; font-variant-numeric: tabular-nums; }
+.bp-meta { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.bp-list .x { border: 0; background: none; color: var(--muted); font-size: 1.3rem; width: 36px; height: 36px; border-radius: 18px; }
+.bp-more { align-self: flex-start; }
+.bp-report { display: flex; flex-direction: column; gap: 6px; padding: 12px; border-radius: 14px; background: var(--soft); }
+.bp-report-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.bp-report .chip { text-decoration: none; }
+.bp-report .segmented { background: var(--card); }
+.bp-telegram select { height: 44px; }
+.bp-stop { align-self: flex-start; }

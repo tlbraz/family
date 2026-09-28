@@ -14,6 +14,8 @@ import { groceryRoutes } from './routes/groceries';
 import { noteRoutes } from './routes/notes';
 import { shareRoutes } from './routes/share';
 import { taskRoutes } from './routes/tasks';
+import { bpRoutes } from './routes/bp';
+import { bpSettingsOf } from './lib/bp';
 import { upcomingRoutes } from './routes/upcoming';
 import { members } from './schema';
 import pkg from '../package.json';
@@ -46,10 +48,11 @@ export function createApp(db: Db, hooks: AppHooks = noop) {
 
   api.use('*', loadMember(db));
 
-  api.get('/config', (c) => {
+  api.get('/config', async (c) => {
     const me = c.get('me');
     const body: AppConfig = {
       me: me ? toMember(me) : null,
+      meTracksBp: me?.role === 'parent' && !!(await bpSettingsOf(db, me.id)),
       features: { ai: aiEnabled(), google: googleEnabled(), telegram: !!process.env.TELEGRAM_BOT_TOKEN },
     };
     return c.json(body);
@@ -61,6 +64,7 @@ export function createApp(db: Db, hooks: AppHooks = noop) {
   api.route('/groceries', groceryRoutes(db));
   api.route('/share', shareRoutes());
   api.route('/tasks', taskRoutes(db));
+  api.route('/bp', bpRoutes(db));
   api.route('/upcoming', upcomingRoutes(db));
   api.route('/', eventRoutes(db, hooks));
 

@@ -5,6 +5,7 @@ import { useBack } from './back';
 import { type Shared, takeShared } from './share';
 import { dateKey } from './dates';
 import { Avatar, setFamily } from './components/Avatar';
+import { BpEntrySheet } from './components/BloodPressure';
 import { CalendarView } from './components/CalendarView';
 import { EventSheet } from './components/EventSheet';
 import { FamilyView } from './components/FamilyView';
@@ -26,10 +27,11 @@ export function App() {
   const [signIn, setSignIn] = useState(false);
   const [refresh, setRefresh] = useState(0);
   const [shared, setShared] = useState<Shared | null>(null);
+  const [bpOpen, setBpOpen] = useState(false);
   useBack(() => setTab('calendar'), tab !== 'calendar');
 
   const loadAll = useCallback(() => {
-    api.config().then(setConfig).catch(() => setConfig({ me: null, features: { ai: false, google: false, telegram: false } }));
+    api.config().then(setConfig).catch(() => setConfig({ me: null, meTracksBp: false, features: { ai: false, google: false, telegram: false } }));
     api.members().then((list) => {
       setFamily(list);
       setMembers(list);
@@ -64,10 +66,17 @@ export function App() {
           Family
         </span>
         {me ? (
-          <button className="me" onClick={() => api.logout().then(loadAll)} title="Sign out">
-            <Avatar member={members.find((m) => m.id === me.id) ?? me} size={30} />
-            <span className="small">Sign out</span>
-          </button>
+          <span className="me-row">
+            {config?.meTracksBp && (
+              <button className="round ghost bp-quick" onClick={() => setBpOpen(true)} aria-label="Log blood pressure" title="Log blood pressure">
+                <Icon name="heart" size={20} />
+              </button>
+            )}
+            <button className="me" onClick={() => api.logout().then(loadAll)} title="Sign out">
+              <Avatar member={members.find((m) => m.id === me.id) ?? me} size={30} />
+              <span className="small">Sign out</span>
+            </button>
+          </span>
         ) : (
           <button className="chip" onClick={() => setSignIn(true)}>Sign in</button>
         )}
@@ -166,6 +175,7 @@ export function App() {
           }}
         />
       )}
+      {bpOpen && me && <BpEntrySheet member={me} onClose={() => setBpOpen(false)} />}
       {signIn && (
         <SignIn
           members={members}

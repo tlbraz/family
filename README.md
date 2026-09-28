@@ -21,6 +21,10 @@ Install it on a phone with *Share → Add to Home Screen*.
   (and on today once late); anyone can tick them off, and ticked ones drop off the next day. The "To-dos" switch
   next to Week/Month hides them on that device. Add one from the Add button → To-do.
 - **Family**: members with colour, role and birthday (birthdays show up every year with the age).
+- **Blood pressure log** (per adult, turned on from their profile; only signed-in parents can see it): type the two
+  numbers straight through, tap tags (forgot meds, after training…), save. The heart next to your picture opens it.
+  Or message the bot privately: `128/82 after training` (`undo` removes it). "Open report" gives a printable page for
+  the doctor: averages (morning/evening), a chart with the 135/85 lines, how each tag compares, and every reading.
 - **Portuguese holidays** (incl. Carnival and Almada's São João) and the **public school calendar**
   (`shared/school-calendar.ts`, update it each summer from the new Despacho).
 - **Parents sign in** (first sign-in sets the password); everyone else can look and tick "bring" items and to-dos.

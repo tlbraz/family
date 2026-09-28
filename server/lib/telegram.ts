@@ -13,7 +13,10 @@ export interface TelegramChat {
 }
 
 const SAVED_KEY = 'telegram:chats';
+const SEEN_KEY = 'telegram:seen'; // everyone who has written to the bot: chat id → name
+const OFFSET_KEY = 'telegram:offset';
 let saved: TelegramChat[] = [];
+let seen: Record<string, string> = {};
 
 const envChats = () => (process.env.TELEGRAM_CHAT_ID ?? '').split(',').map((s) => s.trim()).filter(Boolean);
 const recipientIds = () => [...new Set([...envChats(), ...saved.map((c) => c.id)])];
@@ -45,36 +48,92 @@ export async function sendTelegram(html: string, only?: string): Promise<boolean
 
 export const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
+async function getSetting(db: Db, key: string) {
+  const [row] = await db.select().from(settings).where(eq(settings.key, key));
+  return row?.value ?? null;
+}
+
+async function setSetting(db: Db, key: string, value: string) {
+  await db.insert(settings).values({ key, value }).onConflictDoUpdate({ target: settings.key, set: { value } });
+}
+
 /** Loads the recipients added on the Family page (at startup). */
 export async function loadTelegramChats(db: Db) {
-  const [row] = await db.select().from(settings).where(eq(settings.key, SAVED_KEY));
-  saved = row ? (JSON.parse(row.value) as TelegramChat[]) : [];
+  saved = JSON.parse((await getSetting(db, SAVED_KEY)) ?? '[]') as TelegramChat[];
+  seen = JSON.parse((await getSetting(db, SEEN_KEY)) ?? '{}') as Record<string, string>;
 }
 
 async function save(db: Db, chats: TelegramChat[]) {
-  const value = JSON.stringify(chats);
-  await db.insert(settings).values({ key: SAVED_KEY, value }).onConflictDoUpdate({ target: settings.key, set: { value } });
+  await setSetting(db, SAVED_KEY, JSON.stringify(chats));
   saved = chats;
 }
 
 export const addTelegramChat = (db: Db, chat: TelegramChat) => save(db, [...saved.filter((c) => c.id !== chat.id), chat]);
 export const removeTelegramChat = (db: Db, id: string) => save(db, saved.filter((c) => c.id !== id));
 
+interface Chat {
+  id: number;
+  type: string;
+  title?: string;
+  first_name?: string;
+  last_name?: string;
+  username?: string;
+}
 interface Update {
-  message?: { chat: { id: number; type: string; title?: string; first_name?: string; last_name?: string; username?: string } };
-  my_chat_member?: Update['message'];
+  update_id: number;
+  message?: { chat: Chat; text?: string; date: number };
+  my_chat_member?: { chat: Chat };
 }
 
-/** For the Family page: the bot's link, who gets the messages, and who has tapped Start but isn't added yet. */
+/** A text someone sent the bot in a private chat. */
+export interface Incoming {
+  chatId: string;
+  text: string;
+  at: Date;
+}
+
+/**
+ * Reads what people send the bot (long polling; the app isn't reachable from the internet for a webhook).
+ * Remembers who wrote, for the Family page, and hands private texts to `onText`. Runs until `stop()`.
+ */
+export function pollTelegram(db: Db, onText: (m: Incoming) => Promise<string | null>) {
+  let running = true;
+  void (async () => {
+    let offset = Number((await getSetting(db, OFFSET_KEY).catch(() => null)) ?? 0);
+    while (running) {
+      const updates = await call<Update[]>('getUpdates', { offset, timeout: 30, allowed_updates: ['message', 'my_chat_member'] });
+      if (!updates) {
+        await new Promise((r) => setTimeout(r, 15_000)); // Telegram down, or another copy polling during a deploy
+        continue;
+      }
+      for (const u of updates) {
+        offset = u.update_id + 1;
+        const chat = (u.message ?? u.my_chat_member)?.chat;
+        if (!chat) continue;
+        const id = String(chat.id);
+        const name = chat.title ?? ([chat.first_name, chat.last_name].filter(Boolean).join(' ') || chat.username || id);
+        if (seen[id] !== name) {
+          seen = { ...seen, [id]: name };
+          await setSetting(db, SEEN_KEY, JSON.stringify(seen)).catch(() => {});
+        }
+        if (u.message?.text && chat.type === 'private') {
+          const reply = await onText({ chatId: id, text: u.message.text, at: new Date(u.message.date * 1000) }).catch((e: Error) => {
+            console.error('telegram message:', e.message);
+            return 'Something went wrong saving that. Try again in a moment.';
+          });
+          if (reply) await sendTelegram(reply, id);
+        }
+      }
+      if (updates.length) await setSetting(db, OFFSET_KEY, String(offset)).catch(() => {});
+    }
+  })();
+  return { stop: () => void (running = false) };
+}
+
+/** For the Family page: the bot's link, who gets the messages, and who has written to the bot but isn't added yet. */
 export async function telegramStatus() {
-  const [me, updates] = await Promise.all([call<{ username: string }>('getMe'), call<Update[]>('getUpdates', { allowed_updates: ['message', 'my_chat_member'] })]);
-  const names = new Map<string, string>();
-  for (const u of updates ?? []) {
-    const chat = (u.message ?? u.my_chat_member)?.chat;
-    if (!chat) continue;
-    const name = chat.title ?? ([chat.first_name, chat.last_name].filter(Boolean).join(' ') || chat.username || String(chat.id));
-    names.set(String(chat.id), name);
-  }
+  const me = await call<{ username: string }>('getMe');
+  const names = new Map(Object.entries(seen));
   const env = envChats();
   // Nobody left to message = digests are paused (telegramEnabled is false) until someone is added.
   const recipients = [

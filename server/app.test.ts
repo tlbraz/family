@@ -49,6 +49,12 @@ describe('permissions', () => {
     expect(res.status).toBe(401);
   });
 
+  it('never shows blood pressure without a parent signed in', async () => {
+    for (const path of ['/api/bp/1', '/api/bp/1/report?from=2026-09-01&to=2026-09-30']) expect((await up().request(path)).status).toBe(401);
+    const res = await up().request('/api/bp/1', { method: 'POST', body: '{}', headers: { 'content-type': 'application/json' } });
+    expect(res.status).toBe(401);
+  });
+
   it('rejects an empty note', async () => {
     const res = await up().request('/api/notes', {
       method: 'POST',
