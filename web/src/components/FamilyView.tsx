@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import type { Member, Role } from '../../../shared/types';
+import { DOCUMENT_KINDS, type DocumentKind, type Member, type MemberDocument, type Role } from '../../../shared/types';
 import { api, type GoogleStatus, type TelegramStatus } from '../api';
 import { Avatar } from './Avatar';
 import { Icon } from './Icon';
@@ -19,7 +19,9 @@ function age(birthday: string | null): string {
 }
 
 export function FamilyView({ members, canEdit, googleOn, telegramOn, onChanged }: { members: Member[]; canEdit: boolean; googleOn: boolean; telegramOn: boolean; onChanged: () => void }) {
+  const [viewing, setViewing] = useState<number | null>(null);
   const [editing, setEditing] = useState<Member | 'new' | null>(null);
+  const viewed = members.find((m) => m.id === viewing);
   return (
     <div className="family">
       <header className="cal-head">
@@ -31,7 +33,7 @@ export function FamilyView({ members, canEdit, googleOn, telegramOn, onChanged }
       <ul className="member-list">
         {members.map((m) => (
           <li key={m.id}>
-            <button className="card member" onClick={() => canEdit && setEditing(m)} disabled={!canEdit}>
+            <button className="card member" onClick={() => setViewing(m.id)}>
               <Avatar member={m} size={40} />
               <span className="member-text">
                 <span className="card-title">{m.name}</span>
@@ -53,12 +55,14 @@ export function FamilyView({ members, canEdit, googleOn, telegramOn, onChanged }
       {!canEdit && <p className="muted">Sign in as a parent to edit the family.</p>}
       {canEdit && <GoogleCard members={members} onChanged={onChanged} />}
       {canEdit && telegramOn && <TelegramCard />}
+      {viewed && !editing && <MemberView member={viewed} canEdit={canEdit} onClose={() => setViewing(null)} onEdit={() => setEditing(viewed)} />}
       {editing && (
         <MemberSheet
           member={editing === 'new' ? null : editing}
           onClose={() => setEditing(null)}
-          onSaved={() => {
+          onSaved={(id) => {
             setEditing(null);
+            setViewing(id); // back to the profile (null after removing someone)
             onChanged();
           }}
         />
@@ -67,7 +71,7 @@ export function FamilyView({ members, canEdit, googleOn, telegramOn, onChanged }
   );
 }
 
-function MemberSheet({ member, onClose, onSaved }: { member: Member | null; onClose: () => void; onSaved: () => void }) {
+function MemberSheet({ member, onClose, onSaved }: { member: Member | null; onClose: () => void; onSaved: (id: number | null) => void }) {
   const [name, setName] = useState(member?.name ?? '');
   const [role, setRole] = useState<Role>(member?.role ?? 'kid');
   const [color, setColor] = useState(member?.color ?? COLORS[5]!);
@@ -77,6 +81,11 @@ function MemberSheet({ member, onClose, onSaved }: { member: Member | null; onCl
   const [cropping, setCropping] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [confirm, setConfirm] = useState(false);
+  const [docs, setDocs] = useState<MemberDocument[] | null>(member ? null : []); // null while loading
+
+  useEffect(() => {
+    if (member) api.documents(member.id).then(setDocs).catch((e) => setError((e as Error).message));
+  }, [member]);
 
   async function save(e: FormEvent) {
     e.preventDefault();
@@ -85,7 +94,8 @@ function MemberSheet({ member, onClose, onSaved }: { member: Member | null; onCl
       const saved = member ? await api.updateMember(member.id, body) : await api.addMember(body);
       if (photo?.startsWith('data:')) await api.setPhoto(saved.id, photo);
       else if (!photo && member?.photo) await api.removePhoto(saved.id);
-      onSaved();
+      if (docs) await api.saveDocuments(saved.id, docs);
+      onSaved(saved.id);
     } catch (err) {
       setError((err as Error).message);
     }
@@ -94,7 +104,7 @@ function MemberSheet({ member, onClose, onSaved }: { member: Member | null; onCl
   async function remove() {
     try {
       await api.deleteMember(member!.id);
-      onSaved();
+      onSaved(null);
     } catch (err) {
       setError((err as Error).message);
     }
@@ -163,6 +173,7 @@ function MemberSheet({ member, onClose, onSaved }: { member: Member | null; onCl
             <input id="googleEmail" type="email" value={googleEmail} onChange={(e) => setGoogleEmail(e.target.value)} placeholder="name@gmail.com" />
           </label>
         )}
+        {docs && <DocumentsEditor docs={docs} onChange={setDocs} />}
         {error && <p className="error">{error}</p>}
         <div className="form-actions">
           {member && !confirm && (
@@ -176,10 +187,132 @@ function MemberSheet({ member, onClose, onSaved }: { member: Member | null; onCl
               <button type="button" className="chip" onClick={() => setConfirm(false)}>Keep</button>
             </div>
           )}
-          <button type="submit" className="primary">Save</button>
+          <button type="submit" className="primary" disabled={!docs}>Save</button>
         </div>
       </form>
     </Sheet>
+  );
+}
+
+const longDate = (d: string) => new Date(`${d}T12:00`).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+const docName = (d: MemberDocument) => (d.kind === 'other' && d.label) || DOCUMENT_KINDS[d.kind].label;
+
+function expiry(expires: string) {
+  const days = Math.round((new Date(`${expires}T12:00`).getTime() - Date.now()) / 86_400_000);
+  if (days < 0) return { text: `Expired ${longDate(expires)}`, level: 'bad' };
+  if (days <= 90) return { text: `Expires ${longDate(expires)} · in ${days} day${days === 1 ? '' : 's'}`, level: 'soon' };
+  return { text: `Valid until ${longDate(expires)}`, level: '' };
+}
+
+/** What you see when you tap someone: their details and, for parents, their documents. */
+function MemberView({ member, canEdit, onClose, onEdit }: { member: Member; canEdit: boolean; onClose: () => void; onEdit: () => void }) {
+  const [docs, setDocs] = useState<MemberDocument[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [copied, setCopied] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (canEdit) api.documents(member.id).then(setDocs).catch((e) => setError((e as Error).message));
+  }, [member.id, canEdit]);
+
+  async function copy(i: number, text: string) {
+    await navigator.clipboard?.writeText(text).catch(() => {});
+    setCopied(i);
+    setTimeout(() => setCopied((c) => (c === i ? null : c)), 1500);
+  }
+
+  const edit = canEdit ? (
+    <button className="round ghost" aria-label={`Edit ${member.name}`} onClick={onEdit}>
+      <Icon name="edit" />
+    </button>
+  ) : null;
+
+  return (
+    <Sheet title={member.name} onClose={onClose} actions={edit}>
+      <div className="profile">
+        <Avatar member={member} size={72} />
+        <div className="member-text">
+          <span className="muted">{member.role === 'parent' ? 'Parent' : 'Kid'}{member.birthday ? ` · ${age(member.birthday)}` : ''}</span>
+          {member.birthday && new Date(member.birthday).getFullYear() > 1904 && <span className="muted small">Born {longDate(member.birthday)}</span>}
+        </div>
+      </div>
+      {!canEdit && <p className="muted small">Sign in as a parent to see documents.</p>}
+      {error && <p className="error">{error}</p>}
+      {canEdit && docs && docs.length === 0 && (
+        <p className="muted small">No documents yet. Tap the pencil to add NIF, Cartão de Cidadão, nº de utente…</p>
+      )}
+      {docs && docs.length > 0 && (
+        <ul className="docs">
+          {docs.map((d, i) => {
+            const exp = d.expires ? expiry(d.expires) : null;
+            return (
+              <li key={i} className="card doc">
+                <span className="muted small">{docName(d)}</span>
+                <div className="doc-main">
+                  {d.number && <span className="doc-number">{d.number}</span>}
+                  <span className="doc-buttons">
+                    {d.number && (
+                      <button className="chip" onClick={() => copy(i, d.number)} aria-label={`Copy ${docName(d)}`}>
+                        <Icon name={copied === i ? 'check' : 'copy'} size={16} /> {copied === i ? 'Copied' : 'Copy'}
+                      </button>
+                    )}
+                    {d.link && (
+                      <a className="chip" href={d.link} target="_blank" rel="noreferrer">
+                        <Icon name="open" size={16} /> Open
+                      </a>
+                    )}
+                  </span>
+                </div>
+                {exp && <span className={`small doc-exp ${exp.level}`}>{exp.text}</span>}
+                {d.note && <span className="muted small">{d.note}</span>}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </Sheet>
+  );
+}
+
+function DocumentsEditor({ docs, onChange }: { docs: MemberDocument[]; onChange: (docs: MemberDocument[]) => void }) {
+  const set = (i: number, patch: Partial<MemberDocument>) => onChange(docs.map((d, j) => (j === i ? { ...d, ...patch } : d)));
+  const used = new Set(docs.map((d) => d.kind));
+  const free = (Object.keys(DOCUMENT_KINDS) as DocumentKind[]).filter((k) => k === 'other' || !used.has(k));
+  return (
+    <div className="stacked docs-edit">
+      <span>Documents (only parents can see these)</span>
+      {docs.map((d, i) => (
+        <div key={i} className="doc-edit">
+          <div className="doc-edit-head">
+            <b>{DOCUMENT_KINDS[d.kind].label}</b>
+            <button type="button" className="round ghost" aria-label={`Remove ${docName(d)}`} onClick={() => onChange(docs.filter((_, j) => j !== i))}>
+              <Icon name="trash" size={16} />
+            </button>
+          </div>
+          {d.kind === 'other' && (
+            <input value={d.label ?? ''} onChange={(e) => set(i, { label: e.target.value })} placeholder="What is it? (e.g. Cartão de estudante)" maxLength={40} />
+          )}
+          <input value={d.number} onChange={(e) => set(i, { number: e.target.value })} placeholder="Number" maxLength={60} autoComplete="off" />
+          {DOCUMENT_KINDS[d.kind].expires && (
+            <label className="stacked">
+              <span className="small">Valid until</span>
+              <input type="date" value={d.expires ?? ''} onChange={(e) => set(i, { expires: e.target.value || null })} />
+            </label>
+          )}
+          <input type="url" value={d.link ?? ''} onChange={(e) => set(i, { link: e.target.value || null })} placeholder="Link to the scan (Paperless)" maxLength={500} />
+          <input value={d.note ?? ''} onChange={(e) => set(i, { note: e.target.value || null })} placeholder="Note (optional)" maxLength={200} />
+        </div>
+      ))}
+      <select
+        className="doc-add"
+        value=""
+        onChange={(e) => e.target.value && onChange([...docs, { kind: e.target.value as DocumentKind, label: null, number: '', expires: null, link: null, note: null }])}
+      >
+        <option value="">+ Add a document…</option>
+        {free.map((k) => (
+          <option key={k} value={k}>{DOCUMENT_KINDS[k].label}</option>
+        ))}
+      </select>
+    </div>
   );
 }
 

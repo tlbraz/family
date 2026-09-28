@@ -29,6 +29,29 @@ export interface Member {
 
 export type MemberInput = Omit<Member, 'id' | 'hasPassword' | 'photo'>;
 
+/** Personal documents (parents only). `expires` marks the ones that run out and need renewing. */
+export const DOCUMENT_KINDS = {
+  cc: { label: 'Cartão de Cidadão', expires: true },
+  nif: { label: 'NIF', expires: false },
+  niss: { label: 'Segurança Social (NISS)', expires: false },
+  sns: { label: 'Nº de utente (SNS)', expires: false },
+  passport: { label: 'Passaporte', expires: true },
+  driving: { label: 'Carta de condução', expires: true },
+  cesd: { label: 'Cartão Europeu de Seguro de Doença', expires: true },
+  insurance: { label: 'Seguro de saúde', expires: true },
+  other: { label: 'Other', expires: true },
+} as const;
+export type DocumentKind = keyof typeof DOCUMENT_KINDS;
+
+export interface MemberDocument {
+  kind: DocumentKind;
+  label: string | null; // the name, for kind "other"
+  number: string;
+  expires: string | null; // YYYY-MM-DD
+  link: string | null; // e.g. the scan in Paperless
+  note: string | null;
+}
+
 export const EVENT_TYPES = ['medical', 'sports', 'school', 'party', 'family', 'work', 'holiday', 'other'] as const;
 export type EventType = (typeof EVENT_TYPES)[number];
 

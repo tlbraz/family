@@ -24,6 +24,8 @@ Install it on a phone with *Share → Add to Home Screen*.
 - **Portuguese holidays** (incl. Carnival and Almada's São João) and the **public school calendar**
   (`shared/school-calendar.ts`, update it each summer from the new Despacho).
 - **Parents sign in** (first sign-in sets the password); everyone else can look and tick "bring" items and to-dos.
+- **Tap someone** for their profile. Parents also see their documents (Cartão de Cidadão, NIF, NISS, utente, passport,
+  driving licence…) with copy buttons, expiry warnings and a link to the scan in Paperless. Served only to signed-in parents.
 - **Telegram** (`TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`): 07:30 "today" message, 20:00 "tomorrow" message with
   what to bring, both with open to-dos (late, or due within three days), Sunday 19:00 week ahead (day messages only
   when something is on). `POST /api/digest?kind=today|tomorrow|week` sends one now.
