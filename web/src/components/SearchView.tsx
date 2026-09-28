@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { Member, Occurrence, SearchResults } from '../../../shared/types';
 import { api } from '../api';
 import { useBack } from '../back';
-import { dateKey } from '../dates';
+import { dateKey, timeOf } from '../dates';
 import { EventCard } from './CalendarView';
 import { Icon } from './Icon';
 
@@ -75,7 +75,7 @@ export function SearchView({ members, refreshKey, onOpen, onClose }: Props) {
 
   const list = (items: Occurrence[]) =>
     items.map((o) => (
-      <EventCard key={o.key} o={o} members={members} dayKey={dateKey(new Date(o.start))} label={shortDate(o.start)} onOpen={() => onOpen(o)} />
+      <EventCard key={o.key} o={o} members={members} dayKey={dateKey(new Date(o.start))} label={<>{shortDate(o.start)}<br />{o.allDay ? 'All day' : timeOf(o.start)}</>} onOpen={() => onOpen(o)} />
     ));
   const none = results && !results.upcoming.length && !results.past.length;
 

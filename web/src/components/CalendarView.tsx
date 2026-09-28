@@ -418,9 +418,8 @@ function DayAgenda({ day, visible, tasks, hiddenTasks, onShowTasks, members, tod
 }
 
 /** One event in a list; `label` replaces the time column (search results show the date there). */
-export function EventCard({ o, members, dayKey, onOpen, label }: { o: Occurrence; members: Member[]; dayKey: string; onOpen: () => void; label?: string }) {
+export function EventCard({ o, members, dayKey, onOpen, label }: { o: Occurrence; members: Member[]; dayKey: string; onOpen: () => void; label?: React.ReactNode }) {
   const lead = members.find((m) => m.id === o.participants[0]);
-  const multiDay = dateKey(new Date(o.start)) !== dateKey(new Date(new Date(o.end).getTime() - 1));
   const startsToday = dateKey(new Date(o.start)) === dayKey;
   const time = o.allDay ? 'All day' : startsToday ? timeOf(o.start) : 'cont.';
   const todo = o.bring.filter((b) => !b.done);
@@ -437,7 +436,6 @@ export function EventCard({ o, members, dayKey, onOpen, label }: { o: Occurrence
             <Icon name={o.type} size={14} />
             {TYPE_LABEL[o.type]}
           </span>
-          {!o.allDay && startsToday && <span>until {multiDay ? new Date(o.end).toLocaleDateString('en-GB', { weekday: 'short' }) + ' ' : ''}{timeOf(o.end)}</span>}
           {o.location && (
             <span className="meta-item">
               <Icon name="pin" size={14} />
