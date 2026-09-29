@@ -15,6 +15,7 @@ describe('payroll alert', () => {
     expect(newPayrollCredits(all, ['1']).map((t) => t.id)).toEqual(['2']);
   });
   it('reads naturally', () => {
-    expect(payrollMessage(all[1]!)).toBe('💶 <b>EPI Operations B.V. paid €9120,00</b> into Empresa (12/10/2026).');
+    expect(payrollMessage(all[1]!)).toBe('💶 <b>EPI Operations B.V.</b> paid <b>€9 120</b> into Empresa');
+    expect(payrollMessage(tx('5', '2026-10-12', 528050, 'EPI Operations B.V.'))).toBe('💶 <b>EPI Operations B.V.</b> paid <b>€5 280.50</b> into Empresa');
   });
 });

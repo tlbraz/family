@@ -20,6 +20,13 @@ const eur = (cents: number, decimals = false) => {
 };
 const monthName = (m: string) => new Date(`${m}-15T12:00`).toLocaleDateString('en-GB', { month: 'long', year: m.slice(0, 4) === String(new Date().getFullYear()) ? undefined : 'numeric' });
 const shortDate = (d: string) => new Date(`${d}T12:00`).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+// "today at 13:02", "yesterday at 19:00" or "28 Sept at 07:00".
+const when = (iso: string) => {
+  const d = new Date(iso);
+  const time = d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+  const days = Math.round((new Date(new Date().toDateString()).getTime() - new Date(d.toDateString()).getTime()) / 86_400_000);
+  return `${days === 0 ? 'today' : days === 1 ? 'yesterday' : d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} at ${time}`;
+};
 const ago = (iso: string) => {
   const min = Math.round((Date.now() - new Date(iso).getTime()) / 60_000);
   return min < 1 ? 'just now' : min < 60 ? `${min} min ago` : `${Math.round(min / 60)} h ago`;
@@ -120,6 +127,9 @@ export function MoneyView({ meName }: { meName: string }) {
             <IncomeCard data={data} onOpen={setSource} />
           </div>
           <SavingsCard data={data} />
+          <p className="money-synced">
+            {data.bankSyncedAt ? `Banks synced ${when(data.bankSyncedAt)}` : 'Banks not synced yet'} · read from Actual {ago(data.fetchedAt)}
+          </p>
         </>
       )}
       {open && data && (

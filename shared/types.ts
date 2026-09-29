@@ -197,6 +197,7 @@ export interface MoneySummary {
   transactions: MoneyTransaction[];
   accounts: { name: string; balance: number; offBudget: boolean }[];
   fetchedAt: string;
+  bankSyncedAt: string | null; // when the banks were last synced into Actual
   link: string | null; // where to open Actual
   review: MoneyTransaction[]; // tagged #review in Actual, any month: still to be checked
   pickable: { id: string; name: string; categories: { id: string; name: string }[] }[]; // for the category picker

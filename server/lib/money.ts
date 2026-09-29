@@ -29,6 +29,7 @@ export interface Snapshot {
   /** Expense-side transactions of on-budget accounts: no transfers, no starting balances, splits flattened. */
   tx: { id: string; accountId: string; fixable: boolean; review: boolean; date: string; amount: number; account: string; category: string | null; payee: string }[];
   dataFrom: string | null; // earliest real transaction, to know which months are complete
+  bankSyncedAt?: string | null; // the latest bank sync of any linked account (ours, Actual's button or another tool)
   review: { id: string; accountId: string; fixable: boolean; date: string; amount: number; account: string; category: string | null; payee: string }[]; // tagged #review
 }
 
@@ -112,7 +113,13 @@ async function load(budget: MoneyBudget, bankSync: boolean): Promise<Snapshot> {
     hidden: !!g.hidden,
     categories: (g.categories ?? []).map((c) => ({ id: c.id, name: c.name })),
   }));
-  return { fetchedAt: new Date().toISOString(), accounts, groups, tx, dataFrom, review };
+  // Actual keeps when each bank-linked account last synced; getAccounts leaves it out, so ask for it.
+  const synced = await api
+    .aqlQuery(api.q('accounts').select(['last_sync']))
+    .then((r) => ((r as { data: { last_sync: string | null }[] }).data ?? []).map((a) => Number(a.last_sync)).filter((n) => n > 0))
+    .catch(() => [] as number[]);
+  const bankSyncedAt = synced.length ? new Date(Math.max(...synced)).toISOString() : null;
+  return { fetchedAt: new Date().toISOString(), accounts, groups, tx, dataFrom, review, bankSyncedAt };
 }
 
 /** Fetches every configured budget. Called on a timer and, the first time, by the page. */
@@ -281,6 +288,7 @@ export function summarise(snap: Snapshot, budget: MoneyBudget, budgets: MoneyBud
       .map(({ name, balance, offBudget }) => ({ name, balance, offBudget }))
       .sort((a, b) => Number(a.offBudget) - Number(b.offBudget) || b.balance - a.balance),
     fetchedAt: snap.fetchedAt,
+    bankSyncedAt: snap.bankSyncedAt ?? null,
     link: process.env.ACTUAL_PUBLIC_URL || process.env.ACTUAL_SERVER_URL || null,
     review: snap.review
       .map((t) => {

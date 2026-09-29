@@ -21,8 +21,10 @@ export function newPayrollCredits(tx: Snapshot['tx'], seen: string[], pattern = 
 }
 
 export function payrollMessage(t: Snapshot['tx'][number]): string {
-  const eur = (t.amount / 100).toLocaleString('pt-PT', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  return `💶 <b>${esc(t.payee)} paid €${eur}</b> into ${esc(t.account)} (${t.date.split('-').reverse().join('/')}).`;
+  const cents = t.amount % 100 !== 0;
+  const [int, dec] = (t.amount / 100).toFixed(cents ? 2 : 0).split('.');
+  const eur = `€${int!.replace(/\B(?=(\d{3})+(?!\d))/g, ' ')}${dec ? `.${dec}` : ''}`;
+  return `💶 <b>${esc(t.payee)}</b> paid <b>${eur}</b> into Empresa`;
 }
 
 export async function runPayrollAlert(db: Db) {

@@ -475,3 +475,4 @@ button.link { border: 0; padding: 0; background: none; color: var(--accent, inhe
 .review-fix .check { display: flex; align-items: center; gap: 8px; font-weight: 700; }
 .review-fix .check input { width: 18px; height: 18px; }
 div.review-row { cursor: default; }
+.money-synced { margin: 14px 0 0; text-align: center; color: var(--muted); font-size: 0.75rem; }
