@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { newPayrollCredits, payrollMessage } from './payroll';
 
 const tx = (id: string, date: string, amount: number, payee: string) =>
-  ({ id, accountId: 'a', fixable: true, review: false, date, amount, account: 'Empresa', category: null, payee });
+  ({ id, accountId: 'a', fixable: true, review: false, note: null, date, amount, account: 'Empresa', category: null, payee });
 
 describe('payroll alert', () => {
   const all = [

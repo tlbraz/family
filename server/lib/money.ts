@@ -27,10 +27,10 @@ export interface Snapshot {
   accounts: { id: string; name: string; offBudget: boolean; balance: number }[];
   groups: { id: string; name: string; income: boolean; hidden?: boolean; categories: { id: string; name: string }[] }[];
   /** Expense-side transactions of on-budget accounts: no transfers, no starting balances, splits flattened. */
-  tx: { id: string; accountId: string; fixable: boolean; review: boolean; date: string; amount: number; account: string; category: string | null; payee: string }[];
+  tx: { id: string; accountId: string; fixable: boolean; review: boolean; note: string | null; date: string; amount: number; account: string; category: string | null; payee: string }[];
   dataFrom: string | null; // earliest real transaction, to know which months are complete
   bankSyncedAt?: string | null; // the latest bank sync of any linked account (ours, Actual's button or another tool)
-  review: { id: string; accountId: string; fixable: boolean; date: string; amount: number; account: string; category: string | null; payee: string }[]; // tagged #review
+  review: { id: string; accountId: string; fixable: boolean; note?: string | null; date: string; amount: number; account: string; category: string | null; payee: string }[]; // tagged #review
 }
 
 type Api = typeof import('@actual-app/api');
@@ -89,7 +89,7 @@ async function load(budget: MoneyBudget, bankSync: boolean): Promise<Snapshot> {
       const tagged = parts.find((p) => REVIEW_TAG.test(p.notes ?? ''));
       if (tagged) {
         const plain = !t.subtransactions?.length && !t.is_child && !t.transfer_id;
-        review.push({ id: tagged.id, accountId: a.id, fixable: plain, date: t.date, amount: tagged.amount, account: a.name, category: tagged.category ?? null, payee: (t.payee && payees.get(t.payee)) || t.imported_payee || '' });
+        review.push({ id: tagged.id, accountId: a.id, fixable: plain, note: withoutReviewTag(tagged.notes), date: t.date, amount: tagged.amount, account: a.name, category: tagged.category ?? null, payee: (t.payee && payees.get(t.payee)) || t.imported_payee || '' });
       }
     }
     if (a.offbudget) continue;
@@ -102,7 +102,7 @@ async function load(budget: MoneyBudget, bankSync: boolean): Promise<Snapshot> {
       for (const p of parts) {
         if (p.transfer_id) continue;
         const review = REVIEW_TAG.test(p.notes ?? '') || REVIEW_TAG.test(t.notes ?? '');
-        tx.push({ id: p.id, accountId: a.id, fixable: !split, review, date: t.date, amount: p.amount, account: a.name, category: p.category ?? null, payee });
+        tx.push({ id: p.id, accountId: a.id, fixable: !split, review, note: withoutReviewTag(p.notes), date: t.date, amount: p.amount, account: a.name, category: p.category ?? null, payee });
       }
     }
   }
@@ -145,7 +145,7 @@ export const withoutReviewTag = (notes: string | null | undefined) =>
  * Changes a transaction in Actual from the app: its category, and/or whether it's tagged #review (the rest of the
  * note is kept). Then reads the budget again so the page shows the change.
  */
-export function editTransaction(budget: MoneyBudget, id: string, change: { category?: string; review?: boolean }) {
+export function editTransaction(budget: MoneyBudget, id: string, change: { category?: string; review?: boolean; note?: string }) {
   return serial(async () => {
     const snap = snapshots.get(budget);
     const item = snap?.tx.find((t) => t.id === id) ?? snap?.review.find((t) => t.id === id);
@@ -159,8 +159,10 @@ export function editTransaction(budget: MoneyBudget, id: string, change: { categ
     const all = await api.getTransactions(item.accountId, '1900-01-01', '2999-12-31');
     const current = all.flatMap((t) => [t, ...(t.subtransactions ?? [])]).find((t) => t.id === id);
     if (!current) throw new ReviewError('That transaction is no longer in Actual');
-    const kept = withoutReviewTag(current.notes);
-    const notes = change.review === undefined ? current.notes ?? '' : change.review ? `${kept ?? ''} #review`.trim() : kept ?? '';
+    // The note is the description plus, when it needs review, the #review tag at the end.
+    const tagged = change.review ?? REVIEW_TAG.test(current.notes ?? '');
+    const text = change.note !== undefined ? change.note.trim().slice(0, 500) : withoutReviewTag(current.notes) ?? '';
+    const notes = tagged ? `${text} #review`.trim() : text;
     await api.updateTransaction(id, { notes, ...(change.category !== undefined ? { category: change.category } : {}) });
     await api.sync();
     snapshots.set(budget, await load(budget, false));
@@ -246,7 +248,7 @@ export function summarise(snap: Snapshot, budget: MoneyBudget, budgets: MoneyBud
     g.amount -= t.amount;
     cat.amount -= t.amount;
     groups.set(groupId, g);
-    transactions.push({ id: t.id, categoryId: t.category, fixable: t.fixable, review: t.review, date: t.date, payee: t.payee, account: t.account, groupId, category: cat.name, amount: -t.amount });
+    transactions.push({ id: t.id, categoryId: t.category, fixable: t.fixable, review: t.review, note: t.note, date: t.date, payee: t.payee, account: t.account, groupId, category: cat.name, amount: -t.amount });
   }
   const sorted = [...groups.values()]
     .map((g) => ({ ...g, categories: g.categories.filter((c) => c.amount > 0).sort((a, b) => b.amount - a.amount) }))
@@ -275,7 +277,7 @@ export function summarise(snap: Snapshot, budget: MoneyBudget, budgets: MoneyBud
         total: incomeTx.reduce((sum, t) => sum + t.amount, 0),
         sources: [...bySource].map(([name, amount]) => ({ name, amount })).sort((a, b) => (a.name === 'Not categorised' ? 1 : b.name === 'Not categorised' ? -1 : b.amount - a.amount)),
         transactions: incomeTx
-          .map((t) => ({ id: t.id, categoryId: t.category, fixable: t.fixable, review: t.review, date: t.date, payee: t.payee, account: t.account, groupId: 'income', category: sourceName(t, catName), amount: -t.amount }))
+          .map((t) => ({ id: t.id, categoryId: t.category, fixable: t.fixable, review: t.review, note: t.note, date: t.date, payee: t.payee, account: t.account, groupId: 'income', category: sourceName(t, catName), amount: -t.amount }))
           .sort((a, b) => b.date.localeCompare(a.date)),
       };
     })(),
@@ -293,7 +295,7 @@ export function summarise(snap: Snapshot, budget: MoneyBudget, budgets: MoneyBud
     review: snap.review
       .map((t) => {
         const c = t.category ? groupOf.get(t.category) : undefined;
-        return { id: t.id, categoryId: t.category, fixable: t.fixable, date: t.date, payee: t.payee, account: t.account, groupId: c?.groupId ?? 'uncategorised', category: c?.name ?? 'Not categorised', amount: -t.amount };
+        return { id: t.id, categoryId: t.category, fixable: t.fixable, review: true, note: t.note ?? null, date: t.date, payee: t.payee, account: t.account, groupId: c?.groupId ?? 'uncategorised', category: c?.name ?? 'Not categorised', amount: -t.amount };
       })
       .sort((a, b) => b.date.localeCompare(a.date)),
     // Spending groups first, then income, as in Actual.

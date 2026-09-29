@@ -284,6 +284,7 @@ function TxList({ tx, showCategory, edit }: { tx: MoneyTransaction[]; showCatego
           <>
             <span>
               {t.payee || '—'}
+              {t.note && <span className="tx-desc">{t.note}</span>}
               <span className="sub">
                 {shortDate(t.date)} · {t.account}{showCategory ? ` · ${t.category}` : ''}
                 {t.review && <span className="tag"> #review</span>}
@@ -308,16 +309,39 @@ function TxList({ tx, showCategory, edit }: { tx: MoneyTransaction[]; showCatego
   );
 }
 
+/** Pick a category: type to search (by category or group name, accents ignored), tap to choose. */
 function CategoryPicker({ data, value, onChange }: { data: MoneySummary; value: string; onChange: (id: string) => void }) {
+  const [query, setQuery] = useState('');
+  const fold = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  const q = fold(query.trim());
+  const groups = data.pickable
+    .map((g) => ({ ...g, categories: !q || fold(g.name).includes(q) ? g.categories : g.categories.filter((c) => fold(c.name).includes(q)) }))
+    .filter((g) => g.categories.length);
+  const current = data.pickable.flatMap((g) => g.categories.map((c) => ({ ...c, group: g.name }))).find((c) => c.id === value);
   return (
-    <select value={value} onChange={(e) => onChange(e.target.value)} aria-label="Category">
-      <option value="" disabled>Choose a category…</option>
-      {data.pickable.map((g) => (
-        <optgroup key={g.id} label={g.name}>
-          {g.categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-        </optgroup>
-      ))}
-    </select>
+    <div className="cat-picker">
+      <input
+        type="search"
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        placeholder={current ? `${current.group} › ${current.name}` : 'Search categories…'}
+        aria-label="Search categories"
+        autoComplete="off"
+      />
+      <ul role="listbox" aria-label="Categories">
+        {groups.map((g) => (
+          <li key={g.id} role="presentation">
+            <span className="cat-group">{g.name}</span>
+            {g.categories.map((c) => (
+              <button key={c.id} type="button" role="option" aria-selected={c.id === value} className={c.id === value ? 'on' : ''} onClick={() => onChange(c.id)}>
+                {c.name}
+              </button>
+            ))}
+          </li>
+        ))}
+        {!groups.length && <li className="muted small">No category matches "{query}"</li>}
+      </ul>
+    </div>
   );
 }
 
@@ -325,11 +349,13 @@ function CategoryPicker({ data, value, onChange }: { data: MoneySummary; value: 
 function TxEditor({ t, edit, onDone }: { t: MoneyTransaction; edit: Editing; onDone: () => void }) {
   const [pick, setPick] = useState(t.categoryId ?? '');
   const [review, setReview] = useState(!!t.review);
+  const [note, setNote] = useState(t.note ?? '');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const change = {
     ...(t.fixable && pick && pick !== t.categoryId ? { category: pick } : {}),
     ...(review !== !!t.review ? { review } : {}),
+    ...(note.trim() !== (t.note ?? '') ? { note: note.trim() } : {}),
   };
   async function save() {
     setBusy(true);
@@ -351,6 +377,7 @@ function TxEditor({ t, edit, onDone }: { t: MoneyTransaction; edit: Editing; onD
       ) : (
         <p className="muted small">Part of a split: change its category in Actual.</p>
       )}
+      <input className="tx-note" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Description (optional)" maxLength={500} aria-label="Description" />
       <label className="check">
         <input type="checkbox" checked={review} onChange={(e) => setReview(e.target.checked)} /> Needs review (#review)
       </label>

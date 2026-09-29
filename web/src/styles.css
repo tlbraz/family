@@ -476,3 +476,13 @@ button.link { border: 0; padding: 0; background: none; color: var(--accent, inhe
 .review-fix .check input { width: 18px; height: 18px; }
 div.review-row { cursor: default; }
 .money-synced { margin: 14px 0 0; text-align: center; color: var(--muted); font-size: 0.75rem; }
+.cat-picker { display: flex; flex-direction: column; gap: 8px; }
+.cat-picker input { width: 100%; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--card); font: inherit; color: var(--ink); }
+.cat-picker ul { list-style: none; margin: 0; padding: 4px; max-height: 240px; overflow-y: auto; border-radius: 12px; background: var(--card); }
+.cat-picker li { display: flex; flex-wrap: wrap; gap: 6px; padding: 6px 4px; align-items: center; }
+.cat-picker .cat-group { width: 100%; font-size: 0.72rem; font-weight: 800; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+.cat-picker button { border: 1px solid var(--line); background: var(--bg); color: var(--ink); border-radius: 16px; padding: 6px 12px; font: inherit; font-size: 0.9rem; font-weight: 700; }
+.cat-picker button.on { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+.tx-note { width: 100%; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--card); font: inherit; color: var(--ink); }
+.money-list .tx-desc { font-size: 0.85rem; color: var(--ink); opacity: 0.8; font-style: italic; }
+.money-list .cat-picker li { flex-direction: row; justify-content: flex-start; align-items: center; border-top: 0; padding: 6px 4px; }

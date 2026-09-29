@@ -141,13 +141,13 @@ export function createApp(db: Db, hooks: AppHooks = noop) {
   // Change any transaction from the app: its category and/or the #review tag.
   api.post('/money/edit', requireParent, async (c) => {
     if (!moneyEnabled()) return c.json({ error: 'Actual Budget is not set up on the server' }, 404);
-    const body = (await c.req.json().catch(() => ({}))) as { budget?: string; id?: unknown; category?: unknown; review?: unknown };
+    const body = (await c.req.json().catch(() => ({}))) as { budget?: string; id?: unknown; category?: unknown; review?: unknown; note?: unknown };
     const budget = (body.budget ?? 'family') as MoneyBudget;
     if (!budgetsFor(c.get('me')!.name).includes(budget)) return c.json({ error: 'Not available' }, 403);
-    const bad = typeof body.id !== 'string' || (body.category !== undefined && typeof body.category !== 'string') || (body.review !== undefined && typeof body.review !== 'boolean');
+    const bad = typeof body.id !== 'string' || (body.category !== undefined && typeof body.category !== 'string') || (body.review !== undefined && typeof body.review !== 'boolean') || (body.note !== undefined && typeof body.note !== 'string');
     if (bad) return c.json({ error: 'Pick a transaction' }, 400);
     try {
-      await editTransaction(budget, body.id as string, { category: body.category as string | undefined, review: body.review as boolean | undefined });
+      await editTransaction(budget, body.id as string, { category: body.category as string | undefined, review: body.review as boolean | undefined, note: body.note as string | undefined });
       return c.json({ ok: true });
     } catch (e) {
       return c.json({ error: (e as Error).message }, e instanceof ReviewError ? 400 : 503);

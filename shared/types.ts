@@ -180,6 +180,7 @@ export interface MoneyTransaction {
   categoryId?: string | null;
   fixable?: boolean; // false for splits and transfers: their category is changed in Actual
   review?: boolean; // tagged #review
+  note?: string | null; // the description (Actual's note, without the #review tag)
 }
 
 export interface MoneySummary {

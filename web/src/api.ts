@@ -85,7 +85,7 @@ export const api = {
 
   money: (budget: MoneyBudget, month: string | null) => request<MoneySummary>(`/money?budget=${budget}${month ? `&month=${month}` : ''}`),
   refreshMoney: () => request<{ ok: true }>('/money/refresh', json('POST')),
-  editMoney: (budget: MoneyBudget, id: string, change: { category?: string; review?: boolean }) => request<{ ok: true }>('/money/edit', json('POST', { budget, id, ...change })),
+  editMoney: (budget: MoneyBudget, id: string, change: { category?: string; review?: boolean; note?: string }) => request<{ ok: true }>('/money/edit', json('POST', { budget, id, ...change })),
   reviewMoney: (budget: MoneyBudget, id: string, category?: string) => request<{ ok: true }>('/money/review', json('POST', { budget, id, category })),
 
   notes: () => request<Note[]>('/notes'),
