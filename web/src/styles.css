@@ -395,9 +395,9 @@ button.link { border: 0; padding: 0; background: none; color: var(--accent, inhe
 .bp-quick { width: 38px; height: 38px; color: #c2413b; }
 
 /* Money tab (parents only). Category colours validated for colour-blind separation on the cards. */
-:root { --m1: #2a78d6; --m2: #eb6834; --m3: #1baf7a; --m4: #eda100; --m5: #e87ba4; --m6: #008300; --m7: #4a3aa7; --m8: #e34948; --m-other: #a9a4b8; }
+:root { --m1: #2a78d6; --m2: #eb6834; --m3: #1baf7a; --m4: #eda100; --m5: #e87ba4; --m6: #008300; --m7: #4a3aa7; --m8: #e34948; --m9: #6fb8ff; --m10: #9e2f7a; --m11: #7a8b00; --m12: #a86cf0; --m-other: #a9a4b8; }
 @media (prefers-color-scheme: dark) {
-  :root { --m1: #3987e5; --m2: #d95926; --m3: #199e70; --m4: #c98500; --m5: #d55181; --m6: #008300; --m7: #9085e9; --m8: #e66767; --m-other: #6d6780; }
+  :root { --m1: #3987e5; --m2: #d95926; --m3: #199e70; --m4: #c98500; --m5: #d55181; --m6: #008300; --m7: #9085e9; --m8: #e66767; --m9: #3fa0c8; --m10: #b8468f; --m11: #8a9c10; --m12: #7a5cd6; --m-other: #6d6780; }
 }
 .money-cards { display: flex; flex-direction: column; gap: 12px; }
 .money-switch { margin-bottom: 12px; }
@@ -453,3 +453,8 @@ button.link { border: 0; padding: 0; background: none; color: var(--accent, inhe
 .month-bar span { font-weight: 800; font-size: 1.1rem; }
 .month-bar button:disabled { opacity: 0.35; }
 .money > .card { margin-bottom: 0; }
+.income-num { font-size: 1.9rem; font-weight: 800; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.income-kept { margin: 2px 0 14px; font-weight: 800; }
+.income-kept.good { color: var(--ok); }
+.income-kept.bad { color: var(--danger); }
+.legend.income .track span { background: var(--ok); }

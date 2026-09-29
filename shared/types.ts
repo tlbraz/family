@@ -185,6 +185,7 @@ export interface MoneySummary {
   today: number | null; // day of the month when it's the current month
   daysInMonth: number;
   spent: number;
+  income: { total: number; sources: { name: string; amount: number }[]; transactions: MoneyTransaction[] }; // money in this month
   usual: number | null; // what's usually spent by this point of the month (null until there's enough history)
   groups: MoneyGroup[];
   groupOrder: string[]; // every expense group in Actual's order, so a group keeps its colour from month to month

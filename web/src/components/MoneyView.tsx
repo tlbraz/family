@@ -4,9 +4,10 @@ import { api } from '../api';
 import { Icon } from './Icon';
 import { Sheet } from './Sheet';
 
-// Category colours, validated for colour-blind separation on the light and dark cards (see styles.css --m1…--m8).
-// A group keeps its colour by its place in Actual, not by how much was spent; past the 8th it folds into "Other".
-const SLOTS = 8;
+// Category colours, validated for colour-blind separation on the light and dark cards (see styles.css --m1…--m12).
+// A group keeps its colour by its place in Actual (among the groups in use), not by how much was spent; past the
+// 12th it goes gray. Every colour has its name next to it, so colour is never the only way to tell them apart.
+const SLOTS = 12;
 const colourOf = (id: string, order: string[]) => {
   const i = order.indexOf(id);
   return i >= 0 && i < SLOTS ? `var(--m${i + 1})` : 'var(--m-other)';
@@ -31,6 +32,7 @@ export function MoneyView({ meName }: { meName: string }) {
   const [error, setError] = useState<string | null>(null);
   const [open, setOpen] = useState<MoneyGroup | null>(null);
   const [reviewing, setReviewing] = useState(false);
+  const [source, setSource] = useState<string | null>(null); // an income source, to list its transactions
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(() => {
@@ -115,10 +117,16 @@ export function MoneyView({ meName }: { meName: string }) {
             <SpentCard data={data} />
             <ReviewCard review={data.review} onOpen={() => setReviewing(true)} />
             <GroupsCard data={data} onOpen={setOpen} />
+            <IncomeCard data={data} onOpen={setSource} />
           </div>
         </>
       )}
       {open && data && <GroupSheet group={open} data={data} onClose={() => setOpen(null)} />}
+      {source && data && (
+        <Sheet title={`${source} · ${eur(data.income.sources.find((x) => x.name === source)?.amount ?? 0)}`} onClose={() => setSource(null)}>
+          <TxList tx={data.income.transactions.filter((t) => sourceOf(t) === source)} showCategory={false} />
+        </Sheet>
+      )}
       {reviewing && data && (
         <Sheet title={`To review · ${data.review.length}`} onClose={() => setReviewing(false)}>
           <TxList tx={data.review} showCategory />
@@ -283,6 +291,42 @@ function ReviewCard({ review, onOpen }: { review: MoneyTransaction[]; onOpen: ()
 }
 
 /** How much we have now: the biggest number on the page. Doesn't change with the month being looked at. */
+// Same naming as the server's income sources: by who paid, or "Not categorised".
+const sourceOf = (t: MoneyTransaction) => (t.category === 'Not categorised' ? 'Not categorised' : t.payee || t.category || 'Income');
+
+/** What came in this month, and how much of it is left after spending. */
+function IncomeCard({ data, onOpen }: { data: MoneySummary; onOpen: (source: string) => void }) {
+  const { total, sources } = data.income;
+  const kept = total - data.spent;
+  const max = Math.max(...sources.map((x) => x.amount), 1);
+  return (
+    <section className="card money-card">
+      <h2>Came in</h2>
+      {total === 0 ? (
+        <p className="muted small">Nothing came in {data.today ? 'yet this month' : `in ${monthName(data.month)}`}.</p>
+      ) : (
+        <>
+          <div className="income-num">{eur(total)}</div>
+          <p className={`income-kept ${kept >= 0 ? 'good' : 'bad'}`}>
+            {kept >= 0 ? `${eur(kept)} left after spending` : `${eur(-kept)} more spent than came in`}
+          </p>
+          <ul className="legend sub income">
+            {sources.map((x) => (
+              <li key={x.name}>
+                <button onClick={() => onOpen(x.name)}>
+                  <span className="name">{x.name}</span>
+                  <span className="amt">{eur(x.amount)}</span>
+                  <span className="track"><span style={{ width: `${(Math.max(x.amount, 0) / max) * 100}%` }} /></span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+    </section>
+  );
+}
+
 function BalanceCard({ data, busy, onRefresh }: { data: MoneySummary; busy: boolean; onRefresh: () => void }) {
   const [showAll, setShowAll] = useState(false);
   const onBudget = data.accounts.filter((a) => !a.offBudget);

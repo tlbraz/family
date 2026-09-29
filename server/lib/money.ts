@@ -25,7 +25,7 @@ export function budgetsFor(name: string): MoneyBudget[] {
 export interface Snapshot {
   fetchedAt: string;
   accounts: { id: string; name: string; offBudget: boolean; balance: number }[];
-  groups: { id: string; name: string; income: boolean; categories: { id: string; name: string }[] }[];
+  groups: { id: string; name: string; income: boolean; hidden?: boolean; categories: { id: string; name: string }[] }[];
   /** Expense-side transactions of on-budget accounts: no transfers, no starting balances, splits flattened. */
   tx: { date: string; amount: number; account: string; category: string | null; payee: string }[];
   dataFrom: string | null; // earliest real transaction, to know which months are complete
@@ -104,6 +104,7 @@ async function load(budget: MoneyBudget, bankSync: boolean): Promise<Snapshot> {
     id: g.id,
     name: g.name,
     income: !!g.is_income,
+    hidden: !!g.hidden,
     categories: (g.categories ?? []).map((c) => ({ id: c.id, name: c.name })),
   }));
   return { fetchedAt: new Date().toISOString(), accounts, groups, tx, dataFrom, review };
@@ -159,6 +160,10 @@ export function summarise(snap: Snapshot, budget: MoneyBudget, budgets: MoneyBud
 
   // Spending: expenses count, refunds in an expense category count back; income and unknown money in don't.
   const spending = snap.tx.filter((t) => (t.category ? !incomeCats.has(t.category) : t.amount < 0));
+  const usedCats = new Set(spending.map((t) => t.category));
+  // Money in: income categories, and money in without a category (shown apart, it may be a refund or a transfer).
+  const catName = new Map(snap.groups.flatMap((g) => g.categories.map((c) => [c.id, c.name] as const)));
+  const incomeTx = snap.tx.filter((t) => monthKey(t.date) === month && (t.category ? incomeCats.has(t.category) : t.amount > 0));
   const spentIn = (m: string, uptoDay = 31) =>
     spending.filter((t) => monthKey(t.date) === m && Number(t.date.slice(8, 10)) <= uptoDay).reduce((s, t) => s - t.amount, 0);
 
@@ -205,9 +210,24 @@ export function summarise(snap: Snapshot, budget: MoneyBudget, budgets: MoneyBud
     today: day,
     daysInMonth: daysIn(month),
     spent: spentIn(month),
+    income: (() => {
+      const bySource = new Map<string, number>();
+      for (const t of incomeTx) {
+        const name = t.category ? t.payee || catName.get(t.category) || 'Income' : 'Not categorised';
+        bySource.set(name, (bySource.get(name) ?? 0) + t.amount);
+      }
+      return {
+        total: incomeTx.reduce((sum, t) => sum + t.amount, 0),
+        sources: [...bySource].map(([name, amount]) => ({ name, amount })).sort((a, b) => (a.name === 'Not categorised' ? 1 : b.name === 'Not categorised' ? -1 : b.amount - a.amount)),
+        transactions: incomeTx
+          .map((t) => ({ date: t.date, payee: t.payee, account: t.account, groupId: 'income', category: t.category ? (catName.get(t.category) ?? 'Income') : 'Not categorised', amount: -t.amount }))
+          .sort((a, b) => b.date.localeCompare(a.date)),
+      };
+    })(),
     usual,
     groups: sorted,
-    groupOrder: snap.groups.filter((g) => !g.income).map((g) => g.id),
+    // Colours go to the groups actually used (Actual's unused default and hidden groups would take slots otherwise).
+    groupOrder: snap.groups.filter((g) => !g.income && !g.hidden && g.categories.some((c) => usedCats.has(c.id))).map((g) => g.id),
     transactions: transactions.sort((a, b) => b.date.localeCompare(a.date) || b.amount - a.amount),
     accounts: snap.accounts
       .map(({ name, balance, offBudget }) => ({ name, balance, offBudget }))

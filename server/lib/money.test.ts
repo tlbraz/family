@@ -77,6 +77,38 @@ describe('money summary', () => {
   });
 });
 
+describe('colours and money in', () => {
+  const today = new Date(2026, 8, 20);
+
+  it('gives colours only to groups that are used, not empty or hidden ones', () => {
+    const base = snap([t('2026-09-05', -5000, 'super'), t('2026-08-05', -1000, 'spare')]);
+    base.groups.splice(1, 0,
+      { id: 'gdefault', name: 'Usual Expenses', income: false, categories: [{ id: 'food', name: 'Food' }] },
+      { id: 'ghidden', name: 'Old', income: false, hidden: true, categories: [{ id: 'spare', name: 'Spare' }] });
+    expect(summarise(base, 'family', ['family'], '2026-09', today).groupOrder).toEqual(['gsuper']);
+  });
+
+  it('sums what came in by who paid, with uncategorised money in apart', () => {
+    const s = summarise(
+      snap([
+        t('2026-09-01', 310000, 'salary', 'SALARIO TIAGO'),
+        t('2026-09-01', 210000, 'salary', 'VENCIMENTO CATARINA'),
+        t('2026-09-15', 2500, null, 'MB WAY ANA'),
+        t('2026-08-01', 310000, 'salary', 'SALARIO TIAGO'), // another month
+        t('2026-09-06', 1000, 'super'), // a refund is less spending, not income
+      ]),
+      'family', ['family'], '2026-09', today,
+    );
+    expect(s.income.total).toBe(522500);
+    expect(s.income.sources).toEqual([
+      { name: 'SALARIO TIAGO', amount: 310000 },
+      { name: 'VENCIMENTO CATARINA', amount: 210000 },
+      { name: 'Not categorised', amount: 2500 },
+    ]);
+    expect(s.income.transactions).toHaveLength(3);
+  });
+});
+
 describe('who sees which budget', () => {
   it('keeps the company budget to its viewers', () => {
     process.env.ACTUAL_COMPANY_VIEWERS = 'Tiago';
