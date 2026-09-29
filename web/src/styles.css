@@ -486,3 +486,13 @@ div.review-row { cursor: default; }
 .tx-note { width: 100%; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--card); font: inherit; color: var(--ink); }
 .money-list .tx-desc { font-size: 0.85rem; color: var(--ink); opacity: 0.8; font-style: italic; }
 .money-list .cat-picker li { flex-direction: row; justify-content: flex-start; align-items: center; border-top: 0; padding: 6px 4px; }
+.holding { display: flex; flex-direction: column; gap: 8px; padding: 12px; margin: 12px 0; border-radius: 14px; background: var(--soft); }
+.holding input { min-width: 0; padding: 9px 11px; border-radius: 10px; border: 1px solid var(--line); background: var(--card); font: inherit; color: var(--ink); }
+.holding-head { display: flex; gap: 8px; align-items: center; }
+.holding-head input { flex: 1; font-weight: 800; }
+.holding-row { display: grid; grid-template-columns: 1fr 110px 36px; gap: 8px; align-items: center; }
+.holding-row .chip { justify-self: start; }
+.holding-row:last-of-type input { grid-column: 2 / 4; }
+.holding p { margin: 0; }
+.good-note { color: var(--ok); font-weight: 700; }
+.holding-save { margin-top: 12px; }

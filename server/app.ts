@@ -6,6 +6,7 @@ import { AiError, draftEvent, aiEnabled, type ImageInput } from './lib/ai';
 import { type AuthEnv, loadMember, requireParent } from './lib/auth';
 import { todayDigest, tomorrowDigest, weekDigest } from './lib/digest';
 import { googleEnabled, googleStatus, saveGoogleKey, syncRound } from './lib/google';
+import { cleanHoldings, lastValuations, loadHoldings, revalueNow, saveHoldings } from './lib/valuations';
 import { budgetsFor, editTransaction, moneyEnabled, moneySnapshot, refreshMoney, ReviewError, reviewTransaction, summarise } from './lib/money';
 import { addTelegramChat, removeTelegramChat, sendTelegram, telegramStatus } from './lib/telegram';
 import { authRoutes } from './routes/auth';
@@ -152,6 +153,25 @@ export function createApp(db: Db, hooks: AppHooks = noop) {
     } catch (e) {
       return c.json({ error: (e as Error).message }, e instanceof ReviewError ? 400 : 503);
     }
+  });
+  // What the investment accounts hold, for the daily values (edited on the Money tab).
+  api.get('/money/holdings', requireParent, async (c) => {
+    if (!moneyEnabled()) return c.json({ error: 'Actual Budget is not set up on the server' }, 404);
+    const snap = await moneySnapshot('family').catch(() => null);
+    const accounts = (snap?.accounts ?? []).filter((a) => a.offBudget).map((a) => a.name);
+    return c.json({ holdings: await loadHoldings(db), last: await lastValuations(db), accounts });
+  });
+  api.put('/money/holdings', requireParent, async (c) => {
+    if (!moneyEnabled()) return c.json({ error: 'Actual Budget is not set up on the server' }, 404);
+    let holdings;
+    try {
+      holdings = cleanHoldings(((await c.req.json().catch(() => ({}))) as { holdings?: unknown }).holdings);
+    } catch (e) {
+      return c.json({ error: (e as Error).message }, 400);
+    }
+    await saveHoldings(db, holdings);
+    await revalueNow(db).catch((e: Error) => console.error('valuation:', e.message));
+    return c.json({ holdings, last: await lastValuations(db), accounts: [] });
   });
   api.post('/money/refresh', requireParent, async (c) => {
     if (!moneyEnabled()) return c.json({ error: 'Actual Budget is not set up on the server' }, 404);

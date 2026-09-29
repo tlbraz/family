@@ -1,4 +1,4 @@
-import type { GroceryList, AppConfig, CalendarEvent, EventDraft, EventInput, Health, Member, MemberDocument, MemberInput, MoneyBudget, MoneySummary, Note, Occurrence, SearchResults, Task, TaskInput } from '../../shared/types';
+import type { GroceryList, AppConfig, CalendarEvent, EventDraft, EventInput, Health, Member, MemberDocument, MemberInput, MoneyBudget, MoneyHolding, MoneyHoldings, MoneySummary, Note, Occurrence, SearchResults, Task, TaskInput } from '../../shared/types';
 
 export interface GoogleStatus {
   connected: boolean;
@@ -84,6 +84,8 @@ export const api = {
   clearGroceries: () => request<GroceryList>('/groceries/clear', json('POST')),
 
   money: (budget: MoneyBudget, month: string | null) => request<MoneySummary>(`/money?budget=${budget}${month ? `&month=${month}` : ''}`),
+  holdings: () => request<MoneyHoldings>('/money/holdings'),
+  saveHoldings: (holdings: MoneyHolding[]) => request<MoneyHoldings>('/money/holdings', json('PUT', { holdings })),
   refreshMoney: () => request<{ ok: true }>('/money/refresh', json('POST')),
   editMoney: (budget: MoneyBudget, id: string, change: { category?: string; review?: boolean; note?: string }) => request<{ ok: true }>('/money/edit', json('POST', { budget, id, ...change })),
   reviewMoney: (budget: MoneyBudget, id: string, category?: string) => request<{ ok: true }>('/money/review', json('POST', { budget, id, category })),

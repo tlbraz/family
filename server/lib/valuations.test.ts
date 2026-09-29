@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ethValue, holdingValue, parseHoldings, priceOf, weiToEth } from './valuations';
+import { cleanHoldings, ethValue, holdingValue, parseHoldings, priceOf, weiToEth } from './valuations';
 
 describe('ethereum value', () => {
   it('turns wei into ETH', () => {
@@ -64,5 +64,22 @@ describe('holdings', () => {
     const v = await holdingValue(h!, get);
     expect(v.cents).toBe(Math.round((27.2941 * 11.5 + 414.4142 * 14.25 + 10) * 100));
     expect(v.note).toBe('27.2941 × €11.5 + 414.4142 × €14.25 + cash €10');
+  });
+});
+
+
+describe('holdings from the page', () => {
+  it('tidies what the page sends', () => {
+    expect(cleanHoldings([{ account: ' DEGIRO ', items: [{ id: 'iwda.as', units: '64' as unknown as number }, { id: 'MSF.DE', units: 2 }], cash: 67.77 }])).toEqual([
+      { account: 'DEGIRO', items: [{ id: 'IWDA.AS', units: 64 }, { id: 'MSF.DE', units: 2 }], cash: 67.77 },
+    ]);
+    expect(cleanHoldings([{ account: 'PPR', items: [{ id: 'PTOPZDHM0000', units: '27,2941' as unknown as number }] }])[0]!.items[0]!.units).toBe(27.2941);
+  });
+
+  it('refuses what it could not use', () => {
+    expect(() => cleanHoldings('x')).toThrow('list of accounts');
+    expect(() => cleanHoldings([{ account: '', items: [] }])).toThrow('name as in Actual');
+    expect(() => cleanHoldings([{ account: 'X', items: [{ id: 'not a symbol!', units: 1 }] }])).toThrow("isn't an ISIN or a symbol");
+    expect(() => cleanHoldings([{ account: 'X', items: [{ id: 'VWCE.DE', units: 'lots' as unknown as number }] }])).toThrow('must be a number');
   });
 });

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { MoneyBudget, MoneyGroup, MoneySummary, MoneyTransaction } from '../../../shared/types';
+import type { MoneyBudget, MoneyGroup, MoneyHolding, MoneyHoldings, MoneySummary, MoneyTransaction } from '../../../shared/types';
 import { api } from '../api';
 import { Icon } from './Icon';
 import { Sheet } from './Sheet';
@@ -40,6 +40,7 @@ export function MoneyView({ meName }: { meName: string }) {
   const [open, setOpen] = useState<MoneyGroup | null>(null);
   const [reviewing, setReviewing] = useState(false);
   const [source, setSource] = useState<string | null>(null); // an income source, to list its transactions
+  const [holdingsOpen, setHoldingsOpen] = useState(false);
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(() => {
@@ -126,7 +127,7 @@ export function MoneyView({ meName }: { meName: string }) {
             <GroupsCard data={data} onOpen={setOpen} />
             <IncomeCard data={data} onOpen={setSource} />
           </div>
-          <SavingsCard data={data} />
+          <SavingsCard data={data} onHoldings={budget === 'family' ? () => setHoldingsOpen(true) : undefined} />
           <p className="money-synced">
             {data.bankSyncedAt ? `Banks synced ${when(data.bankSyncedAt)}` : 'Banks not synced yet'} · read from Actual {ago(data.fetchedAt)}
           </p>
@@ -145,6 +146,7 @@ export function MoneyView({ meName }: { meName: string }) {
           <TxList tx={data.income.transactions.filter((t) => sourceOf(t) === source)} showCategory={false} edit={{ data, budget, onChanged: load }} />
         </Sheet>
       )}
+      {holdingsOpen && <HoldingsSheet onClose={() => setHoldingsOpen(false)} onSaved={load} />}
       {reviewing && data && <ReviewSheet data={data} budget={budget} onChanged={load} onClose={() => setReviewing(false)} />}
     </div>
   );
@@ -556,7 +558,7 @@ function BalanceCard({ data, busy, onRefresh }: { data: MoneySummary; busy: bool
 }
 
 /** Savings and investments (off-budget accounts), with debts like the mortgage kept apart. */
-function SavingsCard({ data }: { data: MoneySummary }) {
+function SavingsCard({ data, onHoldings }: { data: MoneySummary; onHoldings?: () => void }) {
   const list = saving(data).sort((a, b) => b.balance - a.balance);
   const owed = debts(data);
   if (!list.length && !owed.length) return null;
@@ -564,7 +566,10 @@ function SavingsCard({ data }: { data: MoneySummary }) {
   const max = Math.max(...list.map((a) => a.balance), 1);
   return (
     <section className="card money-card">
-      <h2>Savings &amp; investments</h2>
+      <div className="row">
+        <h2>Savings &amp; investments</h2>
+        {onHoldings && <button className="pill" onClick={onHoldings}>Update values</button>}
+      </div>
       {list.length > 0 && (
         <>
           <div className="income-num">{eur(total)}</div>
@@ -591,5 +596,96 @@ function SavingsCard({ data }: { data: MoneySummary }) {
         </div>
       )}
     </section>
+  );
+}
+
+/** What each investment account holds; the app values them daily (units × today's price) and writes that to Actual. */
+function HoldingsSheet({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
+  type Row = { id: string; units: string };
+  type Draft = { account: string; items: Row[]; cash: string };
+  const [draft, setDraft] = useState<Draft[] | null>(null);
+  const [info, setInfo] = useState<MoneyHoldings | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+
+  const fromHoldings = (h: MoneyHolding[]): Draft[] =>
+    h.map((a) => ({ account: a.account, items: a.items.map((i) => ({ id: i.id, units: String(i.units) })), cash: a.cash ? String(a.cash) : '' }));
+  useEffect(() => {
+    api.holdings().then((h) => { setInfo(h); setDraft(fromHoldings(h.holdings)); }).catch((e: Error) => setError(e.message));
+  }, []);
+
+  const set = (i: number, patch: Partial<Draft>) => setDraft((d) => d!.map((a, j) => (j === i ? { ...a, ...patch } : a)));
+  const setRow = (i: number, r: number, patch: Partial<Row>) => set(i, { items: draft![i]!.items.map((x, k) => (k === r ? { ...x, ...patch } : x)) });
+
+  async function save() {
+    setBusy(true);
+    setError(null);
+    setSaved(false);
+    try {
+      const holdings: MoneyHolding[] = draft!.map((a) => ({
+        account: a.account,
+        items: a.items.filter((x) => x.id.trim()).map((x) => ({ id: x.id, units: Number(x.units.replace(',', '.')) })),
+        cash: Number((a.cash || '0').replace(',', '.')),
+      }));
+      const res = await api.saveHoldings(holdings);
+      setInfo((i) => ({ ...res, accounts: i?.accounts ?? [] }));
+      setDraft(fromHoldings(res.holdings));
+      setSaved(true);
+      onSaved();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Sheet title="Holdings" onClose={onClose}>
+      <p className="muted small">
+        What each account holds. Every morning the app works out units × today's price and sets the account in Actual. Use an
+        ISIN (PPR, funds) or a Yahoo symbol in euros (MSF.DE, IWDA.AS, ETH-EUR). Update the units when you buy or sell.
+      </p>
+      {!draft && !error && <p className="muted">Loading…</p>}
+      <datalist id="money-accounts">{info?.accounts.map((a) => <option key={a} value={a} />)}</datalist>
+      {draft?.map((a, i) => (
+        <section key={i} className="holding">
+          <div className="holding-head">
+            <input value={a.account} onChange={(e) => set(i, { account: e.target.value })} list="money-accounts" placeholder="Account in Actual" aria-label="Account in Actual" />
+            <button type="button" className="round ghost" aria-label={`Remove ${a.account || 'account'}`} onClick={() => setDraft(draft.filter((_, j) => j !== i))}>
+              <Icon name="trash" size={16} />
+            </button>
+          </div>
+          {a.items.map((x, r) => (
+            <div key={r} className="holding-row">
+              <input value={x.id} onChange={(e) => setRow(i, r, { id: e.target.value.toUpperCase() })} placeholder="ISIN or symbol" aria-label="ISIN or symbol" autoCapitalize="characters" />
+              <input value={x.units} onChange={(e) => setRow(i, r, { units: e.target.value })} placeholder="Units" aria-label="Units" inputMode="decimal" />
+              <button type="button" className="round ghost" aria-label="Remove line" onClick={() => set(i, { items: a.items.filter((_, k) => k !== r) })}>
+                <Icon name="close" size={14} />
+              </button>
+            </div>
+          ))}
+          <div className="holding-row">
+            <button type="button" className="chip" onClick={() => set(i, { items: [...a.items, { id: '', units: '' }] })}>
+              <Icon name="plus" size={14} /> Fund / ETF
+            </button>
+            <input value={a.cash} onChange={(e) => set(i, { cash: e.target.value })} placeholder="Cash €" aria-label="Cash in euros" inputMode="decimal" />
+          </div>
+          {info?.last[a.account] && (
+            <p className="muted small">Valued {shortDate(info.last[a.account]!.date)}: {info.last[a.account]!.note}</p>
+          )}
+        </section>
+      ))}
+      {draft && (
+        <button type="button" className="chip" onClick={() => setDraft([...draft, { account: '', items: [{ id: '', units: '' }], cash: '' }])}>
+          <Icon name="plus" size={14} /> Account
+        </button>
+      )}
+      {error && <p className="error small">{error}</p>}
+      {saved && !error && <p className="small good-note">Saved, and valued with today's prices ✓</p>}
+      <div className="review-actions holding-save">
+        <button className="primary" onClick={save} disabled={busy || !draft}>{busy ? 'Saving and valuing…' : 'Save'}</button>
+      </div>
+    </Sheet>
   );
 }

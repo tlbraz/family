@@ -203,3 +203,16 @@ export interface MoneySummary {
   review: MoneyTransaction[]; // tagged #review in Actual, any month: still to be checked
   pickable: { id: string; name: string; categories: { id: string; name: string }[] }[]; // for the category picker
 }
+
+/** What an off-budget investment account holds, valued daily (Money tab → Holdings). */
+export interface MoneyHolding {
+  account: string; // as named in Actual
+  items: { id: string; units: number }[]; // ISIN or Yahoo symbol
+  cash: number; // euros
+}
+
+export interface MoneyHoldings {
+  holdings: MoneyHolding[];
+  last: Record<string, { date: string; note: string }>; // when each account was last valued
+  accounts: string[]; // off-budget accounts in Actual, to pick names from
+}

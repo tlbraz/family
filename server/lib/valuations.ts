@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm';
+import { and, eq, like } from 'drizzle-orm';
 import type { Db } from '../db';
 import { settings } from '../schema';
 import { moneyEnabled, setAccountValue } from './money';
@@ -10,7 +10,8 @@ import { dateKey } from './time';
 //   ETH_ACCOUNT  the account in Actual (default "Ethereum");  ETH_RPC_URL  a public Ethereum node.
 //   Only ETH itself on Ethereum mainnet is counted (not tokens, and not other chains).
 //
-// Funds, ETFs and shares (PPR, Degiro…): HOLDINGS lists, per Actual account, what's held and how many units:
+// Funds, ETFs and shares (PPR, Degiro…): a list, per Actual account, of what's held and how many units. It's
+// edited on the Money tab (saved in settings); HOLDINGS in the environment is only a fallback, in this form:
 //   HOLDINGS="PPR Tiago (Optimize)=PTOPZDHM0000:27.2941,PTOPZAHM0003:414.4142; DEGIRO=VWCE.DE:120,cash:250"
 //   Each item is an ISIN or a Yahoo Finance symbol with its units; "cash:250" adds a fixed amount in euros.
 //   Prices come from Yahoo Finance (ISINs are looked up to a symbol first) and must be in euros.
@@ -103,6 +104,64 @@ export async function holdingValue(h: Holding, get: Fetch = fetch) {
   return { cents: Math.round(euros * 100), note: parts.join(' + ') };
 }
 
+// ---- The list, kept in the app (edited on the Money tab) -----------------------------------------
+
+const HOLDINGS_KEY = 'money:holdings';
+// What we started with (September 2026); the Money tab's Holdings editor replaces it.
+const STARTING_HOLDINGS =
+  'PPR Tiago (Optimize)=PTOPZDHM0000:27.2941,PTOPZAHM0003:414.4142; ' +
+  'PPR Catarina (Optimize)=PTOPZDHM0000:82.7781,PTOPZAHM0003:154.2191; ' +
+  'DEGIRO=MSF.DE:2,NVD.DE:20,IWDA.AS:64,VWCE.DE:2,cash:67.77; ' +
+  'Ethereum=ETH-EUR:3.42367';
+
+/** The saved list, else HOLDINGS from the environment, else what we started with. */
+export async function loadHoldings(db: Db): Promise<Holding[]> {
+  const [row] = await db.select().from(settings).where(eq(settings.key, HOLDINGS_KEY));
+  if (row) return JSON.parse(row.value) as Holding[];
+  return parseHoldings(process.env.HOLDINGS || STARTING_HOLDINGS);
+}
+
+/** Checks a list sent from the page; throws a readable message. */
+export function cleanHoldings(input: unknown): Holding[] {
+  if (!Array.isArray(input) || input.length > 20) throw new Error('Send a list of accounts');
+  return input.map((h: Partial<Holding>) => {
+    const account = String(h?.account ?? '').trim().slice(0, 60);
+    if (!account) throw new Error('Every account needs its name as in Actual');
+    const cash = Number(h.cash ?? 0);
+    if (!Number.isFinite(cash) || cash < 0) throw new Error(`${account}: cash must be a number`);
+    const items = (Array.isArray(h.items) ? h.items : []).slice(0, 30).map((i) => {
+      const id = String(i?.id ?? '').trim().toUpperCase();
+      const units = Number(String(i?.units ?? '').replace(',', '.'));
+      if (!/^[A-Z0-9.^=-]{1,20}$/.test(id)) throw new Error(`${account}: "${id}" isn't an ISIN or a symbol`);
+      if (!Number.isFinite(units) || units < 0) throw new Error(`${account}: units for ${id} must be a number`);
+      return { id, units };
+    });
+    return { account, items, cash };
+  });
+}
+
+export async function saveHoldings(db: Db, holdings: Holding[]) {
+  const value = JSON.stringify(holdings);
+  await db.insert(settings).values({ key: HOLDINGS_KEY, value }).onConflictDoUpdate({ target: settings.key, set: { value } });
+}
+
+/** When each account was last valued, and with what: account → { date, note }. */
+export async function lastValuations(db: Db) {
+  const rows = await db.select().from(settings).where(like(settings.key, 'valuation:holding:%'));
+  const last: Record<string, { date: string; note: string }> = {};
+  for (const r of rows) {
+    const m = r.key.match(/^valuation:holding:(.+):(\d{4}-\d{2}-\d{2})$/);
+    if (m && (!last[m[1]!] || last[m[1]!]!.date < m[2]!)) last[m[1]!] = { date: m[2]!, note: r.value };
+  }
+  return last;
+}
+
+/** After the list changes: value everything again now, not tomorrow. */
+export async function revalueNow(db: Db, now = new Date(), get: Fetch = fetch) {
+  await db.delete(settings).where(and(like(settings.key, 'valuation:holding:%'), like(settings.key, `%:${dateKey(now)}`)));
+  await runValuations(db, now, get, { force: true });
+}
+
 // ---- Once a day ----------------------------------------------------------------------------------
 
 async function daily(db: Db, now: Date, name: string, work: () => Promise<string>) {
@@ -114,8 +173,8 @@ async function daily(db: Db, now: Date, name: string, work: () => Promise<string
 }
 
 /** From 08:00, once a day per account. A failure is logged and tried again on the next round (20 minutes). */
-export async function runValuations(db: Db, now = new Date(), get: Fetch = fetch) {
-  if (!moneyEnabled() || now.getHours() < 8) return;
+export async function runValuations(db: Db, now = new Date(), get: Fetch = fetch, { force = false } = {}) {
+  if (!moneyEnabled() || (!force && now.getHours() < 8)) return;
   const address = process.env.ETH_ADDRESS;
   if (address) {
     await daily(db, now, 'eth', async () => {
@@ -125,7 +184,7 @@ export async function runValuations(db: Db, now = new Date(), get: Fetch = fetch
       return note;
     }).catch((e: Error) => console.error('valuation (Ethereum):', e.message));
   }
-  for (const h of parseHoldings()) {
+  for (const h of await loadHoldings(db)) {
     await daily(db, now, `holding:${h.account}`, async () => {
       const { cents, note } = await holdingValue(h, get);
       await setAccountValue('family', h.account, cents, note);

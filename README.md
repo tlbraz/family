@@ -39,10 +39,10 @@ Install it on a phone with *Share → Add to Home Screen*.
 - **Ethereum at today's value** (`ETH_ADDRESS`, the public address only; `ETH_ACCOUNT`, default "Ethereum"): once a
   day the ETH balance × the euro price (CoinGecko) is written into that off-budget account in Actual as a
   "Market value" adjustment.
-- **Funds, ETFs and shares at today's value** (`HOLDINGS`, e.g.
-  `PPR Tiago (Optimize)=PTOPZDHM0000:27.2941,PTOPZAHM0003:414.4142; DEGIRO=VWCE.DE:120,cash:250`): per Actual account,
-  ISINs or Yahoo symbols with their units; once a day units × the euro price from Yahoo Finance goes into that account.
-  Update the units when you buy or sell.
+- **Funds, ETFs and shares at today's value** (Money tab → Savings → *Update values*): per Actual account, ISINs or
+  Yahoo symbols in euros with their units, plus cash. From 08:00 each day, and right after saving, units × the price
+  from Yahoo Finance is written into that account in Actual. Update the units when you buy or sell. (`HOLDINGS` in the
+  environment, e.g. `DEGIRO=VWCE.DE:120,cash:250; …`, is only used until the list is saved from the app.)
 - **Tap someone** for their profile. Parents also see their documents (Cartão de Cidadão, NIF, NISS, utente, passport,
   driving licence…) with copy buttons, expiry warnings and a link to the scan in Paperless. Served only to signed-in parents.
 - **Telegram** (`TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`): 07:30 "today" message, 20:00 "tomorrow" message with

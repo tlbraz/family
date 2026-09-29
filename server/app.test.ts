@@ -105,6 +105,12 @@ describe('money', () => {
     expect(res.status).toBe(401);
   });
 
+  it('only lets signed-in parents see or change the holdings', async () => {
+    expect((await up().request('/api/money/holdings')).status).toBe(401);
+    const res = await up().request('/api/money/holdings', { method: 'PUT', body: JSON.stringify({ holdings: [] }), headers: { 'content-type': 'application/json' } });
+    expect(res.status).toBe(401);
+  });
+
   it('only lets signed-in parents edit transactions', async () => {
     const res = await up().request('/api/money/edit', { method: 'POST', body: JSON.stringify({ id: 'x', review: true }), headers: { 'content-type': 'application/json' } });
     expect(res.status).toBe(401);
