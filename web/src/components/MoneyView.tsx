@@ -79,16 +79,6 @@ export function MoneyView({ meName }: { meName: string }) {
           <span className="eyebrow">{company ? `Only ${meName} sees this` : 'Only parents see this'}</span>
           <h1>Money</h1>
         </div>
-        {data && (
-          <div className="month-switch">
-            <button className="round ghost" aria-label="Previous month" disabled={at <= 0} onClick={() => go(-1)}>
-              <Icon name="left" />
-            </button>
-            <button className="round ghost" aria-label="Next month" disabled={at >= data.months.length - 1} onClick={() => go(1)}>
-              <Icon name="right" />
-            </button>
-          </div>
-        )}
       </header>
 
       {data && data.budgets.length > 1 && (
@@ -110,12 +100,23 @@ export function MoneyView({ meName }: { meName: string }) {
       {!data && !error && <p className="muted">Reading Actual…</p>}
 
       {data && (
-        <div key={data.month} className={`money-cards slide ${slide}`} onAnimationEnd={() => setSlide('')}>
-          <SpentCard data={data} />
-          <ReviewCard review={data.review} onOpen={() => setReviewing(true)} />
-          <GroupsCard data={data} onOpen={setOpen} />
-          <AccountsCard data={data} busy={busy} onRefresh={refresh} />
-        </div>
+        <>
+          <BalanceCard data={data} busy={busy} onRefresh={refresh} />
+          <div className="month-bar">
+            <button className="round ghost" aria-label="Previous month" disabled={at <= 0} onClick={() => go(-1)}>
+              <Icon name="left" />
+            </button>
+            <span>{monthName(data.month)}</span>
+            <button className="round ghost" aria-label="Next month" disabled={at >= data.months.length - 1} onClick={() => go(1)}>
+              <Icon name="right" />
+            </button>
+          </div>
+          <div key={data.month} className={`money-cards slide ${slide}`} onAnimationEnd={() => setSlide('')}>
+            <SpentCard data={data} />
+            <ReviewCard review={data.review} onOpen={() => setReviewing(true)} />
+            <GroupsCard data={data} onOpen={setOpen} />
+          </div>
+        </>
       )}
       {open && data && <GroupSheet group={open} data={data} onClose={() => setOpen(null)} />}
       {reviewing && data && (
@@ -135,7 +136,7 @@ function SpentCard({ data }: { data: MoneySummary }) {
   return (
     <section className="card money-card">
       <div className="row">
-        <span className="eyebrow">{monthName(data.month)} · {today ? 'spent so far' : 'spent'}</span>
+        <span className="eyebrow">{today ? 'Spent so far' : 'Spent'}</span>
         {today && <span className="pill">day {today} of {data.daysInMonth}</span>}
       </div>
       <div className="hero-num">{eur(spent)}</div>
@@ -210,23 +211,33 @@ function GroupsCard({ data, onOpen }: { data: MoneySummary; onOpen: (g: MoneyGro
 }
 
 function GroupSheet({ group, data, onClose }: { group: MoneyGroup; data: MoneySummary; onClose: () => void }) {
+  const [only, setOnly] = useState<string | null>(null); // a category name, to see just its transactions
   const colour = colourOf(group.id, data.groupOrder);
   const max = Math.max(...group.categories.map((c) => c.amount));
-  const tx = data.transactions.filter((t) => t.groupId === group.id);
+  const tx = data.transactions.filter((t) => t.groupId === group.id && (!only || t.category === only));
+  const several = group.categories.length > 1;
   return (
     <Sheet title={`${group.name} · ${eur(group.amount)}`} onClose={onClose}>
-      {group.categories.length > 1 && (
+      {several && (
         <ul className="legend sub">
           {group.categories.map((c) => (
             <li key={c.id}>
-              <span className="name">{c.name}<span className="pct">{Math.round((c.amount / group.amount) * 100)}%</span></span>
-              <span className="amt">{eur(c.amount)}</span>
-              <span className="track"><span style={{ width: `${(c.amount / max) * 100}%`, background: colour }} /></span>
+              <button className={only && only !== c.name ? 'dim' : ''} aria-pressed={only === c.name} onClick={() => setOnly(only === c.name ? null : c.name)}>
+                <span className="name">{c.name}<span className="pct">{Math.round((c.amount / group.amount) * 100)}%</span></span>
+                <span className="amt">{eur(c.amount)}</span>
+                <span className="track"><span style={{ width: `${(c.amount / max) * 100}%`, background: colour }} /></span>
+              </button>
             </li>
           ))}
         </ul>
       )}
-      <TxList tx={tx} showCategory={group.categories.length > 1} />
+      {several && (
+        <div className="row money-tx-head">
+          <h3>{only ?? 'All transactions'}<span className="muted"> · {tx.length}</span></h3>
+          {only ? <button className="chip" onClick={() => setOnly(null)}>Show all</button> : <span className="muted small">Tap a category to filter</span>}
+        </div>
+      )}
+      <TxList tx={tx} showCategory={several && !only} />
       {group.id === 'uncategorised' && data.link && (
         <p className="muted small money-note">Give these a category in <a href={data.link} target="_blank" rel="noreferrer">Actual</a> and they'll move to the right place.</p>
       )}
@@ -271,37 +282,50 @@ function ReviewCard({ review, onOpen }: { review: MoneyTransaction[]; onOpen: ()
   );
 }
 
-function AccountsCard({ data, busy, onRefresh }: { data: MoneySummary; busy: boolean; onRefresh: () => void }) {
+/** How much we have now: the biggest number on the page. Doesn't change with the month being looked at. */
+function BalanceCard({ data, busy, onRefresh }: { data: MoneySummary; busy: boolean; onRefresh: () => void }) {
+  const [showAll, setShowAll] = useState(false);
   const onBudget = data.accounts.filter((a) => !a.offBudget);
   const offBudget = data.accounts.filter((a) => a.offBudget);
+  const total = onBudget.reduce((s, a) => s + a.balance, 0);
+  const saved = offBudget.reduce((s, a) => s + a.balance, 0);
   return (
-    <section className="card money-card">
+    <section className="card money-card balance">
       <div className="row">
-        <h2>Accounts</h2>
+        <span className="eyebrow">Available now</span>
         <button className="pill" onClick={onRefresh} disabled={busy} title="Read Actual again">
           {busy ? 'reading…' : `updated ${ago(data.fetchedAt)}`}
         </button>
       </div>
-      <ul className="money-list">
-        {onBudget.map((a) => (
-          <li key={a.name}><span>{a.name}</span><span className={`amt ${a.balance < 0 ? 'neg' : ''}`}>{eur(a.balance)}</span></li>
-        ))}
-        {onBudget.length > 1 && (
-          <li><b>Total</b><span className="amt">{eur(onBudget.reduce((s, a) => s + a.balance, 0))}</span></li>
-        )}
-      </ul>
+      <div className={`balance-num ${total < 0 ? 'neg' : ''}`}>{eur(total)}</div>
       {offBudget.length > 0 && (
+        <p className="balance-saved">+ {eur(saved)} in savings &amp; investments</p>
+      )}
+      <button className="balance-toggle" aria-expanded={showAll} onClick={() => setShowAll(!showAll)}>
+        {showAll ? 'Hide accounts' : `${data.accounts.length} account${data.accounts.length === 1 ? '' : 's'}`}
+        <Icon name={showAll ? 'up' : 'down'} size={16} />
+      </button>
+      {showAll && (
         <>
-          <p className="eyebrow money-sub">Savings &amp; investments</p>
           <ul className="money-list">
-            {offBudget.map((a) => (
-              <li key={a.name}><span>{a.name}</span><span className="amt">{eur(a.balance)}</span></li>
+            {onBudget.map((a) => (
+              <li key={a.name}><span>{a.name}</span><span className={`amt ${a.balance < 0 ? 'neg' : ''}`}>{eur(a.balance)}</span></li>
             ))}
           </ul>
+          {offBudget.length > 0 && (
+            <>
+              <p className="eyebrow money-sub">Savings &amp; investments</p>
+              <ul className="money-list">
+                {offBudget.map((a) => (
+                  <li key={a.name}><span>{a.name}</span><span className="amt">{eur(a.balance)}</span></li>
+                ))}
+              </ul>
+            </>
+          )}
+          {data.link && (
+            <p className="muted small">Categorise and fix things in <a href={data.link} target="_blank" rel="noreferrer">Actual</a>.</p>
+          )}
         </>
-      )}
-      {data.link && (
-        <p className="muted small">Categorise and fix things in <a href={data.link} target="_blank" rel="noreferrer">Actual</a>.</p>
       )}
     </section>
   );
