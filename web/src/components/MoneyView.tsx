@@ -119,6 +119,7 @@ export function MoneyView({ meName }: { meName: string }) {
             <GroupsCard data={data} onOpen={setOpen} />
             <IncomeCard data={data} onOpen={setSource} />
           </div>
+          <SavingsCard data={data} />
         </>
       )}
       {open && data && <GroupSheet group={open} data={data} onClose={() => setOpen(null)} />}
@@ -397,12 +398,16 @@ function IncomeCard({ data, onOpen }: { data: MoneySummary; onOpen: (source: str
   );
 }
 
+// Off-budget accounts: positive ones are savings and investments; negative ones are debts (the mortgage), which
+// stay in their own lane and are never added to or taken from any total.
+const saving = (d: MoneySummary) => d.accounts.filter((a) => a.offBudget && a.balance >= 0);
+const debts = (d: MoneySummary) => d.accounts.filter((a) => a.offBudget && a.balance < 0);
+
 function BalanceCard({ data, busy, onRefresh }: { data: MoneySummary; busy: boolean; onRefresh: () => void }) {
   const [showAll, setShowAll] = useState(false);
   const onBudget = data.accounts.filter((a) => !a.offBudget);
-  const offBudget = data.accounts.filter((a) => a.offBudget);
   const total = onBudget.reduce((s, a) => s + a.balance, 0);
-  const saved = offBudget.reduce((s, a) => s + a.balance, 0);
+  const saved = saving(data).reduce((s, a) => s + a.balance, 0);
   return (
     <section className="card money-card balance">
       <div className="row">
@@ -412,11 +417,9 @@ function BalanceCard({ data, busy, onRefresh }: { data: MoneySummary; busy: bool
         </button>
       </div>
       <div className={`balance-num ${total < 0 ? 'neg' : ''}`}>{eur(total)}</div>
-      {offBudget.length > 0 && (
-        <p className="balance-saved">+ {eur(saved)} in savings &amp; investments</p>
-      )}
+      {saved > 0 && <p className="balance-saved">+ {eur(saved)} in savings &amp; investments</p>}
       <button className="balance-toggle" aria-expanded={showAll} onClick={() => setShowAll(!showAll)}>
-        {showAll ? 'Hide accounts' : `${data.accounts.length} account${data.accounts.length === 1 ? '' : 's'}`}
+        {showAll ? 'Hide accounts' : `${onBudget.length} account${onBudget.length === 1 ? '' : 's'}`}
         <Icon name={showAll ? 'up' : 'down'} size={16} />
       </button>
       {showAll && (
@@ -426,20 +429,49 @@ function BalanceCard({ data, busy, onRefresh }: { data: MoneySummary; busy: bool
               <li key={a.name}><span>{a.name}</span><span className={`amt ${a.balance < 0 ? 'neg' : ''}`}>{eur(a.balance)}</span></li>
             ))}
           </ul>
-          {offBudget.length > 0 && (
-            <>
-              <p className="eyebrow money-sub">Savings &amp; investments</p>
-              <ul className="money-list">
-                {offBudget.map((a) => (
-                  <li key={a.name}><span>{a.name}</span><span className="amt">{eur(a.balance)}</span></li>
-                ))}
-              </ul>
-            </>
-          )}
           {data.link && (
             <p className="muted small">Categorise and fix things in <a href={data.link} target="_blank" rel="noreferrer">Actual</a>.</p>
           )}
         </>
+      )}
+    </section>
+  );
+}
+
+/** Savings and investments (off-budget accounts), with debts like the mortgage kept apart. */
+function SavingsCard({ data }: { data: MoneySummary }) {
+  const list = saving(data).sort((a, b) => b.balance - a.balance);
+  const owed = debts(data);
+  if (!list.length && !owed.length) return null;
+  const total = list.reduce((s, a) => s + a.balance, 0);
+  const max = Math.max(...list.map((a) => a.balance), 1);
+  return (
+    <section className="card money-card">
+      <h2>Savings &amp; investments</h2>
+      {list.length > 0 && (
+        <>
+          <div className="income-num">{eur(total)}</div>
+          <ul className="legend sub savings">
+            {list.map((a) => (
+              <li key={a.name}>
+                <span className="name">{a.name}<span className="pct">{Math.round((a.balance / total) * 100)}%</span></span>
+                <span className="amt">{eur(a.balance)}</span>
+                <span className="track"><span style={{ width: `${(a.balance / max) * 100}%` }} /></span>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+      {owed.length > 0 && (
+        <div className="debt-lane">
+          {owed.map((a) => (
+            <div key={a.name} className="row">
+              <span>{a.name}</span>
+              <span className="amt">{eur(-a.balance)} owed</span>
+            </div>
+          ))}
+          <p className="muted small">Kept apart: not counted in any total.</p>
+        </div>
       )}
     </section>
   );

@@ -464,3 +464,10 @@ button.link { border: 0; padding: 0; background: none; color: var(--accent, inhe
 .review-fix { display: flex; flex-direction: column; gap: 10px; margin-top: 10px; padding: 12px; border-radius: 14px; background: var(--soft); }
 .review-fix select { width: 100%; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--card); }
 .review-actions { display: flex; justify-content: flex-end; align-items: center; gap: 8px; }
+.legend.savings .track span { background: var(--m1); }
+.debt-lane { margin-top: 16px; padding: 12px 14px; border-radius: 14px; background: var(--soft); display: flex; flex-direction: column; gap: 6px; }
+.debt-lane .row { display: flex; justify-content: space-between; font-weight: 700; }
+.debt-lane .amt { font-variant-numeric: tabular-nums; }
+.debt-lane p { margin: 0; }
+.money > .card + .card, .money-cards + .card { margin-top: 12px; }
+.legend.savings { margin-top: 10px; }
