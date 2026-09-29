@@ -30,6 +30,7 @@ export interface Snapshot {
   tx: { id: string; accountId: string; fixable: boolean; review: boolean; note: string | null; date: string; amount: number; account: string; category: string | null; payee: string }[];
   dataFrom: string | null; // earliest real transaction, to know which months are complete
   bankSyncedAt?: string | null; // the latest bank sync of any linked account (ours, Actual's button or another tool)
+  bankLinks?: { name: string; lastSync: string | null; status: string | null }[]; // accounts linked to a bank
   review: { id: string; accountId: string; fixable: boolean; note?: string | null; date: string; amount: number; account: string; category: string | null; payee: string }[]; // tagged #review
 }
 
@@ -113,13 +114,21 @@ async function load(budget: MoneyBudget, bankSync: boolean): Promise<Snapshot> {
     hidden: !!g.hidden,
     categories: (g.categories ?? []).map((c) => ({ id: c.id, name: c.name })),
   }));
-  // Actual keeps when each bank-linked account last synced; getAccounts leaves it out, so ask for it.
-  const synced = await api
-    .aqlQuery(api.q('accounts').select(['last_sync']))
-    .then((r) => ((r as { data: { last_sync: string | null }[] }).data ?? []).map((a) => Number(a.last_sync)).filter((n) => n > 0))
-    .catch(() => [] as number[]);
-  const bankSyncedAt = synced.length ? new Date(Math.max(...synced)).toISOString() : null;
-  return { fetchedAt: new Date().toISOString(), accounts, groups, tx, dataFrom, review, bankSyncedAt };
+  // Actual keeps the bank link of each account (when it last synced, and whether that worked); getAccounts
+  // leaves it out, so ask for it.
+  type Link = { name: string; closed: boolean; last_sync: string | null; account_sync_source: string | null; bank_sync_status: string | null };
+  const links = await api
+    .aqlQuery(api.q('accounts').select(['name', 'closed', 'last_sync', 'account_sync_source', 'bank_sync_status']))
+    .then((r) => ((r as { data: Link[] }).data ?? []).filter((a) => a.account_sync_source && !a.closed))
+    .catch(() => [] as Link[]);
+  const bankLinks = links.map((a) => ({
+    name: a.name,
+    lastSync: Number(a.last_sync) > 0 ? new Date(Number(a.last_sync)).toISOString() : null,
+    status: a.bank_sync_status,
+  }));
+  const synced = bankLinks.map((a) => a.lastSync).filter((d): d is string => !!d).sort();
+  const bankSyncedAt = synced.at(-1) ?? null;
+  return { fetchedAt: new Date().toISOString(), accounts, groups, tx, dataFrom, review, bankSyncedAt, bankLinks };
 }
 
 /** Fetches every configured budget. Called on a timer and, the first time, by the page. */
@@ -172,6 +181,27 @@ export function editTransaction(budget: MoneyBudget, id: string, change: { categ
 /** Done reviewing: optionally a new category, and the #review tag comes out. */
 export const reviewTransaction = (budget: MoneyBudget, id: string, category?: string) => editTransaction(budget, id, { category, review: false });
 export class ReviewError extends Error {}
+
+/**
+ * Brings an (off-budget) account to a value worked out elsewhere, like crypto or a fund at today's price, by adding
+ * one balance adjustment. Small differences (under €1) are left alone. Returns the change, in cents.
+ */
+export function setAccountValue(budget: MoneyBudget, accountName: string, value: number, note: string) {
+  return serial(async () => {
+    const api = await actual();
+    await api.downloadBudget(SYNC_IDS[budget]!);
+    const account = (await api.getAccounts()).find((a) => !a.closed && a.name.toLowerCase() === accountName.toLowerCase());
+    if (!account) throw new Error(`No open account called "${accountName}" in Actual`);
+    const diff = value - (await api.getAccountBalance(account.id));
+    if (Math.abs(diff) < 100) return 0;
+    const today = new Date();
+    const date = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    await api.addTransactions(account.id, [{ date, amount: diff, payee_name: 'Market value', notes: note, cleared: true }]);
+    await api.sync();
+    snapshots.set(budget, await load(budget, false));
+    return diff;
+  });
+}
 
 export async function moneySnapshot(budget: MoneyBudget): Promise<Snapshot> {
   if (!snapshots.has(budget)) await refreshMoney();

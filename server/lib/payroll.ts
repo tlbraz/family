@@ -11,7 +11,7 @@ import { esc, sendTelegram } from './telegram';
 const SEEN_KEY = 'payroll:seen';
 const payeePattern = () => new RegExp(process.env.PAYROLL_PAYEE || 'EPI Operations', 'i');
 // Tiago = the first chat in TELEGRAM_CHAT_ID (the ones added on the Family page are the rest of the family).
-const tiagoChat = () => (process.env.TELEGRAM_CHAT_ID ?? '').split(',')[0]?.trim() || '';
+export const tiagoChat = () => (process.env.TELEGRAM_CHAT_ID ?? '').split(',')[0]?.trim() || '';
 
 /** Credits from the watched payer that aren't in `seen` yet, oldest first. */
 export function newPayrollCredits(tx: Snapshot['tx'], seen: string[], pattern = payeePattern()) {

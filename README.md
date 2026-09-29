@@ -33,6 +33,12 @@ Install it on a phone with *Share → Add to Home Screen*.
   Available balance first, then spending this month vs. usual, by category group (tap for categories and transactions),
   what came in, and transactions tagged `#review`: pick a category (or "Looks fine") and the tag comes out, in Actual. Reads Actual every 20 min and asks it to sync the banks at 07:00, 13:00 and 19:00
   (`ACTUAL_BANK_SYNC=off` to stop). Swipe to change month.
+- **Quiet-failure warnings** on Telegram: a document with a "valid until" date gets a message 90, 30 and 7 days ahead
+  and when it expires (family chats); a bank-linked account in Actual that hasn't synced for 36 h, or whose sync
+  failed, gets a daily message to Tiago (the bank link probably expired).
+- **Ethereum at today's value** (`ETH_ADDRESS`, the public address only; `ETH_ACCOUNT`, default "Ethereum"): once a
+  day the ETH balance × the euro price (CoinGecko) is written into that off-budget account in Actual as a
+  "Market value" adjustment.
 - **Tap someone** for their profile. Parents also see their documents (Cartão de Cidadão, NIF, NISS, utente, passport,
   driving licence…) with copy buttons, expiry warnings and a link to the scan in Paperless. Served only to signed-in parents.
 - **Telegram** (`TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`): 07:30 "today" message, 20:00 "tomorrow" message with

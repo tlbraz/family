@@ -7,6 +7,8 @@ import { deleteGoogleEvent, googleEnabled, loadGoogleKey, pushEvent, shareWithPa
 import { runMoney } from './lib/money';
 import { runPayrollAlert } from './lib/payroll';
 import { runReminders } from './lib/reminders';
+import { runBankAlerts, runDocumentAlerts } from './lib/alerts';
+import { runValuations } from './lib/valuations';
 import { bpFromTelegram } from './lib/bp';
 import { loadTelegramChats, pollTelegram } from './lib/telegram';
 import { seed } from './seed';
@@ -45,13 +47,21 @@ const server = serve({ fetch: app.fetch, port }, () =>
   console.log(`family listening on :${port} (google ${googleEnabled() ? 'on' : 'off'})`),
 );
 
+// After each read of Actual: the payment alert, stuck bank links, and today's value of crypto etc.
+const afterMoney = (read: Promise<unknown> | undefined) =>
+  read
+    ?.then(() => runPayrollAlert(db))
+    .then(() => runBankAlerts(db))
+    .then(() => runValuations(db).catch(logErr('valuations')))
+    .catch(logErr('actual'));
 const timers = [
   setInterval(() => void runDigests(db).catch(logErr('digest')), 60_000),
   setInterval(() => void syncRound(db), 2 * 60_000),
   setInterval(() => void runReminders(db).catch(logErr('reminders')), 60_000),
-  setInterval(() => void runMoney()?.then(() => runPayrollAlert(db)).catch(logErr('actual')), 20 * 60_000),
+  setInterval(() => void runDocumentAlerts(db).catch(logErr('document alerts')), 60_000),
+  setInterval(() => void afterMoney(runMoney()), 20 * 60_000),
 ];
-void runMoney()?.then(() => runPayrollAlert(db)).catch(logErr('actual'));
+void afterMoney(runMoney());
 void syncRound(db);
 // Messages people send the bot (for now: blood pressure readings).
 const inbox = process.env.TELEGRAM_BOT_TOKEN ? pollTelegram(db, (m) => bpFromTelegram(db, m)) : null;
