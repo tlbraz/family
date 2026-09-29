@@ -104,4 +104,9 @@ describe('money', () => {
     const res = await up().request('/api/money');
     expect(res.status).toBe(401);
   });
+
+  it('only lets signed-in parents review transactions', async () => {
+    const res = await up().request('/api/money/review', { method: 'POST', body: JSON.stringify({ id: 'x', category: 'y' }), headers: { 'content-type': 'application/json' } });
+    expect(res.status).toBe(401);
+  });
 });

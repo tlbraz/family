@@ -458,3 +458,9 @@ button.link { border: 0; padding: 0; background: none; color: var(--accent, inhe
 .income-kept.good { color: var(--ok); }
 .income-kept.bad { color: var(--danger); }
 .legend.income .track span { background: var(--ok); }
+.review-list li { flex-direction: column; align-items: stretch; gap: 0; }
+.review-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; width: 100%; padding: 0; background: none; border: 0; color: inherit; font: inherit; text-align: left; }
+.review-row > span:first-child { display: flex; flex-direction: column; min-width: 0; overflow-wrap: anywhere; }
+.review-fix { display: flex; flex-direction: column; gap: 10px; margin-top: 10px; padding: 12px; border-radius: 14px; background: var(--soft); }
+.review-fix select { width: 100%; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--card); }
+.review-actions { display: flex; justify-content: flex-end; align-items: center; gap: 8px; }

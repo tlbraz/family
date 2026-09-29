@@ -29,7 +29,7 @@ export interface Snapshot {
   /** Expense-side transactions of on-budget accounts: no transfers, no starting balances, splits flattened. */
   tx: { date: string; amount: number; account: string; category: string | null; payee: string }[];
   dataFrom: string | null; // earliest real transaction, to know which months are complete
-  review: { date: string; amount: number; account: string; category: string | null; payee: string }[]; // tagged #review
+  review: { id: string; accountId: string; fixable: boolean; date: string; amount: number; account: string; category: string | null; payee: string }[]; // tagged #review
 }
 
 type Api = typeof import('@actual-app/api');
@@ -86,7 +86,10 @@ async function load(budget: MoneyBudget, bankSync: boolean): Promise<Snapshot> {
     for (const t of await api.getTransactions(a.id, '1900-01-01', end)) {
       const parts = [t, ...(t.subtransactions ?? [])];
       const tagged = parts.find((p) => REVIEW_TAG.test(p.notes ?? ''));
-      if (tagged) review.push({ date: t.date, amount: tagged.amount, account: a.name, category: tagged.category ?? null, payee: (t.payee && payees.get(t.payee)) || t.imported_payee || '' });
+      if (tagged) {
+        const plain = !t.subtransactions?.length && !t.is_child && !t.transfer_id;
+        review.push({ id: tagged.id, accountId: a.id, fixable: plain, date: t.date, amount: tagged.amount, account: a.name, category: tagged.category ?? null, payee: (t.payee && payees.get(t.payee)) || t.imported_payee || '' });
+      }
     }
     if (a.offbudget) continue;
     for (const t of await api.getTransactions(a.id, start, end)) {
@@ -125,6 +128,34 @@ export function refreshMoney({ bankSync = false } = {}) {
     }
   });
 }
+
+export const withoutReviewTag = (notes: string | null | undefined) =>
+  (notes ?? '').replace(/(^|\s)#review\b/gi, ' ').replace(/\s+/g, ' ').trim() || null;
+
+/**
+ * Marks a #review transaction as reviewed in Actual: takes the tag out of its notes and, if given, sets its
+ * category. Then reads the budget again so the page shows the change.
+ */
+export function reviewTransaction(budget: MoneyBudget, id: string, category?: string) {
+  return serial(async () => {
+    const item = snapshots.get(budget)?.review.find((r) => r.id === id);
+    if (!item) throw new ReviewError('That transaction is no longer waiting for review');
+    if (category !== undefined) {
+      if (!item.fixable) throw new ReviewError('Change the category of splits and transfers in Actual');
+      const known = snapshots.get(budget)!.groups.some((g) => g.categories.some((c) => c.id === category));
+      if (!known) throw new ReviewError('Unknown category');
+    }
+    const api = await actual();
+    await api.downloadBudget(SYNC_IDS[budget]!);
+    const all = await api.getTransactions(item.accountId, '1900-01-01', '2999-12-31');
+    const current = all.flatMap((t) => [t, ...(t.subtransactions ?? [])]).find((t) => t.id === id);
+    if (!current) throw new ReviewError('That transaction is no longer in Actual');
+    await api.updateTransaction(id, { notes: withoutReviewTag(current.notes) ?? '', ...(category !== undefined ? { category } : {}) });
+    await api.sync();
+    snapshots.set(budget, await load(budget, false));
+  });
+}
+export class ReviewError extends Error {}
 
 export async function moneySnapshot(budget: MoneyBudget): Promise<Snapshot> {
   if (!snapshots.has(budget)) await refreshMoney();
@@ -247,8 +278,11 @@ export function summarise(snap: Snapshot, budget: MoneyBudget, budgets: MoneyBud
     review: snap.review
       .map((t) => {
         const c = t.category ? groupOf.get(t.category) : undefined;
-        return { date: t.date, payee: t.payee, account: t.account, groupId: c?.groupId ?? 'uncategorised', category: c?.name ?? 'Not categorised', amount: -t.amount };
+        return { id: t.id, categoryId: t.category, fixable: t.fixable, date: t.date, payee: t.payee, account: t.account, groupId: c?.groupId ?? 'uncategorised', category: c?.name ?? 'Not categorised', amount: -t.amount };
       })
       .sort((a, b) => b.date.localeCompare(a.date)),
+    // Spending groups first, then income, as in Actual.
+    pickable: [...snap.groups.filter((g) => !g.hidden && !g.income), ...snap.groups.filter((g) => !g.hidden && g.income)]
+      .map((g) => ({ id: g.id, name: g.name, categories: g.categories })),
   };
 }

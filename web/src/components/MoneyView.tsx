@@ -127,12 +127,7 @@ export function MoneyView({ meName }: { meName: string }) {
           <TxList tx={data.income.transactions.filter((t) => sourceOf(t) === source)} showCategory={false} />
         </Sheet>
       )}
-      {reviewing && data && (
-        <Sheet title={`To review · ${data.review.length}`} onClose={() => setReviewing(false)}>
-          <TxList tx={data.review} showCategory />
-          {data.link && <p className="muted small money-note">Check them in <a href={data.link} target="_blank" rel="noreferrer">Actual</a> and remove the #review tag from the notes.</p>}
-        </Sheet>
-      )}
+      {reviewing && data && <ReviewSheet data={data} budget={budget} onChanged={load} onClose={() => setReviewing(false)} />}
     </div>
   );
 }
@@ -267,6 +262,81 @@ function TxList({ tx, showCategory }: { tx: MoneyTransaction[]; showCategory: bo
         </li>
       ))}
     </ul>
+  );
+}
+
+/** Go through the #review transactions: pick a category (or keep it) and the tag comes out, in Actual. */
+function ReviewSheet({ data, budget, onChanged, onClose }: { data: MoneySummary; budget: MoneyBudget; onChanged: () => void; onClose: () => void }) {
+  const [openId, setOpenId] = useState<string | null>(null);
+  const [pick, setPick] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [done, setDone] = useState<string[]>([]); // reviewed here, hidden before the page reloads
+  const left = data.review.filter((t) => !done.includes(t.id!));
+
+  function toggle(t: MoneyTransaction) {
+    setError(null);
+    setOpenId(openId === t.id ? null : t.id!);
+    setPick(t.categoryId ?? '');
+  }
+  async function finish(t: MoneyTransaction, category?: string) {
+    setBusy(true);
+    setError(null);
+    try {
+      await api.reviewMoney(budget, t.id!, category);
+      setDone((d) => [...d, t.id!]);
+      setOpenId(null);
+      onChanged();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Sheet title={left.length ? `To review · ${left.length}` : 'All reviewed'} onClose={onClose}>
+      {!left.length && <p className="muted">Nothing left to review ✓</p>}
+      <ul className="money-list review-list">
+        {left.map((t) => (
+          <li key={t.id} className={openId === t.id ? 'open' : ''}>
+            <button className="review-row" aria-expanded={openId === t.id} onClick={() => toggle(t)}>
+              <span>
+                {t.payee || '—'}
+                <span className="sub">{shortDate(t.date)} · {t.account} · {t.category}</span>
+              </span>
+              <span className={`amt ${t.amount < 0 ? 'in' : ''}`}>{t.amount < 0 ? `+${eur(-t.amount, true)}` : eur(t.amount, true)}</span>
+            </button>
+            {openId === t.id && (
+              <div className="review-fix">
+                {t.fixable ? (
+                  <select value={pick} onChange={(e) => setPick(e.target.value)} aria-label="Category">
+                    <option value="" disabled>Choose a category…</option>
+                    {data.pickable.map((g) => (
+                      <optgroup key={g.id} label={g.name}>
+                        {g.categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                      </optgroup>
+                    ))}
+                  </select>
+                ) : (
+                  <p className="muted small">A split or a transfer: change its category in Actual.</p>
+                )}
+                {error && <p className="error small">{error}</p>}
+                <div className="review-actions">
+                  <button className="chip" disabled={busy} onClick={() => finish(t)}>Looks fine</button>
+                  {t.fixable && (
+                    <button className="primary" disabled={busy || !pick || pick === t.categoryId} onClick={() => finish(t, pick)}>
+                      {busy ? 'Saving…' : 'Save category'}
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+          </li>
+        ))}
+      </ul>
+      <p className="muted small money-note">Saving sets the category in Actual and takes #review out of the note. "Looks fine" only takes the tag out.</p>
+    </Sheet>
   );
 }
 

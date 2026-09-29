@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { budgetsFor, summarise, type Snapshot } from './money';
+import { budgetsFor, summarise, withoutReviewTag, type Snapshot } from './money';
 
 const snap = (tx: Snapshot['tx'], extra: Partial<Snapshot> = {}): Snapshot => ({
   fetchedAt: '2026-09-29T10:00:00Z',
@@ -71,9 +71,19 @@ describe('money summary', () => {
   });
 
   it('lists the #review transactions and the accounts, spending ones first', () => {
-    const s = summarise(snap([], { review: [t('2026-08-02', -6490, null, 'LEROY'), t('2026-09-03', -1200, 'luz', 'EDP')] }), 'family', ['family'], '2026-09', today);
+    const r = (tx: ReturnType<typeof t>, id: string, fixable = true) => ({ ...tx, id, accountId: 'a1', fixable });
+    const s = summarise(snap([], { review: [r(t('2026-08-02', -6490, null, 'LEROY'), 'x1'), r(t('2026-09-03', -1200, 'luz', 'EDP'), 'x2', false)] }), 'family', ['family'], '2026-09', today);
     expect(s.review.map((r) => [r.payee, r.category, r.amount])).toEqual([['EDP', 'Luz', 1200], ['LEROY', 'Not categorised', 6490]]);
+    expect(s.review.map((x) => [x.id, x.categoryId, x.fixable])).toEqual([['x2', 'luz', false], ['x1', null, true]]);
     expect(s.accounts.map((a) => a.name)).toEqual(['CGD', 'Cartão', 'PPR']);
+    expect(s.pickable.map((g) => g.name)).toEqual(['Casa', 'Supermercado', 'Income']);
+  });
+
+  it('takes only the #review tag out of the notes', () => {
+    expect(withoutReviewTag('check this #review')).toBe('check this');
+    expect(withoutReviewTag('#review')).toBeNull();
+    expect(withoutReviewTag('#Review ask Ana #reviewed')).toBe('ask Ana #reviewed');
+    expect(withoutReviewTag(null)).toBeNull();
   });
 });
 

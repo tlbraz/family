@@ -175,6 +175,10 @@ export interface MoneyTransaction {
   groupId: string;
   category: string;
   amount: number;
+  // Only on the #review list: what's needed to fix it from the app.
+  id?: string;
+  categoryId?: string | null;
+  fixable?: boolean; // false for splits and transfers: their category is changed in Actual
 }
 
 export interface MoneySummary {
@@ -194,4 +198,5 @@ export interface MoneySummary {
   fetchedAt: string;
   link: string | null; // where to open Actual
   review: MoneyTransaction[]; // tagged #review in Actual, any month: still to be checked
+  pickable: { id: string; name: string; categories: { id: string; name: string }[] }[]; // for the category picker
 }
