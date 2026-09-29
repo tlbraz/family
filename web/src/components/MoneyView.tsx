@@ -291,8 +291,8 @@ function ReviewCard({ review, onOpen }: { review: MoneyTransaction[]; onOpen: ()
 }
 
 /** How much we have now: the biggest number on the page. Doesn't change with the month being looked at. */
-// Same naming as the server's income sources: by who paid, or "Not categorised".
-const sourceOf = (t: MoneyTransaction) => (t.category === 'Not categorised' ? 'Not categorised' : t.payee || t.category || 'Income');
+// For money in, the server puts the source's name (an income category, who paid, or "Not categorised") in `category`.
+const sourceOf = (t: MoneyTransaction) => t.category;
 
 /** What came in this month, and how much of it is left after spending. */
 function IncomeCard({ data, onOpen }: { data: MoneySummary; onOpen: (source: string) => void }) {

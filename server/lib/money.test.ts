@@ -9,7 +9,7 @@ const snap = (tx: Snapshot['tx'], extra: Partial<Snapshot> = {}): Snapshot => ({
     { id: 'a3', name: 'PPR', offBudget: true, balance: 1890000 },
   ],
   groups: [
-    { id: 'gi', name: 'Income', income: true, categories: [{ id: 'salary', name: 'Salary' }] },
+    { id: 'gi', name: 'Income', income: true, categories: [{ id: 'salary', name: 'Income' }] },
     { id: 'gcasa', name: 'Casa', income: false, categories: [{ id: 'hipoteca', name: 'Hipoteca' }, { id: 'luz', name: 'Luz' }] },
     { id: 'gsuper', name: 'Supermercado', income: false, categories: [{ id: 'super', name: 'Supermercado' }] },
   ],
@@ -106,6 +106,18 @@ describe('colours and money in', () => {
       { name: 'Not categorised', amount: 2500 },
     ]);
     expect(s.income.transactions).toHaveLength(3);
+  });
+
+  it('names money in after its income category when it has a name of its own', () => {
+    const base = snap([
+      t('2026-09-01', 310000, 'inc-tiago', 'ACME LDA'),
+      t('2026-09-01', 210000, 'inc-cat', 'HOSPITAL'),
+      t('2026-09-03', 5000, 'salary', 'IRS'),
+    ]);
+    base.groups[0]!.categories.push({ id: 'inc-tiago', name: 'Tiago' }, { id: 'inc-cat', name: 'Catarina' });
+    const s = summarise(base, 'family', ['family'], '2026-09', today);
+    expect(s.income.sources.map((x) => x.name)).toEqual(['Tiago', 'Catarina', 'IRS']);
+    expect(s.income.transactions.find((x) => x.payee === 'ACME LDA')!.category).toBe('Tiago');
   });
 });
 

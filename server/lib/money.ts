@@ -146,6 +146,16 @@ export function runMoney(now = new Date()) {
 
 // ---- The month summary (pure, so it can be tested) ----------------------------------------------
 
+/**
+ * Who money came from: the income category when it's a named one (e.g. "Tiago", "Catarina"), otherwise who paid
+ * (Actual's generic "Income" says nothing). Money in without a category is kept apart.
+ */
+function sourceName(t: { category: string | null; payee: string }, catName: Map<string, string>) {
+  if (!t.category) return 'Not categorised';
+  const cat = catName.get(t.category);
+  return cat && !/^income$/i.test(cat) ? cat : t.payee || cat || 'Income';
+}
+
 const monthKey = (d: string) => d.slice(0, 7);
 const daysIn = (month: string) => new Date(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0).getDate();
 const addMonths = (month: string, n: number) => {
@@ -213,14 +223,14 @@ export function summarise(snap: Snapshot, budget: MoneyBudget, budgets: MoneyBud
     income: (() => {
       const bySource = new Map<string, number>();
       for (const t of incomeTx) {
-        const name = t.category ? t.payee || catName.get(t.category) || 'Income' : 'Not categorised';
+        const name = sourceName(t, catName);
         bySource.set(name, (bySource.get(name) ?? 0) + t.amount);
       }
       return {
         total: incomeTx.reduce((sum, t) => sum + t.amount, 0),
         sources: [...bySource].map(([name, amount]) => ({ name, amount })).sort((a, b) => (a.name === 'Not categorised' ? 1 : b.name === 'Not categorised' ? -1 : b.amount - a.amount)),
         transactions: incomeTx
-          .map((t) => ({ date: t.date, payee: t.payee, account: t.account, groupId: 'income', category: t.category ? (catName.get(t.category) ?? 'Income') : 'Not categorised', amount: -t.amount }))
+          .map((t) => ({ date: t.date, payee: t.payee, account: t.account, groupId: 'income', category: sourceName(t, catName), amount: -t.amount }))
           .sort((a, b) => b.date.localeCompare(a.date)),
       };
     })(),
