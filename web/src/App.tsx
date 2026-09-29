@@ -139,8 +139,8 @@ export function App() {
             ['calendar', 'calendar', 'Calendar'],
             ['groceries', 'cart', 'Groceries'],
             ['notes', 'notes', 'Notes'],
-            ['family', 'people', 'Family'],
             ...(config?.features.money ? ([['money', 'money', 'Money']] as const) : []),
+            ['family', 'people', 'Family'],
           ] as const
         ).map(([id, icon, label]) => (
           <button key={id} className={tab === id ? 'on' : ''} aria-current={tab === id ? 'page' : undefined} onClick={() => setTab(id)}>
