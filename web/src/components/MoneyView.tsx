@@ -122,10 +122,17 @@ export function MoneyView({ meName }: { meName: string }) {
           <SavingsCard data={data} />
         </>
       )}
-      {open && data && <GroupSheet group={open} data={data} onClose={() => setOpen(null)} />}
+      {open && data && (
+        <GroupSheet
+          group={data.groups.find((g) => g.id === open.id) ?? { ...open, amount: 0, categories: [] }}
+          data={data}
+          edit={{ data, budget, onChanged: load }}
+          onClose={() => setOpen(null)}
+        />
+      )}
       {source && data && (
         <Sheet title={`${source} · ${eur(data.income.sources.find((x) => x.name === source)?.amount ?? 0)}`} onClose={() => setSource(null)}>
-          <TxList tx={data.income.transactions.filter((t) => sourceOf(t) === source)} showCategory={false} />
+          <TxList tx={data.income.transactions.filter((t) => sourceOf(t) === source)} showCategory={false} edit={{ data, budget, onChanged: load }} />
         </Sheet>
       )}
       {reviewing && data && <ReviewSheet data={data} budget={budget} onChanged={load} onClose={() => setReviewing(false)} />}
@@ -214,7 +221,7 @@ function GroupsCard({ data, onOpen }: { data: MoneySummary; onOpen: (g: MoneyGro
   );
 }
 
-function GroupSheet({ group, data, onClose }: { group: MoneyGroup; data: MoneySummary; onClose: () => void }) {
+function GroupSheet({ group, data, edit, onClose }: { group: MoneyGroup; data: MoneySummary; edit: Editing; onClose: () => void }) {
   const [only, setOnly] = useState<string | null>(null); // a category name, to see just its transactions
   const colour = colourOf(group.id, data.groupOrder);
   const max = Math.max(...group.categories.map((c) => c.amount));
@@ -241,7 +248,8 @@ function GroupSheet({ group, data, onClose }: { group: MoneyGroup; data: MoneySu
           {only ? <button className="chip" onClick={() => setOnly(null)}>Show all</button> : <span className="muted small">Tap a category to filter</span>}
         </div>
       )}
-      <TxList tx={tx} showCategory={several && !only} />
+      <TxList tx={tx} showCategory={several && !only} edit={edit} />
+      {!tx.length && <p className="muted small">Nothing here any more.</p>}
       {group.id === 'uncategorised' && data.link && (
         <p className="muted small money-note">Give these a category in <a href={data.link} target="_blank" rel="noreferrer">Actual</a> and they'll move to the right place.</p>
       )}
@@ -249,20 +257,99 @@ function GroupSheet({ group, data, onClose }: { group: MoneyGroup; data: MoneySu
   );
 }
 
-function TxList({ tx, showCategory }: { tx: MoneyTransaction[]; showCategory: boolean }) {
+/** What a list needs to let you change a transaction (category, #review) in place. */
+interface Editing {
+  data: MoneySummary;
+  budget: MoneyBudget;
+  onChanged: () => void;
+}
+
+function TxList({ tx, showCategory, edit }: { tx: MoneyTransaction[]; showCategory: boolean; edit?: Editing }) {
+  const [openId, setOpenId] = useState<string | null>(null);
   return (
-    <ul className="money-list">
-      {tx.map((t, i) => (
-        <li key={i}>
-          <span>
-            {t.payee || '—'}
-            <span className="sub">{shortDate(t.date)} · {t.account}{showCategory ? ` · ${t.category}` : ''}</span>
-          </span>
-          {/* Spending is positive here; money in shows with a plus. */}
-          <span className={`amt ${t.amount < 0 ? 'in' : ''}`}>{t.amount < 0 ? `+${eur(-t.amount, true)}` : eur(t.amount, true)}</span>
-        </li>
-      ))}
+    <ul className="money-list review-list">
+      {tx.map((t, i) => {
+        const canEdit = !!(edit && t.id);
+        const row = (
+          <>
+            <span>
+              {t.payee || '—'}
+              <span className="sub">
+                {shortDate(t.date)} · {t.account}{showCategory ? ` · ${t.category}` : ''}
+                {t.review && <span className="tag"> #review</span>}
+              </span>
+            </span>
+            {/* Spending is positive here; money in shows with a plus. */}
+            <span className={`amt ${t.amount < 0 ? 'in' : ''}`}>{t.amount < 0 ? `+${eur(-t.amount, true)}` : eur(t.amount, true)}</span>
+          </>
+        );
+        return (
+          <li key={t.id ?? i} className={openId === t.id ? 'open' : ''}>
+            {canEdit ? (
+              <button className="review-row" aria-expanded={openId === t.id} onClick={() => setOpenId(openId === t.id ? null : t.id!)}>{row}</button>
+            ) : (
+              <div className="review-row">{row}</div>
+            )}
+            {canEdit && openId === t.id && <TxEditor t={t} edit={edit!} onDone={() => setOpenId(null)} />}
+          </li>
+        );
+      })}
     </ul>
+  );
+}
+
+function CategoryPicker({ data, value, onChange }: { data: MoneySummary; value: string; onChange: (id: string) => void }) {
+  return (
+    <select value={value} onChange={(e) => onChange(e.target.value)} aria-label="Category">
+      <option value="" disabled>Choose a category…</option>
+      {data.pickable.map((g) => (
+        <optgroup key={g.id} label={g.name}>
+          {g.categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+        </optgroup>
+      ))}
+    </select>
+  );
+}
+
+/** Change one transaction: its category and whether it's tagged #review. Saved in Actual. */
+function TxEditor({ t, edit, onDone }: { t: MoneyTransaction; edit: Editing; onDone: () => void }) {
+  const [pick, setPick] = useState(t.categoryId ?? '');
+  const [review, setReview] = useState(!!t.review);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const change = {
+    ...(t.fixable && pick && pick !== t.categoryId ? { category: pick } : {}),
+    ...(review !== !!t.review ? { review } : {}),
+  };
+  async function save() {
+    setBusy(true);
+    setError(null);
+    try {
+      await api.editMoney(edit.budget, t.id!, change);
+      onDone();
+      edit.onChanged();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <div className="review-fix">
+      {t.fixable ? (
+        <CategoryPicker data={edit.data} value={pick} onChange={setPick} />
+      ) : (
+        <p className="muted small">Part of a split: change its category in Actual.</p>
+      )}
+      <label className="check">
+        <input type="checkbox" checked={review} onChange={(e) => setReview(e.target.checked)} /> Needs review (#review)
+      </label>
+      {error && <p className="error small">{error}</p>}
+      <div className="review-actions">
+        <button className="chip" onClick={onDone} disabled={busy}>Cancel</button>
+        <button className="primary" onClick={save} disabled={busy || !Object.keys(change).length}>{busy ? 'Saving…' : 'Save'}</button>
+      </div>
+    </div>
   );
 }
 
@@ -311,14 +398,7 @@ function ReviewSheet({ data, budget, onChanged, onClose }: { data: MoneySummary;
             {openId === t.id && (
               <div className="review-fix">
                 {t.fixable ? (
-                  <select value={pick} onChange={(e) => setPick(e.target.value)} aria-label="Category">
-                    <option value="" disabled>Choose a category…</option>
-                    {data.pickable.map((g) => (
-                      <optgroup key={g.id} label={g.name}>
-                        {g.categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                      </optgroup>
-                    ))}
-                  </select>
+                  <CategoryPicker data={data} value={pick} onChange={setPick} />
                 ) : (
                   <p className="muted small">A split or a transfer: change its category in Actual.</p>
                 )}

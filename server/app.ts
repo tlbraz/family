@@ -6,7 +6,7 @@ import { AiError, draftEvent, aiEnabled, type ImageInput } from './lib/ai';
 import { type AuthEnv, loadMember, requireParent } from './lib/auth';
 import { todayDigest, tomorrowDigest, weekDigest } from './lib/digest';
 import { googleEnabled, googleStatus, saveGoogleKey, syncRound } from './lib/google';
-import { budgetsFor, moneyEnabled, moneySnapshot, refreshMoney, ReviewError, reviewTransaction, summarise } from './lib/money';
+import { budgetsFor, editTransaction, moneyEnabled, moneySnapshot, refreshMoney, ReviewError, reviewTransaction, summarise } from './lib/money';
 import { addTelegramChat, removeTelegramChat, sendTelegram, telegramStatus } from './lib/telegram';
 import { authRoutes } from './routes/auth';
 import { type EventHooks, eventRoutes } from './routes/events';
@@ -133,6 +133,21 @@ export function createApp(db: Db, hooks: AppHooks = noop) {
     }
     try {
       await reviewTransaction(budget, body.id, body.category as string | undefined);
+      return c.json({ ok: true });
+    } catch (e) {
+      return c.json({ error: (e as Error).message }, e instanceof ReviewError ? 400 : 503);
+    }
+  });
+  // Change any transaction from the app: its category and/or the #review tag.
+  api.post('/money/edit', requireParent, async (c) => {
+    if (!moneyEnabled()) return c.json({ error: 'Actual Budget is not set up on the server' }, 404);
+    const body = (await c.req.json().catch(() => ({}))) as { budget?: string; id?: unknown; category?: unknown; review?: unknown };
+    const budget = (body.budget ?? 'family') as MoneyBudget;
+    if (!budgetsFor(c.get('me')!.name).includes(budget)) return c.json({ error: 'Not available' }, 403);
+    const bad = typeof body.id !== 'string' || (body.category !== undefined && typeof body.category !== 'string') || (body.review !== undefined && typeof body.review !== 'boolean');
+    if (bad) return c.json({ error: 'Pick a transaction' }, 400);
+    try {
+      await editTransaction(budget, body.id as string, { category: body.category as string | undefined, review: body.review as boolean | undefined });
       return c.json({ ok: true });
     } catch (e) {
       return c.json({ error: (e as Error).message }, e instanceof ReviewError ? 400 : 503);

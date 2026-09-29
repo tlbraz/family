@@ -175,10 +175,11 @@ export interface MoneyTransaction {
   groupId: string;
   category: string;
   amount: number;
-  // Only on the #review list: what's needed to fix it from the app.
+  // What's needed to change it from the app.
   id?: string;
   categoryId?: string | null;
   fixable?: boolean; // false for splits and transfers: their category is changed in Actual
+  review?: boolean; // tagged #review
 }
 
 export interface MoneySummary {

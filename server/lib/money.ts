@@ -27,7 +27,7 @@ export interface Snapshot {
   accounts: { id: string; name: string; offBudget: boolean; balance: number }[];
   groups: { id: string; name: string; income: boolean; hidden?: boolean; categories: { id: string; name: string }[] }[];
   /** Expense-side transactions of on-budget accounts: no transfers, no starting balances, splits flattened. */
-  tx: { date: string; amount: number; account: string; category: string | null; payee: string }[];
+  tx: { id: string; accountId: string; fixable: boolean; review: boolean; date: string; amount: number; account: string; category: string | null; payee: string }[];
   dataFrom: string | null; // earliest real transaction, to know which months are complete
   review: { id: string; accountId: string; fixable: boolean; date: string; amount: number; account: string; category: string | null; payee: string }[]; // tagged #review
 }
@@ -96,10 +96,12 @@ async function load(budget: MoneyBudget, bankSync: boolean): Promise<Snapshot> {
       if (t.transfer_id || t.starting_balance_flag) continue;
       if (!dataFrom || t.date < dataFrom) dataFrom = t.date;
       const payee = (t.payee && payees.get(t.payee)) || t.imported_payee || '';
-      const parts = t.subtransactions?.length ? t.subtransactions : [t];
+      const split = !!t.subtransactions?.length;
+      const parts = split ? t.subtransactions! : [t];
       for (const p of parts) {
         if (p.transfer_id) continue;
-        tx.push({ date: t.date, amount: p.amount, account: a.name, category: p.category ?? null, payee });
+        const review = REVIEW_TAG.test(p.notes ?? '') || REVIEW_TAG.test(t.notes ?? '');
+        tx.push({ id: p.id, accountId: a.id, fixable: !split, review, date: t.date, amount: p.amount, account: a.name, category: p.category ?? null, payee });
       }
     }
   }
@@ -133,28 +135,33 @@ export const withoutReviewTag = (notes: string | null | undefined) =>
   (notes ?? '').replace(/(^|\s)#review\b/gi, ' ').replace(/\s+/g, ' ').trim() || null;
 
 /**
- * Marks a #review transaction as reviewed in Actual: takes the tag out of its notes and, if given, sets its
- * category. Then reads the budget again so the page shows the change.
+ * Changes a transaction in Actual from the app: its category, and/or whether it's tagged #review (the rest of the
+ * note is kept). Then reads the budget again so the page shows the change.
  */
-export function reviewTransaction(budget: MoneyBudget, id: string, category?: string) {
+export function editTransaction(budget: MoneyBudget, id: string, change: { category?: string; review?: boolean }) {
   return serial(async () => {
-    const item = snapshots.get(budget)?.review.find((r) => r.id === id);
-    if (!item) throw new ReviewError('That transaction is no longer waiting for review');
-    if (category !== undefined) {
+    const snap = snapshots.get(budget);
+    const item = snap?.tx.find((t) => t.id === id) ?? snap?.review.find((t) => t.id === id);
+    if (!snap || !item) throw new ReviewError('That transaction is no longer here; pull to refresh');
+    if (change.category !== undefined) {
       if (!item.fixable) throw new ReviewError('Change the category of splits and transfers in Actual');
-      const known = snapshots.get(budget)!.groups.some((g) => g.categories.some((c) => c.id === category));
-      if (!known) throw new ReviewError('Unknown category');
+      if (!snap.groups.some((g) => g.categories.some((c) => c.id === change.category))) throw new ReviewError('Unknown category');
     }
     const api = await actual();
     await api.downloadBudget(SYNC_IDS[budget]!);
     const all = await api.getTransactions(item.accountId, '1900-01-01', '2999-12-31');
     const current = all.flatMap((t) => [t, ...(t.subtransactions ?? [])]).find((t) => t.id === id);
     if (!current) throw new ReviewError('That transaction is no longer in Actual');
-    await api.updateTransaction(id, { notes: withoutReviewTag(current.notes) ?? '', ...(category !== undefined ? { category } : {}) });
+    const kept = withoutReviewTag(current.notes);
+    const notes = change.review === undefined ? current.notes ?? '' : change.review ? `${kept ?? ''} #review`.trim() : kept ?? '';
+    await api.updateTransaction(id, { notes, ...(change.category !== undefined ? { category: change.category } : {}) });
     await api.sync();
     snapshots.set(budget, await load(budget, false));
   });
 }
+
+/** Done reviewing: optionally a new category, and the #review tag comes out. */
+export const reviewTransaction = (budget: MoneyBudget, id: string, category?: string) => editTransaction(budget, id, { category, review: false });
 export class ReviewError extends Error {}
 
 export async function moneySnapshot(budget: MoneyBudget): Promise<Snapshot> {
@@ -232,7 +239,7 @@ export function summarise(snap: Snapshot, budget: MoneyBudget, budgets: MoneyBud
     g.amount -= t.amount;
     cat.amount -= t.amount;
     groups.set(groupId, g);
-    transactions.push({ date: t.date, payee: t.payee, account: t.account, groupId, category: cat.name, amount: -t.amount });
+    transactions.push({ id: t.id, categoryId: t.category, fixable: t.fixable, review: t.review, date: t.date, payee: t.payee, account: t.account, groupId, category: cat.name, amount: -t.amount });
   }
   const sorted = [...groups.values()]
     .map((g) => ({ ...g, categories: g.categories.filter((c) => c.amount > 0).sort((a, b) => b.amount - a.amount) }))
@@ -261,7 +268,7 @@ export function summarise(snap: Snapshot, budget: MoneyBudget, budgets: MoneyBud
         total: incomeTx.reduce((sum, t) => sum + t.amount, 0),
         sources: [...bySource].map(([name, amount]) => ({ name, amount })).sort((a, b) => (a.name === 'Not categorised' ? 1 : b.name === 'Not categorised' ? -1 : b.amount - a.amount)),
         transactions: incomeTx
-          .map((t) => ({ date: t.date, payee: t.payee, account: t.account, groupId: 'income', category: sourceName(t, catName), amount: -t.amount }))
+          .map((t) => ({ id: t.id, categoryId: t.category, fixable: t.fixable, review: t.review, date: t.date, payee: t.payee, account: t.account, groupId: 'income', category: sourceName(t, catName), amount: -t.amount }))
           .sort((a, b) => b.date.localeCompare(a.date)),
       };
     })(),

@@ -18,7 +18,8 @@ const snap = (tx: Snapshot['tx'], extra: Partial<Snapshot> = {}): Snapshot => ({
   review: [],
   ...extra,
 });
-const t = (date: string, amount: number, category: string | null, payee = 'X') => ({ date, amount, account: 'CGD', category, payee });
+let n = 0;
+const t = (date: string, amount: number, category: string | null, payee = 'X') => ({ id: `t${++n}`, accountId: 'a1', fixable: true, review: false, date, amount, account: 'CGD', category, payee });
 
 describe('money summary', () => {
   const today = new Date(2026, 8, 20); // 20 Sep
