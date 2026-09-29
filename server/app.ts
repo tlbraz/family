@@ -1,11 +1,12 @@
 import { Hono } from 'hono';
 import { asc, sql } from 'drizzle-orm';
-import type { AppConfig, Health } from '../shared/types';
+import type { AppConfig, Health, MoneyBudget } from '../shared/types';
 import type { Db } from './db';
 import { AiError, draftEvent, aiEnabled, type ImageInput } from './lib/ai';
 import { type AuthEnv, loadMember, requireParent } from './lib/auth';
 import { todayDigest, tomorrowDigest, weekDigest } from './lib/digest';
 import { googleEnabled, googleStatus, saveGoogleKey, syncRound } from './lib/google';
+import { budgetsFor, moneyEnabled, moneySnapshot, refreshMoney, summarise } from './lib/money';
 import { addTelegramChat, removeTelegramChat, sendTelegram, telegramStatus } from './lib/telegram';
 import { authRoutes } from './routes/auth';
 import { type EventHooks, eventRoutes } from './routes/events';
@@ -53,7 +54,7 @@ export function createApp(db: Db, hooks: AppHooks = noop) {
     const body: AppConfig = {
       me: me ? toMember(me) : null,
       meTracksBp: me?.role === 'parent' && !!(await bpSettingsOf(db, me.id)),
-      features: { ai: aiEnabled(), google: googleEnabled(), telegram: !!process.env.TELEGRAM_BOT_TOKEN },
+      features: { ai: aiEnabled(), google: googleEnabled(), telegram: !!process.env.TELEGRAM_BOT_TOKEN, money: moneyEnabled() && me?.role === 'parent' },
     };
     return c.json(body);
   });
@@ -105,6 +106,26 @@ export function createApp(db: Db, hooks: AppHooks = noop) {
     }
     await syncRound(db);
     return c.json(await googleStatus(db));
+  });
+
+  // The Money tab: a summary of Actual Budget, for parents only (the company budget only for its viewers).
+  api.get('/money', requireParent, async (c) => {
+    if (!moneyEnabled()) return c.json({ error: 'Actual Budget is not set up on the server' }, 404);
+    const budgets = budgetsFor(c.get('me')!.name);
+    const budget = (c.req.query('budget') ?? 'family') as MoneyBudget;
+    if (!budgets.includes(budget)) return c.json({ error: 'Not available' }, 403);
+    const now = new Date();
+    const month = /^\d{4}-\d{2}$/.test(c.req.query('month') ?? '') ? c.req.query('month')! : `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    try {
+      return c.json(summarise(await moneySnapshot(budget), budget, budgets, month, now));
+    } catch (e) {
+      return c.json({ error: (e as Error).message }, 503);
+    }
+  });
+  api.post('/money/refresh', requireParent, async (c) => {
+    if (!moneyEnabled()) return c.json({ error: 'Actual Budget is not set up on the server' }, 404);
+    await refreshMoney();
+    return c.json({ ok: true });
   });
 
   // Send the Telegram digests now (for testing): ?kind=today|tomorrow|week

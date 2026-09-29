@@ -28,6 +28,11 @@ Install it on a phone with *Share → Add to Home Screen*.
 - **Portuguese holidays** (incl. Carnival and Almada's São João) and the **public school calendar**
   (`shared/school-calendar.ts`, update it each summer from the new Despacho).
 - **Parents sign in** (first sign-in sets the password); everyone else can look and tick "bring" items and to-dos.
+- **Money** tab (parents only), read from a self-hosted Actual Budget (`ACTUAL_SERVER_URL`, `ACTUAL_PASSWORD`,
+  `ACTUAL_SYNC_ID`; optional `ACTUAL_COMPANY_SYNC_ID` for a second budget only `ACTUAL_COMPANY_VIEWERS` see, default Tiago).
+  Spending this month vs. usual, by category group (tap for categories and transactions), transactions tagged `#review`,
+  and account balances. Reads Actual every 20 min and asks it to sync the banks at 07:00, 13:00 and 19:00
+  (`ACTUAL_BANK_SYNC=off` to stop). Swipe to change month.
 - **Tap someone** for their profile. Parents also see their documents (Cartão de Cidadão, NIF, NISS, utente, passport,
   driving licence…) with copy buttons, expiry warnings and a link to the scan in Paperless. Served only to signed-in parents.
 - **Telegram** (`TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`): 07:30 "today" message, 20:00 "tomorrow" message with

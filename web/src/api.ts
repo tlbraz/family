@@ -1,4 +1,4 @@
-import type { GroceryList, AppConfig, CalendarEvent, EventDraft, EventInput, Health, Member, MemberDocument, MemberInput, Note, Occurrence, SearchResults, Task, TaskInput } from '../../shared/types';
+import type { GroceryList, AppConfig, CalendarEvent, EventDraft, EventInput, Health, Member, MemberDocument, MemberInput, MoneyBudget, MoneySummary, Note, Occurrence, SearchResults, Task, TaskInput } from '../../shared/types';
 
 export interface GoogleStatus {
   connected: boolean;
@@ -82,6 +82,9 @@ export const api = {
   moveGrocery: (id: number, section: string) => request<GroceryList>(`/groceries/${id}`, json('PATCH', { section })),
   deleteGrocery: (id: number) => request<GroceryList>(`/groceries/${id}`, json('DELETE')),
   clearGroceries: () => request<GroceryList>('/groceries/clear', json('POST')),
+
+  money: (budget: MoneyBudget, month: string | null) => request<MoneySummary>(`/money?budget=${budget}${month ? `&month=${month}` : ''}`),
+  refreshMoney: () => request<{ ok: true }>('/money/refresh', json('POST')),
 
   notes: () => request<Note[]>('/notes'),
   addNote: (text: string, author: string) => request<Note>('/notes', json('POST', { text, author })),

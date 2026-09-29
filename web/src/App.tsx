@@ -12,10 +12,11 @@ import { FamilyView } from './components/FamilyView';
 import { FridgeNotes } from './components/FridgeNotes';
 import { Groceries } from './components/Groceries';
 import { Icon } from './components/Icon';
+import { MoneyView } from './components/MoneyView';
 import { SignIn } from './components/SignIn';
 import { TaskSheet } from './components/TaskSheet';
 
-type Tab = 'calendar' | 'groceries' | 'notes' | 'family';
+type Tab = 'calendar' | 'groceries' | 'notes' | 'family' | 'money';
 type Open = { kind: 'event'; occurrence: Occurrence | null; day: string; shared?: Shared; fromDay?: boolean } | { kind: 'task'; task: Task | null; day: string; fromDay?: boolean } | null;
 
 export function App() {
@@ -105,6 +106,7 @@ export function App() {
             <FridgeNotes />
           </div>
         )}
+        {tab === 'money' && me && config?.features.money && <MoneyView meName={me.name} />}
         {tab === 'family' && <FamilyView members={members} canEdit={canEdit} googleOn={!!config?.features.google} telegramOn={!!config?.features.telegram} onChanged={loadAll} />}
 
         <footer className="footer">
@@ -138,6 +140,7 @@ export function App() {
             ['groceries', 'cart', 'Groceries'],
             ['notes', 'notes', 'Notes'],
             ['family', 'people', 'Family'],
+            ...(config?.features.money ? ([['money', 'money', 'Money']] as const) : []),
           ] as const
         ).map(([id, icon, label]) => (
           <button key={id} className={tab === id ? 'on' : ''} aria-current={tab === id ? 'page' : undefined} onClick={() => setTab(id)}>

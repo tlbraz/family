@@ -125,7 +125,7 @@ export type TaskInput = Pick<Task, 'title' | 'due' | 'memberId'>;
 export interface AppConfig {
   me: Member | null;
   meTracksBp: boolean; // show the quick "log blood pressure" button
-  features: { ai: boolean; google: boolean; telegram: boolean };
+  features: { ai: boolean; google: boolean; telegram: boolean; money?: boolean };
 }
 
 /** What Claude reads out of a photo or a sentence; the user confirms it in the event form. */
@@ -153,4 +153,44 @@ export interface GroceryList {
   items: GroceryItem[];
   sections: string[]; // walking order through the shop
   suggestions: string[]; // bought often, not on the list now
+}
+
+/** The Money tab (parents only), read from Actual Budget. Amounts are in cents; spending is positive. */
+export type MoneyBudget = 'family' | 'company';
+
+export interface MoneyCategory {
+  id: string;
+  name: string;
+  amount: number;
+}
+
+export interface MoneyGroup extends MoneyCategory {
+  categories: MoneyCategory[];
+}
+
+export interface MoneyTransaction {
+  date: string; // YYYY-MM-DD
+  payee: string;
+  account: string;
+  groupId: string;
+  category: string;
+  amount: number;
+}
+
+export interface MoneySummary {
+  budget: MoneyBudget;
+  budgets: MoneyBudget[]; // the ones this person may open
+  month: string; // YYYY-MM
+  months: string[]; // months with data, oldest first
+  today: number | null; // day of the month when it's the current month
+  daysInMonth: number;
+  spent: number;
+  usual: number | null; // what's usually spent by this point of the month (null until there's enough history)
+  groups: MoneyGroup[];
+  groupOrder: string[]; // every expense group in Actual's order, so a group keeps its colour from month to month
+  transactions: MoneyTransaction[];
+  accounts: { name: string; balance: number; offBudget: boolean }[];
+  fetchedAt: string;
+  link: string | null; // where to open Actual
+  review: MoneyTransaction[]; // tagged #review in Actual, any month: still to be checked
 }

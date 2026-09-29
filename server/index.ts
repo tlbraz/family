@@ -4,6 +4,7 @@ import { connect, runMigrations } from './db';
 import { createApp } from './app';
 import { runDigests } from './lib/digest';
 import { deleteGoogleEvent, googleEnabled, loadGoogleKey, pushEvent, shareWithParents, syncRound } from './lib/google';
+import { runMoney } from './lib/money';
 import { runReminders } from './lib/reminders';
 import { bpFromTelegram } from './lib/bp';
 import { loadTelegramChats, pollTelegram } from './lib/telegram';
@@ -47,7 +48,9 @@ const timers = [
   setInterval(() => void runDigests(db).catch(logErr('digest')), 60_000),
   setInterval(() => void syncRound(db), 2 * 60_000),
   setInterval(() => void runReminders(db).catch(logErr('reminders')), 60_000),
+  setInterval(() => void runMoney()?.catch(logErr('actual')), 20 * 60_000),
 ];
+void runMoney()?.catch(logErr('actual'));
 void syncRound(db);
 // Messages people send the bot (for now: blood pressure readings).
 const inbox = process.env.TELEGRAM_BOT_TOKEN ? pollTelegram(db, (m) => bpFromTelegram(db, m)) : null;

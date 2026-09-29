@@ -1,5 +1,7 @@
 FROM node:22-alpine AS build
 WORKDIR /app
+# Tools to compile better-sqlite3 (used by Actual Budget's API) if no prebuilt binary matches.
+RUN apk add --no-cache python3 make g++
 COPY package.json package-lock.json ./
 RUN npm ci
 COPY . .

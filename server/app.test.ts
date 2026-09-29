@@ -98,3 +98,10 @@ describe('member documents', () => {
     expect(res.status).toBe(401);
   });
 });
+
+describe('money', () => {
+  it('is only for signed-in parents', async () => {
+    const res = await up().request('/api/money');
+    expect(res.status).toBe(401);
+  });
+});

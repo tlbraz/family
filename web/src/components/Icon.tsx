@@ -29,6 +29,7 @@ const PATHS: Record<string, string> = {
   search: 'M11 4a7 7 0 1 0 0 14a7 7 0 1 0 0-14M20 20l-4-4',
   cart: 'M3 4h2.5l2.2 10.5h10.6L20.5 7H6.4M10 19.5a1 1 0 1 0 0 .01M17 19.5a1 1 0 1 0 0 .01',
   trash: 'M4 7h16M9 7V4h6v3M6 7l1 14h10l1-14',
+  money: 'M3 7h18v12H3zM3 11h18M7 15h3',
   edit: 'M4 20h4L19 9l-4-4L4 16zM13.5 6.5l4 4',
   open: 'M14 4h6v6M20 4l-9 9M18 14v6H4V6h6',
   copy: 'M9 9h11v11H9zM5 15H4V4h11v1',
