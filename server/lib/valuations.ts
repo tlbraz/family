@@ -11,7 +11,7 @@ import { dateKey } from './time';
 //   Only ETH itself on Ethereum mainnet is counted (not tokens, and not other chains).
 //
 // Funds, ETFs and shares (PPR, Degiro…): HOLDINGS lists, per Actual account, what's held and how many units:
-//   HOLDINGS="PPR Tiago (Optimize)=PTOPZAHM0003:27.2941,PTOPZDHM0000:414.4142; DEGIRO=VWCE.DE:120,cash:250"
+//   HOLDINGS="PPR Tiago (Optimize)=PTOPZDHM0000:27.2941,PTOPZAHM0003:414.4142; DEGIRO=VWCE.DE:120,cash:250"
 //   Each item is an ISIN or a Yahoo Finance symbol with its units; "cash:250" adds a fixed amount in euros.
 //   Prices come from Yahoo Finance (ISINs are looked up to a symbol first) and must be in euros.
 

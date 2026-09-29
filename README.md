@@ -40,7 +40,7 @@ Install it on a phone with *Share → Add to Home Screen*.
   day the ETH balance × the euro price (CoinGecko) is written into that off-budget account in Actual as a
   "Market value" adjustment.
 - **Funds, ETFs and shares at today's value** (`HOLDINGS`, e.g.
-  `PPR Tiago (Optimize)=PTOPZAHM0003:27.2941,PTOPZDHM0000:414.4142; DEGIRO=VWCE.DE:120,cash:250`): per Actual account,
+  `PPR Tiago (Optimize)=PTOPZDHM0000:27.2941,PTOPZAHM0003:414.4142; DEGIRO=VWCE.DE:120,cash:250`): per Actual account,
   ISINs or Yahoo symbols with their units; once a day units × the euro price from Yahoo Finance goes into that account.
   Update the units when you buy or sell.
 - **Tap someone** for their profile. Parents also see their documents (Cartão de Cidadão, NIF, NISS, utente, passport,
