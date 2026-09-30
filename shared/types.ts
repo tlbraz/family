@@ -183,6 +183,28 @@ export interface MoneyTransaction {
   note?: string | null; // the description (Actual's note, without the #review tag)
 }
 
+/** A payment that repeats (found in Actual, or marked by hand), and how it stands in the month shown. Cents. */
+export interface Bill {
+  key: string; // the payee, normalised
+  name: string;
+  cadence: 'monthly' | 'yearly';
+  varying: boolean; // the amount changes every time (electricity, water): no price-change flags
+  tracked: boolean; // marked as a bill by hand
+  status: 'paid' | 'due' | 'missing';
+  date: string; // when it was paid, or when it's expected (YYYY-MM-DD)
+  amount: number; // what was paid, or what's expected
+  change: { from: number; to: number } | null; // the price moved since last time
+  history: { date: string; amount: number }[]; // recent charges, newest first
+}
+
+export interface MoneyBills {
+  bills: Bill[]; // due first, then missing, then paid
+  paid: number; // how many are paid this month
+  remaining: number; // cents still to come this month
+  candidates: { key: string; name: string; count: number; last: { date: string; amount: number } }[]; // payees to track by hand
+  ignored: { key: string; name: string }[];
+}
+
 export interface MoneySummary {
   budget: MoneyBudget;
   budgets: MoneyBudget[]; // the ones this person may open
@@ -203,6 +225,7 @@ export interface MoneySummary {
   review: MoneyTransaction[]; // tagged #review in Actual, any month: still to be checked
   pickable: { id: string; name: string; categories: { id: string; name: string }[] }[]; // for the category picker
   worth: MoneyWorth | null; // net worth over the last year
+  bills: MoneyBills | null; // family budget only
 }
 
 /** Net worth day by day (cents): budget accounts (cash) and savings & investments. Debts are left out. */

@@ -33,6 +33,10 @@ Install it on a phone with *Share → Add to Home Screen*.
   Available balance first, then spending this month vs. usual, by category group (tap for categories and transactions),
   what came in, and transactions tagged `#review`: pick a category (or "Looks fine") and the tag comes out, in Actual. Reads Actual every 20 min and asks it to sync the banks at 07:00, 13:00 and 19:00
   (`ACTUAL_BANK_SYNC=off` to stop). Swipe to change month.
+- **Bills & subscriptions** (Money tab, family budget): payments to the same payee in 3 of the last 4 months around
+  the same day for a similar amount (or twice a year apart) are bills. The card shows what's still to come this month,
+  a price change ("Vodafone €39.90 → €44.90") and a bill that didn't show up; tap for the list, "Not a bill", or to
+  track a payee it missed. Price changes and missing bills also go to Tiago on Telegram, once each.
 - **Quiet-failure warnings** on Telegram: a document with a "valid until" date gets a message 90, 30 and 7 days ahead
   and when it expires (family chats); a bank-linked account in Actual that hasn't synced for 36 h, or whose sync
   failed, gets a daily message to Tiago (the bank link probably expired).

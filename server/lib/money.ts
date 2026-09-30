@@ -2,6 +2,7 @@ import { mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { MoneyBudget, MoneyGroup, MoneySummary, MoneyTransaction, MoneyWorth } from '../../shared/types';
+import { type BillOverrides, billsFor } from './bills';
 import { dateKey } from './time';
 
 /**
@@ -285,7 +286,7 @@ const addMonths = (month: string, n: number) => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 };
 
-export function summarise(snap: Snapshot, budget: MoneyBudget, budgets: MoneyBudget[], month: string, today: Date): MoneySummary {
+export function summarise(snap: Snapshot, budget: MoneyBudget, budgets: MoneyBudget[], month: string, today: Date, billOverrides?: BillOverrides): MoneySummary {
   const incomeCats = new Set(snap.groups.filter((g) => g.income).flatMap((g) => g.categories.map((c) => c.id)));
   const groupOf = new Map<string, { groupId: string; groupName: string; name: string }>();
   for (const g of snap.groups) for (const c of g.categories) groupOf.set(c.id, { groupId: g.id, groupName: g.name, name: c.name });
@@ -375,6 +376,7 @@ export function summarise(snap: Snapshot, budget: MoneyBudget, budgets: MoneyBud
       .sort((a, b) => b.date.localeCompare(a.date)),
     // Spending groups first, then income, as in Actual.
     worth: netWorth(snap, today),
+    bills: budget === 'family' ? billsFor(snap, month, today, billOverrides) : null,
     pickable: [...snap.groups.filter((g) => !g.hidden && !g.income), ...snap.groups.filter((g) => !g.hidden && g.income)]
       .map((g) => ({ id: g.id, name: g.name, categories: g.categories })),
   };
