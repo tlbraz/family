@@ -311,38 +311,49 @@ function TxList({ tx, showCategory, edit }: { tx: MoneyTransaction[]; showCatego
   );
 }
 
-/** Pick a category: type to search (by category or group name, accents ignored), tap to choose. */
+/** Pick a category: one field showing the current one; tap or type to open a short list of matches. */
 function CategoryPicker({ data, value, onChange }: { data: MoneySummary; value: string; onChange: (id: string) => void }) {
+  const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const fold = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
   const q = fold(query.trim());
-  const groups = data.pickable
-    .map((g) => ({ ...g, categories: !q || fold(g.name).includes(q) ? g.categories : g.categories.filter((c) => fold(c.name).includes(q)) }))
-    .filter((g) => g.categories.length);
-  const current = data.pickable.flatMap((g) => g.categories.map((c) => ({ ...c, group: g.name }))).find((c) => c.id === value);
+  const all = data.pickable.flatMap((g) => g.categories.map((c) => ({ ...c, group: g.name })));
+  const matches = q ? all.filter((c) => fold(c.name).includes(q) || fold(c.group).includes(q)) : all;
+  const current = all.find((c) => c.id === value);
+  function choose(id: string) {
+    onChange(id);
+    setOpen(false);
+    setQuery('');
+  }
   return (
     <div className="cat-picker">
       <input
-        type="search"
-        value={query}
+        type="text"
+        role="combobox"
+        aria-expanded={open}
+        aria-label="Category"
+        value={open ? query : current ? `${current.name} · ${current.group}` : ''}
+        onFocus={() => { setOpen(true); setQuery(''); }}
+        onBlur={() => setTimeout(() => setOpen(false), 150)}
         onChange={(e) => setQuery(e.target.value)}
-        placeholder={current ? `${current.group} › ${current.name}` : 'Search categories…'}
-        aria-label="Search categories"
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' && matches[0]) { e.preventDefault(); choose(matches[0].id); (e.target as HTMLInputElement).blur(); }
+          if (e.key === 'Escape') (e.target as HTMLInputElement).blur();
+        }}
+        placeholder={current ? `${current.name} · ${current.group}` : 'Category…'}
         autoComplete="off"
       />
-      <ul role="listbox" aria-label="Categories">
-        {groups.map((g) => (
-          <li key={g.id} role="presentation">
-            <span className="cat-group">{g.name}</span>
-            {g.categories.map((c) => (
-              <button key={c.id} type="button" role="option" aria-selected={c.id === value} className={c.id === value ? 'on' : ''} onClick={() => onChange(c.id)}>
-                {c.name}
-              </button>
-            ))}
-          </li>
-        ))}
-        {!groups.length && <li className="muted small">No category matches "{query}"</li>}
-      </ul>
+      {open && (
+        <ul role="listbox" aria-label="Categories">
+          {matches.map((c) => (
+            <li key={c.id} role="option" aria-selected={c.id === value} className={c.id === value ? 'on' : ''}
+              onMouseDown={(e) => e.preventDefault()} onClick={() => choose(c.id)}>
+              <b>{c.name}</b> <span>{c.group}</span>
+            </li>
+          ))}
+          {!matches.length && <li className="none">No category matches "{query}"</li>}
+        </ul>
+      )}
     </div>
   );
 }
@@ -392,10 +403,11 @@ function TxEditor({ t, edit, onDone }: { t: MoneyTransaction; edit: Editing; onD
   );
 }
 
-/** Go through the #review transactions: pick a category (or keep it) and the tag comes out, in Actual. */
+/** Go through the #review transactions: fix the category or description (or keep them) and the tag comes out, in Actual. */
 function ReviewSheet({ data, budget, onChanged, onClose }: { data: MoneySummary; budget: MoneyBudget; onChanged: () => void; onClose: () => void }) {
   const [openId, setOpenId] = useState<string | null>(null);
   const [pick, setPick] = useState('');
+  const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<string[]>([]); // reviewed here, hidden before the page reloads
@@ -405,12 +417,17 @@ function ReviewSheet({ data, budget, onChanged, onClose }: { data: MoneySummary;
     setError(null);
     setOpenId(openId === t.id ? null : t.id!);
     setPick(t.categoryId ?? '');
+    setNote(t.note ?? '');
   }
-  async function finish(t: MoneyTransaction, category?: string) {
+  const changes = (t: MoneyTransaction) => ({
+    ...(t.fixable && pick && pick !== t.categoryId ? { category: pick } : {}),
+    ...(note.trim() !== (t.note ?? '') ? { note: note.trim() } : {}),
+  });
+  async function finish(t: MoneyTransaction) {
     setBusy(true);
     setError(null);
     try {
-      await api.reviewMoney(budget, t.id!, category);
+      await api.editMoney(budget, t.id!, { ...changes(t), review: false });
       setDone((d) => [...d, t.id!]);
       setOpenId(null);
       onChanged();
@@ -430,6 +447,7 @@ function ReviewSheet({ data, budget, onChanged, onClose }: { data: MoneySummary;
             <button className="review-row" aria-expanded={openId === t.id} onClick={() => toggle(t)}>
               <span>
                 {t.payee || '—'}
+                {t.note && <span className="tx-desc">{t.note}</span>}
                 <span className="sub">{shortDate(t.date)} · {t.account} · {t.category}</span>
               </span>
               <span className={`amt ${t.amount < 0 ? 'in' : ''}`}>{t.amount < 0 ? `+${eur(-t.amount, true)}` : eur(t.amount, true)}</span>
@@ -441,21 +459,20 @@ function ReviewSheet({ data, budget, onChanged, onClose }: { data: MoneySummary;
                 ) : (
                   <p className="muted small">A split or a transfer: change its category in Actual.</p>
                 )}
+                <input className="tx-note" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Description (optional)" maxLength={500} aria-label="Description" />
                 {error && <p className="error small">{error}</p>}
                 <div className="review-actions">
-                  <button className="chip" disabled={busy} onClick={() => finish(t)}>Looks fine</button>
-                  {t.fixable && (
-                    <button className="primary" disabled={busy || !pick || pick === t.categoryId} onClick={() => finish(t, pick)}>
-                      {busy ? 'Saving…' : 'Save category'}
-                    </button>
-                  )}
+                  <button className="chip" disabled={busy} onClick={() => setOpenId(null)}>Cancel</button>
+                  <button className="primary" disabled={busy} onClick={() => finish(t)}>
+                    {busy ? 'Saving…' : Object.keys(changes(t)).length ? 'Save ✓' : 'Looks fine ✓'}
+                  </button>
                 </div>
               </div>
             )}
           </li>
         ))}
       </ul>
-      <p className="muted small money-note">Saving sets the category in Actual and takes #review out of the note. "Looks fine" only takes the tag out.</p>
+      <p className="muted small money-note">Saving sets the category and description in Actual and takes #review out of the note.</p>
     </Sheet>
   );
 }

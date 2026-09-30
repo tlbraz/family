@@ -88,7 +88,6 @@ export const api = {
   saveHoldings: (holdings: MoneyHolding[]) => request<MoneyHoldings>('/money/holdings', json('PUT', { holdings })),
   refreshMoney: () => request<{ ok: true }>('/money/refresh', json('POST')),
   editMoney: (budget: MoneyBudget, id: string, change: { category?: string; review?: boolean; note?: string }) => request<{ ok: true }>('/money/edit', json('POST', { budget, id, ...change })),
-  reviewMoney: (budget: MoneyBudget, id: string, category?: string) => request<{ ok: true }>('/money/review', json('POST', { budget, id, category })),
 
   notes: () => request<Note[]>('/notes'),
   addNote: (text: string, author: string) => request<Note>('/notes', json('POST', { text, author })),
