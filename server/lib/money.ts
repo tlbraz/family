@@ -1,7 +1,8 @@
 import { mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { MoneyBudget, MoneyGroup, MoneySummary, MoneyTransaction } from '../../shared/types';
+import type { MoneyBudget, MoneyGroup, MoneySummary, MoneyTransaction, MoneyWorth } from '../../shared/types';
+import { dateKey } from './time';
 
 /**
  * The Money tab reads from Actual Budget (self-hosted, fed by bank sync). Actual stays the place to categorise
@@ -24,7 +25,8 @@ export function budgetsFor(name: string): MoneyBudget[] {
 
 export interface Snapshot {
   fetchedAt: string;
-  accounts: { id: string; name: string; offBudget: boolean; balance: number }[];
+  /** days: how much the balance moved on each date, oldest first (for net worth over time). */
+  accounts: { id: string; name: string; offBudget: boolean; balance: number; days?: [string, number][] }[];
   groups: { id: string; name: string; income: boolean; hidden?: boolean; categories: { id: string; name: string }[] }[];
   /** Expense-side transactions of on-budget accounts: no transfers, no starting balances, splits flattened. */
   tx: { id: string; accountId: string; fixable: boolean; review: boolean; note: string | null; date: string; amount: number; account: string; category: string | null; payee: string }[];
@@ -36,6 +38,7 @@ export interface Snapshot {
 
 type Api = typeof import('@actual-app/api');
 const REVIEW_TAG = /(^|\s)#review\b/i;
+const BEFORE = '0000-00-00'; // the date given to starting balances in Snapshot.accounts[].days
 let apiPromise: Promise<Api> | null = null;
 const snapshots = new Map<MoneyBudget, Snapshot>();
 let lastError: string | null = null;
@@ -83,9 +86,18 @@ async function load(budget: MoneyBudget, bankSync: boolean): Promise<Snapshot> {
   let dataFrom: string | null = null;
   for (const a of await api.getAccounts()) {
     if (a.closed) continue;
-    accounts.push({ id: a.id, name: a.name, offBudget: !!a.offbudget, balance: await api.getAccountBalance(a.id) });
+    const moved = new Map<string, number>();
+    const all = await api.getTransactions(a.id, '1900-01-01', end);
+    // A starting balance is money that was already there before the account came into Actual: it goes before
+    // everything else, so net worth doesn't seem to jump on the day an account was added.
+    for (const t of all) if (!t.is_child) {
+      const date = t.starting_balance_flag ? BEFORE : t.date;
+      moved.set(date, (moved.get(date) ?? 0) + t.amount);
+    }
+    const days = [...moved].sort((x, y) => x[0].localeCompare(y[0]));
+    accounts.push({ id: a.id, name: a.name, offBudget: !!a.offbudget, balance: await api.getAccountBalance(a.id), days });
     // Anything tagged #review, in any account and any month, is still waiting to be checked.
-    for (const t of await api.getTransactions(a.id, '1900-01-01', end)) {
+    for (const t of all) {
       const parts = [t, ...(t.subtransactions ?? [])];
       const tagged = parts.find((p) => REVIEW_TAG.test(p.notes ?? ''));
       if (tagged) {
@@ -224,6 +236,39 @@ export function runMoney(now = new Date()) {
 // ---- The month summary (pure, so it can be tested) ----------------------------------------------
 
 /**
+ * What we own, day by day for the last year: money in the budget accounts plus savings and investments.
+ * Debts (off-budget accounts below zero, like the mortgage) stay out, as everywhere else on the page.
+ */
+export function netWorth(snap: Snapshot, today: Date): MoneyWorth | null {
+  const counted = snap.accounts.filter((a) => (!a.offBudget || a.balance >= 0) && a.days?.length);
+  if (!counted.length) return null;
+  const end = dateKey(today);
+  const yearAgo = new Date(today.getFullYear() - 1, today.getMonth(), today.getDate());
+  const first = counted.flatMap((a) => a.days!.filter(([d]) => d !== BEFORE).slice(0, 1).map(([d]) => d)).sort()[0] ?? end;
+  const start = first > dateKey(yearAgo) ? first : dateKey(yearAgo);
+  // Each account's balance just before the first day shown, then walk forward a day at a time.
+  const state = counted.map((a) => {
+    const i = a.days!.findIndex(([d]) => d >= start);
+    const upto = i < 0 ? a.days!.length : i;
+    return { a, i: upto, balance: a.days!.slice(0, upto).reduce((s, [, v]) => s + v, 0) };
+  });
+  const points: MoneyWorth['points'] = [];
+  const [y, m, d] = start.split('-').map(Number);
+  for (let day = new Date(y!, m! - 1, d!); dateKey(day) <= end; day.setDate(day.getDate() + 1)) {
+    const key = dateKey(day);
+    let cash = 0;
+    let saved = 0;
+    for (const s of state) {
+      while (s.i < s.a.days!.length && s.a.days![s.i]![0] <= key) s.balance += s.a.days![s.i++]![1];
+      if (s.a.offBudget) saved += s.balance;
+      else cash += s.balance;
+    }
+    points.push({ date: key, cash, saved });
+  }
+  return { points, debtsLeftOut: snap.accounts.filter((a) => a.offBudget && a.balance < 0).map((a) => a.name) };
+}
+
+/**
  * Who money came from: the income category when it's a named one (e.g. "Tiago", "Catarina"), otherwise who paid
  * (Actual's generic "Income" says nothing). Money in without a category is kept apart.
  */
@@ -329,6 +374,7 @@ export function summarise(snap: Snapshot, budget: MoneyBudget, budgets: MoneyBud
       })
       .sort((a, b) => b.date.localeCompare(a.date)),
     // Spending groups first, then income, as in Actual.
+    worth: netWorth(snap, today),
     pickable: [...snap.groups.filter((g) => !g.hidden && !g.income), ...snap.groups.filter((g) => !g.hidden && g.income)]
       .map((g) => ({ id: g.id, name: g.name, categories: g.categories })),
   };

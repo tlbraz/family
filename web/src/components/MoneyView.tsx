@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { MoneyBudget, MoneyGroup, MoneyHolding, MoneyHoldings, MoneySummary, MoneyTransaction } from '../../../shared/types';
+import type { MoneyBudget, MoneyGroup, MoneyHolding, MoneyHoldings, MoneySummary, MoneyTransaction, MoneyWorth } from '../../../shared/types';
 import { api } from '../api';
 import { Icon } from './Icon';
 import { Sheet } from './Sheet';
@@ -127,6 +127,7 @@ export function MoneyView({ meName }: { meName: string }) {
             <GroupsCard data={data} onOpen={setOpen} />
             <IncomeCard data={data} onOpen={setSource} />
           </div>
+          {data.worth && <WorthCard worth={data.worth} />}
           <SavingsCard data={data} onHoldings={budget === 'family' ? () => setHoldingsOpen(true) : undefined} />
           <p className="money-synced">
             {data.bankSyncedAt ? `Banks synced ${when(data.bankSyncedAt)}` : 'Banks not synced yet'} · read from Actual {ago(data.fetchedAt)}
@@ -570,6 +571,130 @@ function BalanceCard({ data, busy, onRefresh }: { data: MoneySummary; busy: bool
           )}
         </>
       )}
+    </section>
+  );
+}
+
+const RANGES = [['1M', 1], ['3M', 3], ['6M', 6], ['1Y', 12]] as const;
+const signed = (cents: number) => (cents > 0 ? `+${eur(cents)}` : cents < 0 ? eur(cents) : '±€0');
+const compact = (cents: number) => {
+  const v = cents / 100;
+  return Math.abs(v) >= 1000 ? `€${(v / 1000).toFixed(Math.abs(v) >= 100_000 ? 0 : 1)}k` : `€${Math.round(v)}`;
+};
+const monthsBack = (date: string, n: number) => {
+  const d = new Date(`${date}T12:00`);
+  const day = d.getDate();
+  d.setDate(1);
+  d.setMonth(d.getMonth() - n);
+  d.setDate(Math.min(day, new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate()));
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+
+/** Net worth (cash + savings & investments, debts left out) over time, with how it moved. */
+function WorthCard({ worth }: { worth: MoneyWorth }) {
+  const pts = worth.points;
+  const total = (p: MoneyWorth['points'][number]) => p.cash + p.saved;
+  const last = pts.at(-1)!;
+  const at = (date: string) => pts.find((p) => p.date === date);
+  const daysBack = (n: number) => pts[pts.length - 1 - n];
+  const changes = [
+    ['Yesterday', daysBack(1)],
+    ['Week', daysBack(7)],
+    ['Month', at(monthsBack(last.date, 1))],
+    ['Year', at(monthsBack(last.date, 12))],
+  ] as const;
+  // This month so far, split into what moved it: cash or investments.
+  const monthStart = [...pts].reverse().find((p) => p.date < `${last.date.slice(0, 7)}-01`);
+
+  const available = RANGES.filter(([, n], i) => i === 0 || pts[0]!.date < monthsBack(last.date, RANGES[i - 1]![1]));
+  const [range, setRange] = useState<number>(Math.min(3, available.at(-1)![1]));
+  const from = monthsBack(last.date, range);
+  const shown = pts.filter((p) => p.date >= from);
+  const values = shown.map(total);
+  const lo = Math.min(...values);
+  const hi = Math.max(...values);
+  const pad = (hi - lo) * 0.16 || Math.max(Math.abs(hi) * 0.02, 100);
+  const [min, max] = [lo - pad, hi + pad];
+  const W = 300;
+  const H = 100;
+  const x = (i: number) => (shown.length > 1 ? (i / (shown.length - 1)) * W : W / 2);
+  const y = (v: number) => H - ((v - min) / (max - min)) * H;
+  const line = shown.map((p, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(total(p)).toFixed(1)}`).join('');
+  const [hover, setHover] = useState<number | null>(null);
+  const plot = useRef<HTMLDivElement>(null);
+  const pick = (clientX: number) => {
+    const r = plot.current!.getBoundingClientRect();
+    setHover(Math.round(Math.min(1, Math.max(0, (clientX - r.left) / r.width)) * (shown.length - 1)));
+  };
+  const h = hover !== null ? shown[hover] : null;
+
+  return (
+    <section className="card money-card worth">
+      <div className="row">
+        <h2>Net worth</h2>
+        <div className="ranges" role="group" aria-label="Period">
+          {available.map(([label, n]) => (
+            <button key={label} className={range === n ? 'on' : ''} aria-pressed={range === n} onClick={() => { setRange(n); setHover(null); }}>{label}</button>
+          ))}
+        </div>
+      </div>
+      <div className="income-num">{eur(total(last))}</div>
+      <p className="muted small worth-split">{eur(last.cash)} cash · {eur(last.saved)} savings &amp; investments</p>
+
+      <div
+        ref={plot}
+        className="worth-plot"
+        tabIndex={0}
+        aria-label={`Net worth from ${shortDate(shown[0]!.date)} (${eur(values[0]!)}) to today (${eur(total(last))})`}
+        onPointerDown={(e) => pick(e.clientX)}
+        onPointerMove={(e) => pick(e.clientX)}
+        onPointerLeave={() => setHover(null)}
+        onBlur={() => setHover(null)}
+        onKeyDown={(e) => {
+          if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+            e.preventDefault();
+            const step = e.key === 'ArrowLeft' ? -1 : 1;
+            setHover((i) => Math.min(shown.length - 1, Math.max(0, (i ?? shown.length - 1) + step)));
+          }
+        }}
+      >
+        <span className="worth-y" style={{ top: `${y(hi)}%` }}>{compact(hi)}</span>
+        <span className="worth-y below" style={{ top: `${y(lo)}%` }}>{compact(lo)}</span>
+        <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" aria-hidden="true">
+          <line x1="0" x2={W} y1={y(hi)} y2={y(hi)} className="grid" vectorEffect="non-scaling-stroke" />
+          <line x1="0" x2={W} y1={y(lo)} y2={y(lo)} className="grid" vectorEffect="non-scaling-stroke" />
+          <path d={line} className="worth-line" vectorEffect="non-scaling-stroke" />
+        </svg>
+        {/* Dots and the crosshair are HTML so they stay round and thin however the chart is stretched. */}
+        <span className="worth-dot" style={{ left: '100%', top: `${y(total(last))}%` }} />
+        {h && (
+          <>
+            <span className="worth-cross" style={{ left: `${(x(hover!) / W) * 100}%` }} />
+            <span className="worth-dot" style={{ left: `${(x(hover!) / W) * 100}%`, top: `${y(total(h))}%` }} />
+            <div className={`worth-tip ${hover! > shown.length / 2 ? 'left' : ''}`} style={{ left: `${(x(hover!) / W) * 100}%` }}>
+              <b>{eur(total(h))}</b>
+              <span>{shortDate(h.date)}</span>
+              <span>{signed(total(h) - total(last))} vs today</span>
+            </div>
+          </>
+        )}
+      </div>
+      <div className="worth-x muted small"><span>{shortDate(shown[0]!.date)}</span><span>today</span></div>
+
+      <ul className="worth-changes">
+        {changes.map(([label, p]) => (
+          <li key={label}>
+            <span className="muted small">{label}</span>
+            <b>{p ? signed(total(last) - total(p)) : '—'}</b>
+          </li>
+        ))}
+      </ul>
+      {monthStart && (
+        <p className="muted small worth-note">
+          This month {signed(total(last) - total(monthStart))}: cash {signed(last.cash - monthStart.cash)}, savings &amp; investments {signed(last.saved - monthStart.saved)}.
+        </p>
+      )}
+      {worth.debtsLeftOut.length > 0 && <p className="muted small worth-note">{worth.debtsLeftOut.join(', ')} not counted.</p>}
     </section>
   );
 }

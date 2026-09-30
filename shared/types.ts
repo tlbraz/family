@@ -202,6 +202,13 @@ export interface MoneySummary {
   link: string | null; // where to open Actual
   review: MoneyTransaction[]; // tagged #review in Actual, any month: still to be checked
   pickable: { id: string; name: string; categories: { id: string; name: string }[] }[]; // for the category picker
+  worth: MoneyWorth | null; // net worth over the last year
+}
+
+/** Net worth day by day (cents): budget accounts (cash) and savings & investments. Debts are left out. */
+export interface MoneyWorth {
+  points: { date: string; cash: number; saved: number }[]; // one per day, oldest first, up to today
+  debtsLeftOut: string[]; // e.g. the mortgage
 }
 
 /** What an off-budget investment account holds, valued daily (Money tab → Holdings). */

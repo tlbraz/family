@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { budgetsFor, summarise, withoutReviewTag, type Snapshot } from './money';
+import { budgetsFor, netWorth, summarise, withoutReviewTag, type Snapshot } from './money';
 
 const snap = (tx: Snapshot['tx'], extra: Partial<Snapshot> = {}): Snapshot => ({
   fetchedAt: '2026-09-29T10:00:00Z',
@@ -136,5 +136,41 @@ describe('who sees which budget', () => {
   it('keeps the company budget to its viewers', () => {
     process.env.ACTUAL_COMPANY_VIEWERS = 'Tiago';
     expect(budgetsFor('Catarina')).toEqual(['family']);
+  });
+});
+
+describe('net worth over time', () => {
+  it('adds up cash and savings day by day, leaving debts out', () => {
+    const s = snap([], {
+      accounts: [
+        { id: 'a1', name: 'CGD', offBudget: false, balance: 120000, days: [['2026-09-01', 100000], ['2026-09-03', 30000], ['2026-09-05', -10000]] },
+        { id: 'a3', name: 'PPR', offBudget: true, balance: 500000, days: [['2026-08-01', 480000], ['2026-09-04', 20000]] },
+        { id: 'a4', name: 'Mortgage', offBudget: true, balance: -9000000, days: [['2026-01-01', -9000000]] },
+        { id: 'a5', name: 'Unused', offBudget: false, balance: 0, days: [] },
+      ],
+    });
+    const w = netWorth(s, new Date(2026, 8, 5))!;
+    expect(w.points[0]).toEqual({ date: '2026-08-01', cash: 0, saved: 480000 });
+    expect(w.points.at(-1)).toEqual({ date: '2026-09-05', cash: 120000, saved: 500000 });
+    expect(w.points.find((p) => p.date === '2026-09-03')).toEqual({ date: '2026-09-03', cash: 130000, saved: 480000 });
+    expect(w.points).toHaveLength(36); // every day from 1 Aug to 5 Sep, DST or not
+    expect(w.debtsLeftOut).toEqual(['Mortgage']);
+  });
+
+  it('counts starting balances as there from the start', () => {
+    const s = snap([], { accounts: [
+      { id: 'a1', name: 'CGD', offBudget: false, balance: 1500, days: [['2026-09-01', 500], ['2026-09-10', 1000]] },
+      { id: 'a3', name: 'PPR', offBudget: true, balance: 900000, days: [['0000-00-00', 900000]] },
+    ] });
+    const w = netWorth(s, new Date(2026, 8, 12))!;
+    expect(w.points[0]).toEqual({ date: '2026-09-01', cash: 500, saved: 900000 });
+    expect(w.points).toHaveLength(12);
+  });
+
+  it('shows at most the last year', () => {
+    const s = snap([], { accounts: [{ id: 'a1', name: 'CGD', offBudget: false, balance: 300, days: [['2020-01-01', 100], ['2026-01-01', 200]] }] });
+    const w = netWorth(s, new Date(2026, 8, 30))!;
+    expect(w.points[0]).toEqual({ date: '2025-09-30', cash: 100, saved: 0 });
+    expect(w.points.at(-1)!.cash).toBe(300);
   });
 });

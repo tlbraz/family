@@ -496,3 +496,26 @@ div.review-row { cursor: default; }
 .holding p { margin: 0; }
 .good-note { color: var(--ok); font-weight: 700; }
 .holding-save { margin-top: 12px; }
+
+/* Net worth */
+.worth .ranges { display: flex; gap: 2px; padding: 2px; border-radius: 10px; background: var(--soft); }
+.worth .ranges button { border: 0; background: none; color: var(--muted); font: inherit; font-size: 0.78rem; font-weight: 800; padding: 4px 8px; border-radius: 8px; }
+.worth .ranges button.on { background: var(--card); color: var(--ink); }
+.worth-split { margin: 2px 0 12px; }
+.worth-plot { position: relative; height: 120px; margin: 8px 0 4px; touch-action: pan-y; outline: none; }
+.worth-plot:focus-visible { box-shadow: 0 0 0 2px var(--accent); border-radius: 6px; }
+.worth-plot svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.worth-plot .grid { stroke: var(--line); stroke-width: 1; }
+.worth-line { fill: none; stroke: var(--m1); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.worth-y { position: absolute; left: 0; transform: translateY(calc(-100% - 3px)); font-size: 0.7rem; color: var(--muted); line-height: 1; }
+.worth-y.below { transform: translateY(3px); }
+.worth-dot { position: absolute; width: 9px; height: 9px; margin: -4.5px 0 0 -4.5px; border-radius: 50%; background: var(--m1); box-shadow: 0 0 0 2px var(--card); z-index: 2; pointer-events: none; }
+.worth-cross { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--muted); opacity: 0.6; pointer-events: none; }
+.worth-tip { position: absolute; top: -6px; transform: translate(8px, -100%); display: flex; flex-direction: column; padding: 6px 10px; border-radius: 10px; background: var(--ink); color: var(--card); font-size: 0.75rem; white-space: nowrap; pointer-events: none; z-index: 3; }
+.worth-tip.left { transform: translate(calc(-100% - 8px), -100%); }
+.worth-tip b { font-size: 0.95rem; }
+.worth-x { display: flex; justify-content: space-between; }
+.worth-changes { list-style: none; margin: 14px 0 0; padding: 0; display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.worth-changes li { display: flex; flex-direction: column; gap: 2px; padding: 8px; border-radius: 12px; background: var(--soft); min-width: 0; }
+.worth-changes b { font-size: 0.85rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.worth-note { margin: 10px 0 0; }
