@@ -88,6 +88,7 @@ export const api = {
   saveHoldings: (holdings: MoneyHolding[]) => request<MoneyHoldings>('/money/holdings', json('PUT', { holdings })),
   billAction: (action: 'ignore' | 'unignore' | 'track' | 'untrack', key: string, name: string) => request<{ ok: true }>('/money/bills', json('POST', { action, key, name })),
   refreshMoney: () => request<{ ok: true }>('/money/refresh', json('POST')),
+  transferMoney: (budget: MoneyBudget, out: string, into: string, action: 'link' | 'ignore') => request<{ ok: true }>('/money/transfer', json('POST', { budget, out, in: into, action })),
   editMoney: (budget: MoneyBudget, id: string, change: { category?: string; review?: boolean; note?: string }) => request<{ ok: true }>('/money/edit', json('POST', { budget, id, ...change })),
 
   notes: () => request<Note[]>('/notes'),

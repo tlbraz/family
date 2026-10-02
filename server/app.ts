@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { asc, sql } from 'drizzle-orm';
+import { asc, eq, sql } from 'drizzle-orm';
 import type { AppConfig, Health, MoneyBudget } from '../shared/types';
 import type { Db } from './db';
 import { AiError, draftEvent, aiEnabled, type ImageInput } from './lib/ai';
@@ -7,7 +7,7 @@ import { type AuthEnv, loadMember, requireParent } from './lib/auth';
 import { todayDigest, tomorrowDigest, weekDigest } from './lib/digest';
 import { googleEnabled, googleStatus, saveGoogleKey, syncRound } from './lib/google';
 import { cleanHoldings, lastValuations, loadHoldings, revalueNow, saveHoldings } from './lib/valuations';
-import { budgetsFor, editTransaction, moneyEnabled, moneySnapshot, refreshMoney, ReviewError, reviewTransaction, summarise } from './lib/money';
+import { budgetsFor, editTransaction, linkTransfer, moneyEnabled, moneySnapshot, refreshMoney, ReviewError, reviewTransaction, summarise } from './lib/money';
 import { addTelegramChat, removeTelegramChat, sendTelegram, telegramStatus } from './lib/telegram';
 import { authRoutes } from './routes/auth';
 import { type EventHooks, eventRoutes } from './routes/events';
@@ -20,7 +20,7 @@ import { bpRoutes } from './routes/bp';
 import { billOverrides, saveBillOverrides } from './lib/alerts';
 import { bpSettingsOf } from './lib/bp';
 import { upcomingRoutes } from './routes/upcoming';
-import { members } from './schema';
+import { members, settings } from './schema';
 import pkg from '../package.json';
 
 export interface AppHooks extends EventHooks {
@@ -119,7 +119,7 @@ export function createApp(db: Db, hooks: AppHooks = noop) {
     const now = new Date();
     const month = /^\d{4}-\d{2}$/.test(c.req.query('month') ?? '') ? c.req.query('month')! : `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
     try {
-      return c.json(summarise(await moneySnapshot(budget), budget, budgets, month, now, budget === 'family' ? await billOverrides(db) : undefined));
+      return c.json(summarise(await moneySnapshot(budget), budget, budgets, month, now, budget === 'family' ? await billOverrides(db) : undefined, await notTransfers(budget)));
     } catch (e) {
       return c.json({ error: (e as Error).message }, 503);
     }
@@ -150,6 +150,30 @@ export function createApp(db: Db, hooks: AppHooks = noop) {
     if (bad) return c.json({ error: 'Pick a transaction' }, 400);
     try {
       await editTransaction(budget, body.id as string, { category: body.category as string | undefined, review: body.review as boolean | undefined, note: body.note as string | undefined });
+      return c.json({ ok: true });
+    } catch (e) {
+      return c.json({ error: (e as Error).message }, e instanceof ReviewError ? 400 : 503);
+    }
+  });
+  // Money that moved between our own accounts: link the two sides as a transfer in Actual, or say it isn't one.
+  const notTransfersKey = (budget: MoneyBudget) => `transfers:not:${budget}`;
+  async function notTransfers(budget: MoneyBudget): Promise<string[]> {
+    const [row] = await db.select().from(settings).where(eq(settings.key, notTransfersKey(budget)));
+    return row ? (JSON.parse(row.value) as string[]) : [];
+  }
+  api.post('/money/transfer', requireParent, async (c) => {
+    if (!moneyEnabled()) return c.json({ error: 'Actual Budget is not set up on the server' }, 404);
+    const body = (await c.req.json().catch(() => ({}))) as { budget?: string; out?: unknown; in?: unknown; action?: unknown };
+    const budget = (body.budget ?? 'family') as MoneyBudget;
+    if (!budgetsFor(c.get('me')!.name).includes(budget)) return c.json({ error: 'Not available' }, 403);
+    if (typeof body.out !== 'string' || typeof body.in !== 'string' || (body.action !== 'link' && body.action !== 'ignore')) return c.json({ error: 'Pick a transfer' }, 400);
+    if (body.action === 'ignore') {
+      const value = JSON.stringify([...(await notTransfers(budget)), `${body.out}:${body.in}`].slice(-200));
+      await db.insert(settings).values({ key: notTransfersKey(budget), value }).onConflictDoUpdate({ target: settings.key, set: { value } });
+      return c.json({ ok: true });
+    }
+    try {
+      await linkTransfer(budget, body.out, body.in);
       return c.json({ ok: true });
     } catch (e) {
       return c.json({ error: (e as Error).message }, e instanceof ReviewError ? 400 : 503);

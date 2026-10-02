@@ -232,6 +232,8 @@ export interface MoneySummary {
     recent: MoneyTransaction[]; // the latest payments and money back, newest first (money back < 0)
   } | null;
   bills: MoneyBills | null; // family budget only
+  // Looks like money moved between our own accounts (−X in one, +X in another) without Actual linking it.
+  transfers: { key: string; out: MoneyTransaction; in: MoneyTransaction }[];
 }
 
 /** Net worth day by day (cents): budget accounts (cash) and savings & investments. Debts are left out. */

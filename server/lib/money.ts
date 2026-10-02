@@ -37,6 +37,8 @@ export interface Snapshot {
   review: { id: string; accountId: string; fixable: boolean; note?: string | null; date: string; amount: number; account: string; category: string | null; payee: string }[]; // tagged #review
   /** Every transaction ever in a "to be reimbursed" category (see reimbursable), oldest first. */
   owed?: Snapshot['tx'];
+  /** Recent plain transactions in any account (not transfers or splits), to spot transfers between our accounts. */
+  loose?: { id: string; accountId: string; account: string; offBudget: boolean; date: string; amount: number; payee: string; note: string | null; category: string | null }[];
 }
 
 /**
@@ -118,6 +120,10 @@ async function load(budget: MoneyBudget, bankSync: boolean): Promise<Snapshot> {
   }));
   const owedCats = reimbursable(groups);
   const owed: Snapshot['tx'] = [];
+  const loose: NonNullable<Snapshot['loose']> = [];
+  const since = new Date();
+  since.setDate(since.getDate() - 45);
+  const looseFrom = since.toISOString().slice(0, 10);
   const accounts: Snapshot['accounts'] = [];
   const tx: Snapshot['tx'] = [];
   const review: Snapshot['review'] = [];
@@ -142,6 +148,11 @@ async function load(budget: MoneyBudget, bankSync: boolean): Promise<Snapshot> {
         const plain = !t.subtransactions?.length && !t.is_child && !t.transfer_id;
         review.push({ id: tagged.id, accountId: a.id, fixable: plain, note: withoutReviewTag(tagged.notes), date: t.date, amount: tagged.amount, account: a.name, category: tagged.category ?? null, payee: (t.payee && payees.get(t.payee)) || t.imported_payee || '' });
       }
+    }
+    for (const t of all) {
+      if (t.date < looseFrom || t.transfer_id || t.starting_balance_flag || t.is_child || t.is_parent || t.subtransactions?.length) continue;
+      const payee = (t.payee && payees.get(t.payee)) || t.imported_payee || '';
+      loose.push({ id: t.id, accountId: a.id, account: a.name, offBudget: !!a.offbudget, date: t.date, amount: t.amount, payee, note: withoutReviewTag(t.notes), category: t.category ?? null });
     }
     if (a.offbudget) continue;
     for (const t of all) {
@@ -181,7 +192,7 @@ async function load(budget: MoneyBudget, bankSync: boolean): Promise<Snapshot> {
   const synced = bankLinks.map((a) => a.lastSync).filter((d): d is string => !!d).sort();
   const bankSyncedAt = synced.at(-1) ?? null;
   owed.sort((x, y) => x.date.localeCompare(y.date));
-  return { fetchedAt: new Date().toISOString(), accounts, groups, tx, dataFrom, review, bankSyncedAt, bankLinks, owed };
+  return { fetchedAt: new Date().toISOString(), accounts, groups, tx, dataFrom, review, bankSyncedAt, bankLinks, owed, loose };
 }
 
 /** Fetches every configured budget. Called on a timer and, the first time, by the page. */
@@ -226,6 +237,62 @@ export function editTransaction(budget: MoneyBudget, id: string, change: { categ
     const text = change.note !== undefined ? change.note.trim().slice(0, 500) : withoutReviewTag(current.notes) ?? '';
     const notes = tagged ? `${text} #review`.trim() : text;
     await api.updateTransaction(id, { notes, ...(change.category !== undefined ? { category: change.category } : {}) });
+    await api.sync();
+    snapshots.set(budget, await load(budget, false));
+  });
+}
+
+/**
+ * Money that left one of our accounts and arrived in another (same amount, within a few days) but that Actual
+ * didn't link as a transfer: each bank imports its own side. Closest dates pair first; money for someone else
+ * ("A receber") and pairs marked "Not a transfer" are left alone.
+ */
+export function transferPairs(snap: Snapshot, ignored: string[] = []) {
+  const skip = reimbursable(snap.groups);
+  const loose = (snap.loose ?? []).filter((t) => !(t.category && skip.has(t.category)));
+  const days = (a: string, b: string) => Math.abs(new Date(`${a}T12:00`).getTime() - new Date(`${b}T12:00`).getTime()) / 86_400_000;
+  const candidates = loose
+    .filter((o) => o.amount < 0)
+    .flatMap((o) => loose.filter((i) => i.amount === -o.amount && i.accountId !== o.accountId && days(o.date, i.date) <= 4).map((i) => ({ o, i, gap: days(o.date, i.date) })))
+    .filter(({ o, i }) => !ignored.includes(`${o.id}:${i.id}`))
+    .sort((a, b) => a.gap - b.gap || b.o.date.localeCompare(a.o.date));
+  const used = new Set<string>();
+  const pairs: { key: string; out: (typeof loose)[number]; in: (typeof loose)[number] }[] = [];
+  for (const { o, i } of candidates) {
+    if (used.has(o.id) || used.has(i.id)) continue;
+    used.add(o.id).add(i.id);
+    pairs.push({ key: `${o.id}:${i.id}`, out: o, in: i });
+  }
+  return pairs.sort((a, b) => b.out.date.localeCompare(a.out.date));
+}
+
+/** Links two transactions as one transfer in Actual, as its "Make transfer" does. The money-out side's note is kept. */
+export function linkTransfer(budget: MoneyBudget, outId: string, inId: string) {
+  return serial(async () => {
+    const snap = snapshots.get(budget);
+    const pair = snap ? transferPairs(snap).find((p) => p.out.id === outId && p.in.id === inId) : undefined;
+    const o = snap?.loose?.find((t) => t.id === outId);
+    const i = snap?.loose?.find((t) => t.id === inId);
+    if (!o || !i) throw new ReviewError('Those transactions are no longer here; pull to refresh');
+    if (!pair && (o.amount !== -i.amount || o.accountId === i.accountId)) throw new ReviewError("Those two don't make a transfer");
+    const api = await actual();
+    await api.downloadBudget(SYNC_IDS[budget]!);
+    const payees = await api.getPayees();
+    const toPayee = payees.find((p) => p.transfer_acct === i.accountId);
+    const fromPayee = payees.find((p) => p.transfer_acct === o.accountId);
+    if (!toPayee || !fromPayee) throw new ReviewError('Actual has no transfer payee for one of the accounts');
+    const find = async (t: { id: string; accountId: string; date: string }) => (await api.getTransactions(t.accountId, t.date, t.date)).find((x) => x.id === t.id);
+    const [co, ci] = [await find(o), await find(i)];
+    if (!co || !ci) throw new ReviewError('Those transactions are no longer in Actual');
+    if (co.transfer_id || ci.transfer_id) throw new ReviewError('One of them is already a transfer');
+    // Point each side at the other: Actual's transfer logic then keeps them in step (and clears the categories).
+    // Linking it is reviewing it: the #review tag comes out (Actual copies the note to the other side).
+    await api.updateTransaction(o.id, { payee: toPayee.id, transfer_id: i.id, notes: withoutReviewTag(co.notes) ?? '' });
+    await api.updateTransaction(i.id, { payee: fromPayee.id, transfer_id: o.id });
+    // Actual keeps one note for both sides of a transfer; set it on each so neither keeps the other's old text.
+    const note = withoutReviewTag(co.notes) ?? withoutReviewTag(ci.notes) ?? '';
+    await api.updateTransaction(o.id, { notes: note });
+    await api.updateTransaction(i.id, { notes: note });
     await api.sync();
     snapshots.set(budget, await load(budget, false));
   });
@@ -326,7 +393,7 @@ const addMonths = (month: string, n: number) => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 };
 
-export function summarise(snap: Snapshot, budget: MoneyBudget, budgets: MoneyBudget[], month: string, today: Date, billOverrides?: BillOverrides): MoneySummary {
+export function summarise(snap: Snapshot, budget: MoneyBudget, budgets: MoneyBudget[], month: string, today: Date, billOverrides?: BillOverrides, notTransfers: string[] = []): MoneySummary {
   const incomeCats = new Set(snap.groups.filter((g) => g.income).flatMap((g) => g.categories.map((c) => c.id)));
   const groupOf = new Map<string, { groupId: string; groupName: string; name: string }>();
   for (const g of snap.groups) for (const c of g.categories) groupOf.set(c.id, { groupId: g.id, groupName: g.name, name: c.name });
@@ -418,6 +485,10 @@ export function summarise(snap: Snapshot, budget: MoneyBudget, budgets: MoneyBud
       .sort((a, b) => b.date.localeCompare(a.date)),
     // Spending groups first, then income, as in Actual.
     worth: netWorth(snap, today),
+    transfers: transferPairs(snap, notTransfers).map((p) => {
+      const tx = (t: NonNullable<Snapshot['loose']>[number]) => ({ id: t.id, date: t.date, payee: t.payee, account: t.account, groupId: 'transfer', category: '', note: t.note, amount: -t.amount });
+      return { key: p.key, out: tx(p.out), in: tx(p.in) };
+    }),
     owed: (() => {
       const items = snap.owed ?? [];
       if (!owedCats.size || !items.length) return null;

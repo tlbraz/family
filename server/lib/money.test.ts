@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { budgetsFor, netWorth, reimbursable, stillOwed, summarise, withoutReviewTag, type Snapshot } from './money';
+import { budgetsFor, netWorth, reimbursable, stillOwed, summarise, transferPairs, withoutReviewTag, type Snapshot } from './money';
 
 const snap = (tx: Snapshot['tx'], extra: Partial<Snapshot> = {}): Snapshot => ({
   fetchedAt: '2026-09-29T10:00:00Z',
@@ -202,5 +202,26 @@ describe('money to be reimbursed', () => {
     expect(s.owed!.total).toBe(8500);
     expect(s.owed!.open.map((o) => [o.payee, o.amount])).toEqual([['RESTAURANTE', 8500]]);
     expect(s.owed!.recent.map((o) => o.amount)).toEqual([-2000, 8500, 2000]);
+  });
+});
+
+describe('transfers between our accounts', () => {
+  const l = (id: string, accountId: string, date: string, amount: number, category: string | null = null) => ({ id, accountId, account: accountId.toUpperCase(), offBudget: false, date, amount, payee: 'TRF', note: null, category });
+
+  it('pairs money out with the same money in another account, closest dates first', () => {
+    const s = snap([], { loose: [
+      l('o1', 'cgd', '2026-09-29', -10000), l('i1', 'abanca', '2026-09-30', 10000),
+      l('i2', 'abanca', '2026-09-26', 10000), // further away: o1 takes i1
+      l('o2', 'cgd', '2026-09-20', -5000), l('i3', 'cgd', '2026-09-20', 5000), // same account: not a transfer
+      l('o3', 'cgd', '2026-09-01', -7000), l('i4', 'abanca', '2026-09-08', 7000), // a week apart: no
+    ] });
+    expect(transferPairs(s).map((p) => p.key)).toEqual(['o1:i1']);
+    expect(transferPairs(s, ['o1:i1']).map((p) => p.key)).toEqual(['o1:i2']); // "Not a transfer" frees both sides
+  });
+
+  it('leaves money for someone else alone', () => {
+    const s = snap([], { loose: [l('o1', 'cgd', '2026-09-29', -10000, 'emp'), l('i1', 'abanca', '2026-09-29', 10000)] });
+    s.groups.push({ id: 'gar', name: 'A receber', income: false, categories: [{ id: 'emp', name: 'Empresa' }] });
+    expect(transferPairs(s)).toEqual([]);
   });
 });

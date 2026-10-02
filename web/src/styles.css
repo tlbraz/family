@@ -478,7 +478,8 @@ button.link { border: 0; padding: 0; background: none; color: var(--accent, inhe
 .review-fix .check input { width: 18px; height: 18px; }
 div.review-row { cursor: default; }
 .money-synced { margin: 14px 0 0; text-align: center; color: var(--muted); font-size: 0.75rem; }
-.cat-picker { position: relative; }
+.cat-picker { position: relative; scroll-margin-top: 12px; }
+.cat-spacer { height: 55vh; }
 .cat-picker input { width: 100%; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--card); font: inherit; color: var(--ink); }
 .cat-picker ul { list-style: none; margin: 4px 0 0; padding: 4px 0; max-height: 200px; overflow-y: auto; border-radius: 12px; border: 1px solid var(--line); background: var(--card); }
 .money-list .cat-picker li, .cat-picker li { display: flex; flex-direction: row; justify-content: flex-start; align-items: baseline; gap: 8px; padding: 8px 12px; border-top: 0; cursor: pointer; }
@@ -521,3 +522,10 @@ div.review-row { cursor: default; }
 .worth-changes li { display: flex; flex-direction: column; gap: 2px; padding: 8px; border-radius: 12px; background: var(--soft); min-width: 0; }
 .worth-changes b { font-size: 0.85rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .worth-note { margin: 10px 0 0; }
+
+/* Transfers between our accounts */
+.money-card.transfers h2 { margin-bottom: 2px; }
+.money-card.transfers ul { list-style: none; margin: 10px 0 0; padding: 0; }
+.money-card.transfers li { display: flex; flex-direction: column; gap: 8px; padding: 10px 0; border-top: 1px solid var(--line); }
+.transfer-row { display: flex; flex-direction: column; gap: 2px; }
+.transfer-path { font-weight: 700; }

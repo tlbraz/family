@@ -128,6 +128,7 @@ export function MoneyView({ meName }: { meName: string }) {
             <SpentCard data={data} />
             <BillsCard data={data} onOpen={() => setBillsOpen(true)} />
             <ReviewCard review={data.review} onOpen={() => setReviewing(true)} />
+            <TransfersCard data={data} budget={budget} onChanged={load} />
             <GroupsCard data={data} onOpen={setOpen} />
             <IncomeCard data={data} onOpen={setSource} />
           </div>
@@ -338,6 +339,27 @@ function TxList({ tx, showCategory, edit }: { tx: MoneyTransaction[]; showCatego
 function CategoryPicker({ data, value, onChange }: { data: MoneySummary; value: string; onChange: (id: string) => void }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
+  const [room, setRoom] = useState(220);
+  const box = useRef<HTMLDivElement>(null);
+  // The phone keyboard covers the bottom of the screen: bring the field to the top and fit the list in what's left.
+  useEffect(() => {
+    if (!open) return;
+    const place = () => {
+      const el = box.current;
+      if (!el) return;
+      el.scrollIntoView({ block: 'start' });
+      const vv = window.visualViewport;
+      const bottom = vv ? vv.offsetTop + vv.height : window.innerHeight;
+      const input = el.querySelector('input')!.getBoundingClientRect();
+      setRoom(Math.max(120, Math.min(260, bottom - input.bottom - 12)));
+    };
+    const timer = setTimeout(place, 300); // once the keyboard is up
+    window.visualViewport?.addEventListener('resize', place);
+    return () => {
+      clearTimeout(timer);
+      window.visualViewport?.removeEventListener('resize', place);
+    };
+  }, [open]);
   const fold = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
   const q = fold(query.trim());
   const all = data.pickable.flatMap((g) => g.categories.map((c) => ({ ...c, group: g.name })));
@@ -349,7 +371,7 @@ function CategoryPicker({ data, value, onChange }: { data: MoneySummary; value: 
     setQuery('');
   }
   return (
-    <div className="cat-picker">
+    <div className="cat-picker" ref={box}>
       <input
         type="text"
         role="combobox"
@@ -367,7 +389,7 @@ function CategoryPicker({ data, value, onChange }: { data: MoneySummary; value: 
         autoComplete="off"
       />
       {open && (
-        <ul role="listbox" aria-label="Categories">
+        <ul role="listbox" aria-label="Categories" style={{ maxHeight: room }}>
           {matches.map((c) => (
             <li key={c.id} role="option" aria-selected={c.id === value} className={c.id === value ? 'on' : ''}
               onMouseDown={(e) => e.preventDefault()} onClick={() => choose(c.id)}>
@@ -377,6 +399,8 @@ function CategoryPicker({ data, value, onChange }: { data: MoneySummary; value: 
           {!matches.length && <li className="none">No category matches "{query}"</li>}
         </ul>
       )}
+      {/* Room to scroll the field up to the top while the list is open, even at the end of a sheet. */}
+      {open && <div className="cat-spacer" aria-hidden="true" />}
     </div>
   );
 }
@@ -497,6 +521,50 @@ function ReviewSheet({ data, budget, onChanged, onClose }: { data: MoneySummary;
       </ul>
       <p className="muted small money-note">Saving sets the category and description in Actual and takes #review out of the note.</p>
     </Sheet>
+  );
+}
+
+/** −X in one account and +X in another, a few days apart: probably a transfer Actual didn't link. One tap links it. */
+function TransfersCard({ data, budget, onChanged }: { data: MoneySummary; budget: MoneyBudget; onChanged: () => void }) {
+  const [busy, setBusy] = useState<string | null>(null);
+  const [done, setDone] = useState<string[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const left = data.transfers.filter((p) => !done.includes(p.key));
+  if (!left.length) return null;
+  async function act(p: MoneySummary['transfers'][number], action: 'link' | 'ignore') {
+    setBusy(p.key);
+    setError(null);
+    try {
+      await api.transferMoney(budget, p.out.id!, p.in.id!, action);
+      setDone((d) => [...d, p.key]);
+      onChanged();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(null);
+    }
+  }
+  return (
+    <section className="card money-card transfers">
+      <h2>Transfers between your accounts?</h2>
+      <p className="muted small">The same money left one account and arrived in another. Linked, it's a transfer in Actual: not spending, not income.</p>
+      <ul>
+        {left.map((p) => (
+          <li key={p.key}>
+            <div className="transfer-row">
+              <b>{eur(p.out.amount, true)}</b>
+              <span className="transfer-path">{p.out.account} → {p.in.account}</span>
+              <span className="muted small">{shortDate(p.out.date)}{p.in.date !== p.out.date ? ` / ${shortDate(p.in.date)}` : ''} · {p.out.payee || p.in.payee || '—'}</span>
+            </div>
+            <div className="review-actions">
+              <button className="chip" disabled={!!busy} onClick={() => act(p, 'ignore')}>Not a transfer</button>
+              <button className="primary" disabled={!!busy} onClick={() => act(p, 'link')}>{busy === p.key ? 'Linking…' : 'Link'}</button>
+            </div>
+          </li>
+        ))}
+      </ul>
+      {error && <p className="error small">{error}</p>}
+    </section>
   );
 }
 
