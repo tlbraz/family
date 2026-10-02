@@ -24,6 +24,7 @@ const fake = (async (url: string, init?: RequestInit) => {
   if (init?.method === 'PATCH') { sentBodies.push(JSON.parse(String(init.body))); return new Response('{}'); }
   if (pathname === '/api/documents/40/') return new Response(JSON.stringify((api['/api/documents/'] as { results: unknown[] }).results[0]));
   expect((init?.headers as Record<string, string>).Authorization).toBe('Token secret');
+  expect((init?.headers as Record<string, string>).Accept).toBe('application/json; version=9'); // Paperless 3 takes 9 and 10
   const body = api[pathname];
   return new Response(JSON.stringify(body ?? {}), { status: body ? 200 : 404 });
 }) as typeof fetch;

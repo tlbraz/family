@@ -18,7 +18,7 @@ export class PaperlessError extends Error {}
 export async function paperlessFetch(path: string, get: Fetch = fetch, init: RequestInit = {}) {
   const res = await get(`${base()}${path}`, {
     ...init,
-    headers: { Authorization: `Token ${process.env.PAPERLESS_TOKEN}`, Accept: 'application/json; version=5', ...init.headers },
+    headers: { Authorization: `Token ${process.env.PAPERLESS_TOKEN}`, Accept: 'application/json; version=9', ...init.headers },
   }).catch((e: Error & { cause?: { code?: string; message?: string } }) => {
     // "fetch failed" says nothing: name the address and the reason (refused, unknown host, timed out…).
     throw new PaperlessError(`Can't reach Paperless at ${base()} (${e.cause?.code ?? e.cause?.message ?? e.message}). Check PAPERLESS_URL: it must be reachable from the app's server.`);
