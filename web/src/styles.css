@@ -529,3 +529,9 @@ div.review-row { cursor: default; }
 .money-card.transfers li { display: flex; flex-direction: column; gap: 8px; padding: 10px 0; border-top: 1px solid var(--line); }
 .transfer-row { display: flex; flex-direction: column; gap: 2px; }
 .transfer-path { font-weight: 700; }
+
+/* While a new version goes live */
+.deploying { min-height: 100dvh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 24px; text-align: center; background: var(--bg); }
+.deploying h1 { font-size: 1.4rem; font-weight: 800; margin: 8px 0 0; }
+.deploying p { max-width: 300px; margin: 0; }
+.deploying .spinner { width: 28px; height: 28px; margin-top: 8px; }

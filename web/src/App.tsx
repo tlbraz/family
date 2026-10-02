@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { AppConfig, Health, Member, Occurrence, Task } from '../../shared/types';
-import { api } from './api';
+import { api, DEPLOYING_EVENT } from './api';
 import { useBack } from './back';
 import { type Shared, takeShared } from './share';
 import { dateKey } from './dates';
@@ -29,6 +29,12 @@ export function App() {
   const [refresh, setRefresh] = useState(0);
   const [shared, setShared] = useState<Shared | null>(null);
   const [bpOpen, setBpOpen] = useState(false);
+  const [deploying, setDeploying] = useState(false);
+  useEffect(() => {
+    const on = () => setDeploying(true);
+    window.addEventListener(DEPLOYING_EVENT, on);
+    return () => window.removeEventListener(DEPLOYING_EVENT, on);
+  }, []);
   useBack(() => setTab('calendar'), tab !== 'calendar');
 
   const loadAll = useCallback(() => {
@@ -58,6 +64,8 @@ export function App() {
     setOpen({ kind: 'event', occurrence: null, day: dateKey(new Date()), shared });
     setShared(null);
   }, [shared, config, canEdit]);
+
+  if (deploying) return <Deploying />;
 
   return (
     <div className="shell">
@@ -192,6 +200,33 @@ export function App() {
             setRefresh((r) => r + 1);
           }}
         />
+      )}
+    </div>
+  );
+}
+
+/** Shown while a new version goes live: checks every few seconds and reloads once the server answers again. */
+function Deploying() {
+  const [seconds, setSeconds] = useState(0);
+  useEffect(() => {
+    const started = Date.now();
+    const timer = setInterval(async () => {
+      setSeconds(Math.round((Date.now() - started) / 1000));
+      const res = await fetch('/api/health', { cache: 'no-store' }).catch(() => null);
+      if (res?.ok && (res.headers.get('content-type') ?? '').includes('json')) location.reload();
+    }, 3000);
+    return () => clearInterval(timer);
+  }, []);
+  return (
+    <div className="deploying" role="status">
+      <img src="/icon.svg" alt="" width={56} height={56} />
+      <h1>Updating the app…</h1>
+      <p className="muted">A new version is going live. This page reloads on its own in a moment.</p>
+      <span className="spinner" aria-hidden="true" />
+      {seconds >= 120 && (
+        <p className="muted small">
+          Taking longer than usual. <button className="chip" onClick={() => location.reload()}>Reload now</button>
+        </p>
       )}
     </div>
   );

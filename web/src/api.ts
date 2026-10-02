@@ -18,11 +18,19 @@ export interface TelegramStatus {
   sent?: boolean;
 }
 
+/** The server is restarting (a new version going live): the proxy answers with plain text, not the app. */
+export class DeployingError extends Error {}
+export const DEPLOYING_EVENT = 'family:deploying';
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`/api${path}`, {
     ...init,
     headers: { 'content-type': 'application/json', ...init?.headers },
   });
+  if (res.status >= 502 && res.status <= 504 && !(res.headers.get('content-type') ?? '').includes('json')) {
+    window.dispatchEvent(new Event(DEPLOYING_EVENT));
+    throw new DeployingError('The app is updating, back in a moment');
+  }
   if (!res.ok && res.status !== 503) {
     const body = await res.json().catch(() => ({}));
     throw new Error(body.error ?? `Something went wrong (${res.status})`);
