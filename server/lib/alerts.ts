@@ -2,7 +2,7 @@ import { eq } from 'drizzle-orm';
 import { DOCUMENT_KINDS, type DocumentKind } from '../../shared/types';
 import type { Db } from '../db';
 import { memberDocuments, members, settings } from '../schema';
-import { moneyEnabled, moneySnapshot, type Snapshot } from './money';
+import { moneyEnabled, moneySnapshot, stillOwed, type Snapshot } from './money';
 import { tiagoChat } from './payroll';
 import { esc, sendTelegram, telegramEnabled } from './telegram';
 import { dateKey } from './time';
@@ -81,5 +81,29 @@ export async function runBankAlerts(db: Db, now = new Date()) {
     for (const l of staleBankLinks(snap?.bankLinks ?? [], now)) {
       await once(db, `bankstale:${budget}:${l.name}:${dateKey(now)}`, () => sendTelegram(staleMessage(l), tiagoChat()));
     }
+  }
+}
+
+// ---- Money to be reimbursed --------------------------------------------------------------------
+
+const OWED_DAYS = 30;
+const euros = (cents: number) => `€${(cents / 100).toFixed(2).replace('.00', '')}`;
+
+/** Expenses paid for someone else (e.g. the company) that haven't come back after a month. */
+export function overdueOwed(items: NonNullable<Snapshot['owed']>, now: Date) {
+  return stillOwed(items).filter((t) => (new Date(`${dateKey(now)}T12:00`).getTime() - new Date(`${t.date}T12:00`).getTime()) / 86_400_000 >= OWED_DAYS);
+}
+
+export function owedMessage(t: ReturnType<typeof overdueOwed>[number]): string {
+  const what = t.note ? `${esc(t.payee)} (${esc(t.note)})` : esc(t.payee || 'an expense');
+  return `🧾 Still not paid back: <b>${euros(t.left)}</b> for ${what}, paid on ${longDate(t.date)}.`;
+}
+
+/** After each read of Actual: tell Tiago once per expense that's been waiting a month. */
+export async function runOwedAlerts(db: Db, now = new Date()) {
+  if (!moneyEnabled() || !tiagoChat() || !daytime(now)) return;
+  const snap = await moneySnapshot('family').catch(() => null);
+  for (const t of overdueOwed(snap?.owed ?? [], now)) {
+    await once(db, `owed:${t.id}`, () => sendTelegram(owedMessage(t), tiagoChat()));
   }
 }

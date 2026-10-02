@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { budgetsFor, netWorth, summarise, withoutReviewTag, type Snapshot } from './money';
+import { budgetsFor, netWorth, reimbursable, stillOwed, summarise, withoutReviewTag, type Snapshot } from './money';
 
 const snap = (tx: Snapshot['tx'], extra: Partial<Snapshot> = {}): Snapshot => ({
   fetchedAt: '2026-09-29T10:00:00Z',
@@ -172,5 +172,35 @@ describe('net worth over time', () => {
     const w = netWorth(s, new Date(2026, 8, 30))!;
     expect(w.points[0]).toEqual({ date: '2025-09-30', cash: 100, saved: 0 });
     expect(w.points.at(-1)!.cash).toBe(300);
+  });
+});
+
+describe('money to be reimbursed', () => {
+  const today = new Date(2026, 8, 20);
+  const groups = (): Snapshot['groups'] => [
+    { id: 'gi', name: 'Income', income: true, categories: [{ id: 'salary', name: 'Income' }] },
+    { id: 'gsuper', name: 'Supermercado', income: false, categories: [{ id: 'super', name: 'Supermercado' }] },
+    { id: 'gar', name: 'A receber', income: false, categories: [{ id: 'emp', name: 'Empresa' }] },
+    { id: 'gx', name: 'Outros', income: false, categories: [{ id: 'reemb', name: 'Reembolsos seguro' }] },
+  ];
+
+  it('finds the categories in "A receber" or named reembolso', () => {
+    expect([...reimbursable(groups())]).toEqual(['emp', 'reemb']);
+  });
+
+  it('pays back the oldest expenses first', () => {
+    const open = stillOwed([t('2026-08-02', -5000, 'emp'), t('2026-08-20', -3000, 'emp'), t('2026-09-01', 6000, 'emp'), t('2026-09-10', -1000, 'emp')]);
+    expect(open.map((o) => [o.date, o.left])).toEqual([['2026-08-20', 2000], ['2026-09-10', 1000]]);
+  });
+
+  it("isn't spending or income, and says what's still owed", () => {
+    const tx = [t('2026-09-05', -5000, 'super'), t('2026-09-06', -8500, 'emp', 'RESTAURANTE'), t('2026-08-01', -2000, 'emp', 'TAXI'), t('2026-09-15', 2000, 'emp', 'EPI OPERATIONS')];
+    const s = summarise(snap(tx, { groups: groups(), owed: tx.filter((x) => x.category === 'emp').sort((a, b) => a.date.localeCompare(b.date)) }), 'family', ['family'], '2026-09', today);
+    expect(s.spent).toBe(5000);
+    expect(s.groups.map((g) => g.name)).toEqual(['Supermercado']);
+    expect(s.income.total).toBe(0);
+    expect(s.owed!.total).toBe(8500);
+    expect(s.owed!.open.map((o) => [o.payee, o.amount])).toEqual([['RESTAURANTE', 8500]]);
+    expect(s.owed!.recent.map((o) => o.amount)).toEqual([-2000, 8500, 2000]);
   });
 });

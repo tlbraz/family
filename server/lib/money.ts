@@ -34,6 +34,34 @@ export interface Snapshot {
   bankSyncedAt?: string | null; // the latest bank sync of any linked account (ours, Actual's button or another tool)
   bankLinks?: { name: string; lastSync: string | null; status: string | null }[]; // accounts linked to a bank
   review: { id: string; accountId: string; fixable: boolean; note?: string | null; date: string; amount: number; account: string; category: string | null; payee: string }[]; // tagged #review
+  /** Every transaction ever in a "to be reimbursed" category (see reimbursable), oldest first. */
+  owed?: Snapshot['tx'];
+}
+
+/**
+ * Money paid for someone else (e.g. the company) that comes back later: the categories in a group called
+ * "A receber", or with "reembolso" in the name. They aren't household spending; what's left in them is owed to us.
+ */
+export function reimbursable(groups: Snapshot['groups']): Set<string> {
+  return new Set(
+    groups
+      .filter((g) => !g.income)
+      .flatMap((g) => g.categories.filter((c) => /^a receber$/i.test(g.name.trim()) || /reembols/i.test(c.name)).map((c) => c.id)),
+  );
+}
+
+/** Which expenses haven't come back yet: money back pays off the oldest first. Amounts as in Actual (out < 0). */
+export function stillOwed(items: Snapshot['tx']) {
+  const sorted = [...items].sort((a, b) => a.date.localeCompare(b.date));
+  let back = sorted.filter((t) => t.amount > 0).reduce((s, t) => s + t.amount, 0);
+  const open: (Snapshot['tx'][number] & { left: number })[] = [];
+  for (const t of sorted) {
+    if (t.amount >= 0) continue;
+    const paid = Math.min(back, -t.amount);
+    back -= paid;
+    if (-t.amount > paid) open.push({ ...t, left: -t.amount - paid });
+  }
+  return open;
 }
 
 type Api = typeof import('@actual-app/api');
@@ -80,6 +108,15 @@ async function load(budget: MoneyBudget, bankSync: boolean): Promise<Snapshot> {
   const end = '2999-12-31';
 
   const payees = new Map((await api.getPayees()).map((p) => [p.id, p.name]));
+  const groups = (await api.getCategoryGroups()).map((g) => ({
+    id: g.id,
+    name: g.name,
+    income: !!g.is_income,
+    hidden: !!g.hidden,
+    categories: (g.categories ?? []).map((c) => ({ id: c.id, name: c.name })),
+  }));
+  const owedCats = reimbursable(groups);
+  const owed: Snapshot['tx'] = [];
   const accounts: Snapshot['accounts'] = [];
   const tx: Snapshot['tx'] = [];
   const review: Snapshot['review'] = [];
@@ -106,6 +143,15 @@ async function load(budget: MoneyBudget, bankSync: boolean): Promise<Snapshot> {
       }
     }
     if (a.offbudget) continue;
+    for (const t of all) {
+      if (t.transfer_id || t.starting_balance_flag || t.is_child) continue;
+      const split = !!t.subtransactions?.length;
+      for (const p of split ? t.subtransactions! : [t]) {
+        if (!p.category || !owedCats.has(p.category)) continue;
+        const payee = (t.payee && payees.get(t.payee)) || t.imported_payee || '';
+        owed.push({ id: p.id, accountId: a.id, fixable: !split, review: REVIEW_TAG.test(p.notes ?? ''), note: withoutReviewTag(p.notes), date: t.date, amount: p.amount, account: a.name, category: p.category, payee });
+      }
+    }
     for (const t of await api.getTransactions(a.id, start, end)) {
       if (t.transfer_id || t.starting_balance_flag) continue;
       if (!dataFrom || t.date < dataFrom) dataFrom = t.date;
@@ -119,13 +165,6 @@ async function load(budget: MoneyBudget, bankSync: boolean): Promise<Snapshot> {
       }
     }
   }
-  const groups = (await api.getCategoryGroups()).map((g) => ({
-    id: g.id,
-    name: g.name,
-    income: !!g.is_income,
-    hidden: !!g.hidden,
-    categories: (g.categories ?? []).map((c) => ({ id: c.id, name: c.name })),
-  }));
   // Actual keeps the bank link of each account (when it last synced, and whether that worked); getAccounts
   // leaves it out, so ask for it.
   type Link = { name: string; closed: boolean; last_sync: string | null; account_sync_source: string | null; bank_sync_status: string | null };
@@ -140,7 +179,8 @@ async function load(budget: MoneyBudget, bankSync: boolean): Promise<Snapshot> {
   }));
   const synced = bankLinks.map((a) => a.lastSync).filter((d): d is string => !!d).sort();
   const bankSyncedAt = synced.at(-1) ?? null;
-  return { fetchedAt: new Date().toISOString(), accounts, groups, tx, dataFrom, review, bankSyncedAt, bankLinks };
+  owed.sort((x, y) => x.date.localeCompare(y.date));
+  return { fetchedAt: new Date().toISOString(), accounts, groups, tx, dataFrom, review, bankSyncedAt, bankLinks, owed };
 }
 
 /** Fetches every configured budget. Called on a timer and, the first time, by the page. */
@@ -291,7 +331,9 @@ export function summarise(snap: Snapshot, budget: MoneyBudget, budgets: MoneyBud
   for (const g of snap.groups) for (const c of g.categories) groupOf.set(c.id, { groupId: g.id, groupName: g.name, name: c.name });
 
   // Spending: expenses count, refunds in an expense category count back; income and unknown money in don't.
-  const spending = snap.tx.filter((t) => (t.category ? !incomeCats.has(t.category) : t.amount < 0));
+  // Money paid for someone else that comes back (e.g. the company) isn't household spending either.
+  const owedCats = reimbursable(snap.groups);
+  const spending = snap.tx.filter((t) => (t.category ? !incomeCats.has(t.category) && !owedCats.has(t.category) : t.amount < 0));
   const usedCats = new Set(spending.map((t) => t.category));
   // Money in: income categories, and money in without a category (shown apart, it may be a refund or a transfer).
   const catName = new Map(snap.groups.flatMap((g) => g.categories.map((c) => [c.id, c.name] as const)));
@@ -375,6 +417,16 @@ export function summarise(snap: Snapshot, budget: MoneyBudget, budgets: MoneyBud
       .sort((a, b) => b.date.localeCompare(a.date)),
     // Spending groups first, then income, as in Actual.
     worth: netWorth(snap, today),
+    owed: (() => {
+      const items = snap.owed ?? [];
+      if (!owedCats.size || !items.length) return null;
+      const tx = (t: Snapshot['tx'][number], amount: number) => ({ id: t.id, categoryId: t.category, fixable: t.fixable, review: t.review, note: t.note, date: t.date, payee: t.payee, account: t.account, groupId: 'owed', category: (t.category && catName.get(t.category)) || '', amount });
+      return {
+        total: -items.reduce((s, t) => s + t.amount, 0),
+        open: stillOwed(items).map((t) => tx(t, t.left)).reverse(),
+        recent: items.slice(-30).reverse().map((t) => tx(t, -t.amount)),
+      };
+    })(),
     pickable: [...snap.groups.filter((g) => !g.hidden && !g.income), ...snap.groups.filter((g) => !g.hidden && g.income)]
       .map((g) => ({ id: g.id, name: g.name, categories: g.categories })),
   };

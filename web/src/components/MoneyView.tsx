@@ -41,6 +41,7 @@ export function MoneyView({ meName }: { meName: string }) {
   const [reviewing, setReviewing] = useState(false);
   const [source, setSource] = useState<string | null>(null); // an income source, to list its transactions
   const [holdingsOpen, setHoldingsOpen] = useState(false);
+  const [owedOpen, setOwedOpen] = useState(false);
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(() => {
@@ -111,7 +112,7 @@ export function MoneyView({ meName }: { meName: string }) {
 
       {data && (
         <>
-          <BalanceCard data={data} busy={busy} onRefresh={refresh} />
+          <BalanceCard data={data} busy={busy} onRefresh={refresh} onOwed={() => setOwedOpen(true)} />
           <div className="month-bar">
             <button className="round ghost" aria-label="Previous month" disabled={at <= 0} onClick={() => go(-1)}>
               <Icon name="left" />
@@ -145,6 +146,23 @@ export function MoneyView({ meName }: { meName: string }) {
       {source && data && (
         <Sheet title={`${source} · ${eur(data.income.sources.find((x) => x.name === source)?.amount ?? 0)}`} onClose={() => setSource(null)}>
           <TxList tx={data.income.transactions.filter((t) => sourceOf(t) === source)} showCategory={false} edit={{ data, budget, onChanged: load }} />
+        </Sheet>
+      )}
+      {owedOpen && data?.owed && (
+        <Sheet title={`To come back · ${eur(data.owed.total)}`} onClose={() => setOwedOpen(false)}>
+          {data.owed.open.length > 0 ? (
+            <>
+              <h3 className="sheet-sub">Not paid back yet</h3>
+              <TxList tx={data.owed.open} showCategory={false} />
+            </>
+          ) : (
+            <p className="muted">Everything has come back ✓</p>
+          )}
+          <h3 className="sheet-sub">Latest</h3>
+          <TxList tx={data.owed.recent} showCategory edit={{ data, budget, onChanged: load }} />
+          <p className="muted small money-note">
+            Paid for the company (or anyone else) and to come back: categories in the "A receber" group, or with "reembolso" in the name. They don't count as spending. Give the money back the same category, and the oldest expenses count as paid first.
+          </p>
         </Sheet>
       )}
       {holdingsOpen && <HoldingsSheet onClose={() => setHoldingsOpen(false)} onSaved={load} />}
@@ -540,7 +558,7 @@ function IncomeCard({ data, onOpen }: { data: MoneySummary; onOpen: (source: str
 const saving = (d: MoneySummary) => d.accounts.filter((a) => a.offBudget && a.balance >= 0);
 const debts = (d: MoneySummary) => d.accounts.filter((a) => a.offBudget && a.balance < 0);
 
-function BalanceCard({ data, busy, onRefresh }: { data: MoneySummary; busy: boolean; onRefresh: () => void }) {
+function BalanceCard({ data, busy, onRefresh, onOwed }: { data: MoneySummary; busy: boolean; onRefresh: () => void; onOwed: () => void }) {
   const [showAll, setShowAll] = useState(false);
   const onBudget = data.accounts.filter((a) => !a.offBudget);
   const total = onBudget.reduce((s, a) => s + a.balance, 0);
@@ -555,6 +573,12 @@ function BalanceCard({ data, busy, onRefresh }: { data: MoneySummary; busy: bool
       </div>
       <div className={`balance-num ${total < 0 ? 'neg' : ''}`}>{eur(total)}</div>
       {saved > 0 && <p className="balance-saved">+ {eur(saved)} in savings &amp; investments</p>}
+      {data.owed && data.owed.total !== 0 && (
+        <button className="balance-owed" onClick={onOwed}>
+          {data.owed.total > 0 ? `+ ${eur(data.owed.total)} to come back` : `${eur(-data.owed.total)} came back more than was paid`}
+          <Icon name="right" size={14} />
+        </button>
+      )}
       <button className="balance-toggle" aria-expanded={showAll} onClick={() => setShowAll(!showAll)}>
         {showAll ? 'Hide accounts' : `${onBudget.length} account${onBudget.length === 1 ? '' : 's'}`}
         <Icon name={showAll ? 'up' : 'down'} size={16} />

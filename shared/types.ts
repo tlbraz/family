@@ -203,6 +203,12 @@ export interface MoneySummary {
   review: MoneyTransaction[]; // tagged #review in Actual, any month: still to be checked
   pickable: { id: string; name: string; categories: { id: string; name: string }[] }[]; // for the category picker
   worth: MoneyWorth | null; // net worth over the last year
+  // Paid for someone else and to come back (categories in "A receber", or named "Reembolso…"); not spending.
+  owed: {
+    total: number; // still to come back (cents; below zero if more came back than was paid)
+    open: MoneyTransaction[]; // the expenses not paid back yet (amount = what's left), newest first
+    recent: MoneyTransaction[]; // the latest payments and money back, newest first (money back < 0)
+  } | null;
 }
 
 /** Net worth day by day (cents): budget accounts (cash) and savings & investments. Debts are left out. */
