@@ -254,3 +254,25 @@ export interface MoneyHoldings {
   last: Record<string, { date: string; note: string }>; // when each account was last valued
   accounts: string[]; // off-budget accounts in Actual, to pick names from
 }
+
+/** A document waiting in the Paperless inbox (company Money tab). */
+export interface PaperlessDoc {
+  id: number;
+  title: string;
+  correspondent: string | null;
+  type: string | null; // document type
+  tags: string[]; // other than the inbox tag
+  created: string; // YYYY-MM-DD, the document's own date
+  added: string; // when it came into Paperless (ISO)
+  pages: number | null;
+  asn: number | null; // archive serial number
+  fields: { name: string; value: string }[]; // custom fields, as text
+  note: string | null; // the latest note
+  url: string; // to open it in Paperless
+}
+
+export interface PaperlessInbox {
+  count: number;
+  documents: PaperlessDoc[]; // the newest 50
+  url: string; // the inbox in Paperless
+}

@@ -47,6 +47,10 @@ Install it on a phone with *Share → Add to Home Screen*.
   Yahoo symbols in euros with their units, plus cash. From 08:00 each day, and right after saving, units × the price
   from Yahoo Finance is written into that account in Actual. Update the units when you buy or sell. (`HOLDINGS` in the
   environment, e.g. `DEGIRO=VWCE.DE:120,cash:250; …`, is only used until the list is saved from the app.)
+- **Paperless inbox** on the Empresa tab (`PAPERLESS_URL`, `PAPERLESS_TOKEN`; optional `PAPERLESS_PUBLIC_URL` for
+  the browser links and `PAPERLESS_INBOX_TAG`, default "inbox"): how many documents still carry the inbox tag (also on
+  the Empresa switch), and a list with their correspondent, type, dates, custom fields, tags, latest note, thumbnail and
+  a link to each in Paperless. Read only; the token stays on the server.
 - **Tap someone** for their profile. Parents also see their documents (Cartão de Cidadão, NIF, NISS, utente, passport,
   driving licence…) with copy buttons, expiry warnings and a link to the scan in Paperless. Served only to signed-in parents.
 - **Telegram** (`TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`): 07:30 "today" message, 20:00 "tomorrow" message with
