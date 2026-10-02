@@ -11,6 +11,19 @@
     <link rel="apple-touch-icon" href="/icon-180.png" />
     <link rel="manifest" href="/manifest.webmanifest" />
     <title>Family</title>
+    <script>
+      // A page kept from before a deploy can ask for a script that no longer exists: reload once to get the new one.
+      addEventListener('error', function (e) {
+        var t = e.target;
+        if (!t || (t.tagName !== 'SCRIPT' && t.tagName !== 'LINK')) return;
+        try {
+          var last = Number(sessionStorage.getItem('family:reloaded') || 0);
+          if (Date.now() - last < 30000) return;
+          sessionStorage.setItem('family:reloaded', String(Date.now()));
+        } catch (_) {}
+        location.reload();
+      }, true);
+    </script>
   </head>
   <body>
     <div id="root"></div>

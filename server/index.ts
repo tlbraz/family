@@ -38,9 +38,21 @@ app.use('*', async (c, next) => {
 });
 // Phones that installed the app before the share target moved to /api/share still post here.
 app.post('/share', (c) => app.fetch(new Request(new URL('/api/share', c.req.url), c.req.raw)));
-// The built web app; unknown paths fall back to index.html so client-side routes work.
-app.use('/*', serveStatic({ root: './dist/web' }));
-app.get('*', serveStatic({ path: './dist/web/index.html' }));
+// The built web app. Its scripts and styles have the content hash in the name: cache them for good, and answer 404
+// for one that's gone (a page from before a deploy asking for an old script must fail loudly, not get the page back
+// as "JavaScript" and go blank). The page itself is never cached, so a deploy is picked up on the next load.
+app.use('/assets/*', async (c, next) => {
+  await next();
+  if (c.res.status === 200) c.header('cache-control', 'public, max-age=31536000, immutable');
+});
+app.use('/assets/*', serveStatic({ root: './dist/web' }));
+app.get('/assets/*', (c) => c.text('Not found', 404));
+const noCache = serveStatic({ path: './dist/web/index.html', onFound: (_path, c) => c.header('cache-control', 'no-cache') });
+app.get('/', noCache);
+app.get('/index.html', noCache);
+app.use('/*', serveStatic({ root: './dist/web', onFound: (_path, c) => c.header('cache-control', 'no-cache') }));
+// Unknown paths fall back to the page so client-side routes work.
+app.get('*', noCache);
 
 const port = Number(process.env.PORT ?? 3000);
 const server = serve({ fetch: app.fetch, port }, () =>
