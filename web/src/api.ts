@@ -104,16 +104,8 @@ export const api = {
     return request<DocsPage>(`/docs?${p}`);
   },
   doc: (id: number) => request<PaperlessDetail>(`/docs/${id}`),
-  saveDoc: (id: number, change: { title?: string; created?: string; correspondent?: number | null; type?: number | null; tags?: number[]; approve?: boolean }) =>
+  saveDoc: (id: number, change: { tags?: number[]; approve?: boolean }) =>
     request<PaperlessDetail>(`/docs/${id}`, json('PATCH', change)),
-  uploadDocs: async (files: File[]) => {
-    const form = new FormData();
-    for (const f of files) form.append('file', f, f.name);
-    const res = await fetch('/api/docs/upload', { method: 'POST', body: form });
-    const body = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(body.error ?? `Something went wrong (${res.status})`);
-    return body as { ok: true; sent: number };
-  },
   paperless: () => request<PaperlessInbox>('/money/paperless'),
   editMoney: (budget: MoneyBudget, id: string, change: { category?: string; review?: boolean; note?: string }) => request<{ ok: true }>('/money/edit', json('POST', { budget, id, ...change })),
 

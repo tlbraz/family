@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { fieldText, forgetLookups, highlightParts, paperlessInbox, searchDocs, updateDoc, uploadDoc } from './paperless';
+import { fieldText, forgetLookups, highlightParts, paperlessInbox, searchDocs, updateDoc } from './paperless';
 
 const page = (results: unknown[]) => ({ count: results.length, results });
 const api: Record<string, unknown> = {
@@ -22,7 +22,6 @@ const fake = (async (url: string, init?: RequestInit) => {
   const { pathname, searchParams } = new URL(url);
   calls.push(`${init?.method ?? 'GET'} ${pathname}?${searchParams}`);
   if (init?.method === 'PATCH') { sentBodies.push(JSON.parse(String(init.body))); return new Response('{}'); }
-  if (init?.method === 'POST') { sentBodies.push((init.body as FormData).get('document')); return new Response('"task-123"'); }
   if (pathname === '/api/documents/40/') return new Response(JSON.stringify((api['/api/documents/'] as { results: unknown[] }).results[0]));
   expect((init?.headers as Record<string, string>).Authorization).toBe('Token secret');
   const body = api[pathname];
@@ -72,15 +71,11 @@ describe('paperless inbox', () => {
   });
 
   it('approving takes the inbox tag off and keeps the rest', async () => {
-    await updateDoc(40, { title: ' Jantar ', approve: true }, fake);
+    await updateDoc(40, { approve: true }, fake);
     expect(calls.at(-1)).toMatch(/^PATCH \/api\/documents\/40\//);
-    expect(sentBodies.at(-1)).toEqual({ title: 'Jantar', tags: [2] });
-    await expect(updateDoc(40, { created: '28/09/2026' }, fake)).rejects.toThrow('2026-09-28');
-  });
-
-  it('sends a file to Paperless', async () => {
-    expect(await uploadDoc(new Blob(['x']), 'recibo.jpg', fake)).toBe('task-123');
-    expect((sentBodies.at(-1) as File).name).toBe('recibo.jpg');
+    expect(sentBodies.at(-1)).toEqual({ tags: [2] });
+    await updateDoc(40, { tags: [1, 2, 2, 5] }, fake); // only tags are ever sent
+    expect(sentBodies.at(-1)).toEqual({ tags: [1, 2, 5] });
   });
 
   it('turns custom field values into text', () => {

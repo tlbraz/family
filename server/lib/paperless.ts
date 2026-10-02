@@ -1,6 +1,6 @@
 import type { DocsMeta, DocsPage, PaperlessDetail, PaperlessDoc, PaperlessInbox } from '../../shared/types';
 
-// Paperless-ngx behind the Docs tab (and the inbox count on the company's Money tab).
+// Paperless-ngx behind the Docs tab (and the inbox count on the company's Money tab). Reading, plus changing tags.
 //   PAPERLESS_URL         where the server reaches Paperless (e.g. http://paperless.lan:8000)
 //   PAPERLESS_TOKEN       an API token (Paperless → your profile → API Auth Token)
 //   PAPERLESS_PUBLIC_URL  the address to open documents in the browser (default PAPERLESS_URL)
@@ -183,36 +183,19 @@ export async function docDetail(id: number, get: Fetch = fetch): Promise<Paperle
   };
 }
 
-export interface DocChange { title?: string; created?: string; correspondent?: number | null; type?: number | null; tags?: number[]; approve?: boolean }
+export interface DocChange { tags?: number[]; approve?: boolean }
 
-/** Saves changes to a document; "approve" also takes the inbox tag off. */
+/** Changes a document's tags; "approve" takes the inbox tag off. Nothing else is changed from the app. */
 export async function updateDoc(id: number, change: DocChange, get: Fetch = fetch) {
   const n = await lookups(get);
   const inbox = inboxTagOf(n);
-  const body: Record<string, unknown> = {};
-  if (change.title !== undefined) body.title = change.title.trim().slice(0, 128);
-  if (change.created !== undefined) {
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(change.created)) throw new PaperlessError('The date should look like 2026-09-28');
-    body.created = change.created;
-  }
-  if (change.correspondent !== undefined) body.correspondent = change.correspondent;
-  if (change.type !== undefined) body.document_type = change.type;
   let tags = change.tags;
   if (change.approve) {
     tags ??= (await json<Doc>(`/api/documents/${id}/`, get)).tags;
     tags = tags.filter((t) => t !== inbox?.id);
   }
-  if (tags !== undefined) body.tags = [...new Set(tags)];
-  if (!Object.keys(body).length) return;
-  await paperlessFetch(`/api/documents/${id}/`, get, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
-}
-
-/** Hands a file to Paperless, which reads it in the background; it then shows up in the inbox. */
-export async function uploadDoc(file: Blob, filename: string, get: Fetch = fetch): Promise<string> {
-  const form = new FormData();
-  form.append('document', file, filename);
-  const res = await paperlessFetch('/api/documents/post_document/', get, { method: 'POST', body: form });
-  return String(await res.text()).replace(/"/g, '');
+  if (tags === undefined) return;
+  await paperlessFetch(`/api/documents/${id}/`, get, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ tags: [...new Set(tags)] }) });
 }
 
 /** The newest inbox documents and how many there are (for the company Money tab). */

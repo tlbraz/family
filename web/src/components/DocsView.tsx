@@ -1,11 +1,11 @@
-import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useState } from 'react';
 import type { DocsMeta, DocsName, PaperlessDetail, PaperlessDoc } from '../../../shared/types';
 import { api } from '../api';
 import { Icon } from './Icon';
 import { Sheet } from './Sheet';
 
-// The Docs tab: Paperless in the app. Search, look at and download documents, approve what's in the inbox, and
-// send photos or PDFs from the phone. Parents only; everything goes through the server (the token stays there).
+// The Docs tab: Paperless in the app. Search, look at and download documents, change their tags and approve what's
+// in the inbox. Nothing is added or otherwise edited from here. Parents only; the token stays on the server.
 
 const shortDate = (d: string) => new Date(`${d.slice(0, 10)}T12:00`).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 type Filters = { tag?: number; type?: number; correspondent?: number };
@@ -24,9 +24,6 @@ export function DocsView() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [openId, setOpenId] = useState<number | null>(null);
-  const [sent, setSent] = useState<string | null>(null);
-  const [uploading, setUploading] = useState(false);
-  const fileInput = useRef<HTMLInputElement>(null);
 
   const loadCount = useCallback(() => api.docs({ inbox: true }).then((p) => { setInboxCount(p.count); return p.count; }), []);
 
@@ -67,24 +64,6 @@ export function DocsView() {
     void loadCount().catch(() => {});
   };
 
-  async function upload(files: FileList | null) {
-    if (!files?.length) return;
-    setUploading(true);
-    setSent(null);
-    try {
-      const r = await api.uploadDocs([...files]);
-      setSent(`Sent ${r.sent === 1 ? 'it' : `${r.sent} files`} to Paperless. ${r.sent === 1 ? 'It shows' : 'They show'} in the inbox once read, usually within a minute.`);
-      // Paperless reads in the background: look again in a bit.
-      setTimeout(refresh, 30_000);
-      setTimeout(refresh, 90_000);
-    } catch (e) {
-      setSent((e as Error).message);
-    } finally {
-      setUploading(false);
-      if (fileInput.current) fileInput.current.value = '';
-    }
-  }
-
   const filtered = !!(filters.tag || filters.type || filters.correspondent);
   const nameIn = (list: DocsName[] | undefined, id?: number) => list?.find((x) => x.id === id)?.name;
 
@@ -95,12 +74,7 @@ export function DocsView() {
           <span className="eyebrow">Only parents see this</span>
           <h1>Docs</h1>
         </div>
-        <label className={`chip docs-add ${uploading ? 'busy' : ''}`}>
-          <Icon name="camera" size={18} /> {uploading ? 'Sending…' : 'Add'}
-          <input ref={fileInput} type="file" accept="image/*,application/pdf" multiple hidden disabled={uploading} onChange={(e) => void upload(e.target.files)} />
-        </label>
       </header>
-      {sent && <p className="docs-sent small" role="status">{sent}</p>}
 
       <div className="docs-search">
         <Icon name="search" size={18} />
@@ -202,9 +176,8 @@ export function DocsView() {
 function DocSheet({ id, meta, onClose, onChanged }: { id: number; meta: DocsMeta; onClose: () => void; onChanged: (approved: boolean) => void }) {
   const [doc, setDoc] = useState<PaperlessDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [editing, setEditing] = useState(false);
   useEffect(() => {
-    api.doc(id).then((d) => { setDoc(d); setEditing(d.inbox); }).catch((e: Error) => setError(e.message));
+    api.doc(id).then(setDoc).catch((e: Error) => setError(e.message));
   }, [id]);
 
   return (
@@ -222,22 +195,15 @@ function DocSheet({ id, meta, onClose, onChanged }: { id: number; meta: DocsMeta
             <a className="chip" href={doc.url} target="_blank" rel="noreferrer"><Icon name="open" size={16} /> Paperless</a>
           </div>
 
-          {doc.inbox && <p className="doc-inbox-note small"><Icon name="inbox" size={16} /> In the inbox: check the details, then approve.</p>}
+          {doc.inbox && <p className="doc-inbox-note small"><Icon name="inbox" size={16} /> In the inbox: check it, fix the tags if needed, then approve.</p>}
 
-          {editing ? (
-            <DocEditor doc={doc} meta={meta} onCancel={doc.inbox ? undefined : () => setEditing(false)} onSaved={(d, approved) => { setDoc(d); setEditing(d.inbox); onChanged(approved); }} />
-          ) : (
-            <>
-              <dl className="doc-meta">
-                <dt>From</dt><dd>{doc.correspondent ?? '—'}</dd>
-                <dt>Type</dt><dd>{doc.type ?? '—'}</dd>
-                <dt>Date</dt><dd>{shortDate(doc.created)}</dd>
-                {doc.tags.length > 0 && <><dt>Tags</dt><dd>{doc.tags.join(', ')}</dd></>}
-                {doc.fields.map((f) => <Fragment key={f.name}><dt>{f.name}</dt><dd>{f.value}</dd></Fragment>)}
-              </dl>
-              <button className="chip" onClick={() => setEditing(true)}><Icon name="edit" size={16} /> Edit details</button>
-            </>
-          )}
+          <dl className="doc-meta">
+            <dt>From</dt><dd>{doc.correspondent ?? '—'}</dd>
+            <dt>Type</dt><dd>{doc.type ?? '—'}</dd>
+            <dt>Date</dt><dd>{shortDate(doc.created)}</dd>
+            {doc.fields.map((f) => <Fragment key={f.name}><dt>{f.name}</dt><dd>{f.value}</dd></Fragment>)}
+          </dl>
+          <TagEditor doc={doc} meta={meta} onSaved={(d, approved) => { setDoc(d); onChanged(approved); }} />
 
           <dl className="doc-meta quiet">
             <dt>Added</dt><dd>{shortDate(doc.added)}</dd>
@@ -263,16 +229,15 @@ function DocSheet({ id, meta, onClose, onChanged }: { id: number; meta: DocsMeta
   );
 }
 
-/** Title, date, from, type and tags, with Paperless's suggestions one tap away. */
-function DocEditor({ doc, meta, onCancel, onSaved }: { doc: PaperlessDetail; meta: DocsMeta; onCancel?: () => void; onSaved: (d: PaperlessDetail, approved: boolean) => void }) {
-  const [title, setTitle] = useState(doc.title);
-  const [created, setCreated] = useState(doc.created);
-  const [correspondent, setCorrespondent] = useState<number | null>(doc.correspondentId);
-  const [type, setType] = useState<number | null>(doc.typeId);
-  const [tags, setTags] = useState<number[]>(doc.tagIds.filter((t) => t !== meta.inboxTag));
+/** The tags (Paperless's suggestions one tap away) and, for the inbox, Approve. The only changes made from here. */
+function TagEditor({ doc, meta, onSaved }: { doc: PaperlessDetail; meta: DocsMeta; onSaved: (d: PaperlessDetail, approved: boolean) => void }) {
+  const initial = doc.tagIds.filter((t) => t !== meta.inboxTag);
+  const [tags, setTags] = useState<number[]>(initial);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const s = doc.suggestions;
+  useEffect(() => setTags(doc.tagIds.filter((t) => t !== meta.inboxTag)), [doc, meta.inboxTag]);
+  const changed = tags.length !== initial.length || tags.some((t) => !initial.includes(t));
+  const name = (id: number) => meta.tags.find((x) => x.id === id)?.name ?? String(id);
 
   async function save(approve: boolean) {
     setBusy(true);
@@ -280,58 +245,28 @@ function DocEditor({ doc, meta, onCancel, onSaved }: { doc: PaperlessDetail; met
     try {
       // Keep the inbox tag unless approving (the server takes it off then).
       const keep = doc.inbox && !approve && meta.inboxTag ? [...tags, meta.inboxTag] : tags;
-      onSaved(await api.saveDoc(doc.id, { title, created, correspondent, type, tags: keep, approve }), approve);
+      onSaved(await api.saveDoc(doc.id, { tags: keep, approve }), approve);
     } catch (e) {
       setError((e as Error).message);
     } finally {
       setBusy(false);
     }
   }
-  const suggest = (list: DocsName[], current: number | null, set: (id: number) => void) =>
-    list.filter((x) => x.id !== current).length > 0 && (
-      <span className="doc-suggest">
-        {list.filter((x) => x.id !== current).map((x) => <button key={x.id} type="button" className="paper-chip sug" onClick={() => set(x.id)}>+ {x.name}</button>)}
-      </span>
-    );
 
   return (
-    <form className="doc-edit" onSubmit={(e) => { e.preventDefault(); void save(doc.inbox); }}>
-      <label>
-        <span className="muted small">Title</span>
-        <input value={title} onChange={(e) => setTitle(e.target.value)} maxLength={128} required />
-      </label>
-      <label>
-        <span className="muted small">Date of the document</span>
-        <input type="date" value={created} onChange={(e) => setCreated(e.target.value)} required />
-        {s.dates.filter((d) => d !== created).length > 0 && (
-          <span className="doc-suggest">{s.dates.filter((d) => d !== created).map((d) => <button key={d} type="button" className="paper-chip sug" onClick={() => setCreated(d)}>{shortDate(d)}</button>)}</span>
-        )}
-      </label>
-      <label>
-        <span className="muted small">From</span>
-        <select value={correspondent ?? ''} onChange={(e) => setCorrespondent(Number(e.target.value) || null)}>
-          <option value="">—</option>
-          {meta.correspondents.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
-        </select>
-        {suggest(s.correspondents, correspondent, setCorrespondent)}
-      </label>
-      <label>
-        <span className="muted small">Type</span>
-        <select value={type ?? ''} onChange={(e) => setType(Number(e.target.value) || null)}>
-          <option value="">—</option>
-          {meta.types.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
-        </select>
-        {suggest(s.types, type, setType)}
-      </label>
+    <div className="doc-edit">
       <div className="doc-tags">
         <span className="muted small">Tags</span>
         <span className="doc-suggest">
           {tags.map((t) => (
-            <button key={t} type="button" className="paper-chip on" onClick={() => setTags(tags.filter((x) => x !== t))} aria-label={`Remove ${meta.tags.find((x) => x.id === t)?.name}`}>
-              {meta.tags.find((x) => x.id === t)?.name ?? t} ×
+            <button key={t} type="button" className="paper-chip on" onClick={() => setTags(tags.filter((x) => x !== t))} aria-label={`Remove ${name(t)}`}>
+              {name(t)} ×
             </button>
           ))}
-          {s.tags.filter((t) => !tags.includes(t.id)).map((t) => <button key={t.id} type="button" className="paper-chip sug" onClick={() => setTags([...tags, t.id])}>+ {t.name}</button>)}
+          {!tags.length && <span className="muted small">None</span>}
+          {doc.suggestions.tags.filter((t) => !tags.includes(t.id)).map((t) => (
+            <button key={t.id} type="button" className="paper-chip sug" onClick={() => setTags([...tags, t.id])}>+ {t.name}</button>
+          ))}
         </span>
         <select value="" onChange={(e) => e.target.value && setTags([...tags, Number(e.target.value)])} aria-label="Add a tag">
           <option value="">Add a tag…</option>
@@ -339,17 +274,12 @@ function DocEditor({ doc, meta, onCancel, onSaved }: { doc: PaperlessDetail; met
         </select>
       </div>
       {error && <p className="error small">{error}</p>}
-      <div className="review-actions">
-        {onCancel && <button type="button" className="chip" disabled={busy} onClick={onCancel}>Cancel</button>}
-        {doc.inbox ? (
-          <>
-            <button type="button" className="chip" disabled={busy} onClick={() => void save(false)}>Save</button>
-            <button type="submit" className="primary" disabled={busy}>{busy ? 'Saving…' : 'Approve ✓'}</button>
-          </>
-        ) : (
-          <button type="submit" className="primary" disabled={busy}>{busy ? 'Saving…' : 'Save'}</button>
-        )}
-      </div>
-    </form>
+      {(changed || doc.inbox) && (
+        <div className="review-actions">
+          {changed && <button type="button" className={doc.inbox ? 'chip' : 'primary'} disabled={busy} onClick={() => void save(false)}>{busy ? 'Saving…' : 'Save tags'}</button>}
+          {doc.inbox && <button type="button" className="primary" disabled={busy} onClick={() => void save(true)}>{busy ? 'Saving…' : 'Approve ✓'}</button>}
+        </div>
+      )}
+    </div>
   );
 }
