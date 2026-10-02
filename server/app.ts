@@ -6,7 +6,7 @@ import { AiError, draftEvent, aiEnabled, type ImageInput } from './lib/ai';
 import { type AuthEnv, loadMember, requireParent } from './lib/auth';
 import { todayDigest, tomorrowDigest, weekDigest } from './lib/digest';
 import { googleEnabled, googleStatus, saveGoogleKey, syncRound } from './lib/google';
-import { paperlessEnabled, paperlessInbox } from './lib/paperless';
+import { paperlessEnabled } from './lib/paperless';
 import { cleanHoldings, lastValuations, loadHoldings, revalueNow, saveHoldings } from './lib/valuations';
 import { budgetsFor, editTransaction, linkTransfer, moneyEnabled, moneySnapshot, refreshMoney, ReviewError, reviewTransaction, summarise } from './lib/money';
 import { addTelegramChat, removeTelegramChat, sendTelegram, telegramStatus } from './lib/telegram';
@@ -180,17 +180,6 @@ export function createApp(db: Db, hooks: AppHooks = noop) {
       return c.json({ ok: true });
     } catch (e) {
       return c.json({ error: (e as Error).message }, e instanceof ReviewError ? 400 : 503);
-    }
-  });
-  // The Paperless inbox (documents still to review), on the company's Money tab: its viewers only.
-  const companyViewer = (name: string) => budgetsFor(name).includes('company');
-  api.get('/money/paperless', requireParent, async (c) => {
-    if (!paperlessEnabled()) return c.json({ error: 'Paperless is not set up on the server' }, 404);
-    if (!companyViewer(c.get('me')!.name)) return c.json({ error: 'Not available' }, 403);
-    try {
-      return c.json(await paperlessInbox());
-    } catch (e) {
-      return c.json({ error: (e as Error).message }, 503);
     }
   });
   // What the investment accounts hold, for the daily values (edited on the Money tab).

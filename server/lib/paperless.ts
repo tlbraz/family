@@ -1,6 +1,6 @@
-import type { DocsMeta, DocsPage, PaperlessDetail, PaperlessDoc, PaperlessInbox } from '../../shared/types';
+import type { DocsMeta, DocsPage, PaperlessDetail, PaperlessDoc } from '../../shared/types';
 
-// Paperless-ngx behind the Docs tab (and the inbox count on the company's Money tab). Reading, plus changing tags.
+// Paperless-ngx behind the Docs tab. Reading, plus changing tags.
 //   PAPERLESS_URL         where the server reaches Paperless (e.g. http://paperless.lan:8000)
 //   PAPERLESS_TOKEN       an API token (Paperless → your profile → API Auth Token)
 //   PAPERLESS_PUBLIC_URL  the address to open documents in the browser (default PAPERLESS_URL)
@@ -199,13 +199,4 @@ export async function updateDoc(id: number, change: DocChange, get: Fetch = fetc
   }
   if (tags === undefined) return;
   await paperlessFetch(`/api/documents/${id}/`, get, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ tags: [...new Set(tags)] }) });
-}
-
-/** The newest inbox documents and how many there are (for the company Money tab). */
-export async function paperlessInbox(get: Fetch = fetch): Promise<PaperlessInbox> {
-  const n = await lookups(get);
-  const inbox = inboxTagOf(n);
-  if (!inbox) throw new PaperlessError(`Paperless has no tag called "${process.env.PAPERLESS_INBOX_TAG || 'inbox'}"`);
-  const page = await json<Page<Doc>>(`/api/documents/?tags__id__all=${inbox.id}&ordering=-added&page_size=50&truncate_content=true`, get);
-  return { count: page.count, documents: page.results.map((d) => toDoc(d, n, inbox.id)), url: `${publicBase()}/documents?tags__id__all=${inbox.id}&sort=added&reverse=1` };
 }

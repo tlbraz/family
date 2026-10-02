@@ -255,7 +255,7 @@ export interface MoneyHoldings {
   accounts: string[]; // off-budget accounts in Actual, to pick names from
 }
 
-/** A document in Paperless (Docs tab, and the inbox on the company Money tab). */
+/** A document in Paperless (Docs tab). */
 export interface PaperlessDoc {
   id: number;
   title: string;
@@ -302,10 +302,4 @@ export interface DocsPage {
   count: number;
   next: boolean; // more pages after this one
   documents: PaperlessDoc[];
-}
-
-export interface PaperlessInbox {
-  count: number;
-  documents: PaperlessDoc[]; // the newest 50
-  url: string; // the inbox in Paperless
 }

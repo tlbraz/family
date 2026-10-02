@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { fieldText, forgetLookups, highlightParts, paperlessInbox, searchDocs, updateDoc } from './paperless';
+import { fieldText, forgetLookups, highlightParts, searchDocs, updateDoc } from './paperless';
 
 const page = (results: unknown[]) => ({ count: results.length, results });
 const api: Record<string, unknown> = {
@@ -42,10 +42,9 @@ describe('paperless inbox', () => {
   });
 
   it('lists the documents tagged inbox with their names, fields and links', async () => {
-    const inbox = await paperlessInbox(fake);
+    const inbox = await searchDocs({ inbox: true }, fake);
     expect(calls.find((c) => c.startsWith('GET /api/documents/'))).toContain('tags__id__all=1');
     expect(inbox.count).toBe(12);
-    expect(inbox.url).toBe('https://paperless.home.tbraz.pt/documents?tags__id__all=1&sort=added&reverse=1');
     expect(inbox.documents[0]).toEqual({
       id: 40, title: 'Fatura FT 2026/118', correspondent: 'Continente', correspondentId: 7, type: 'Fatura', typeId: 3, tags: ['Empresa'], tagIds: [1, 2], inbox: true,
       created: '2026-09-28', added: '2026-09-30T08:12:00Z', pages: 1, asn: null,

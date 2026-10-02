@@ -1,4 +1,4 @@
-import type { GroceryList, AppConfig, CalendarEvent, EventDraft, EventInput, Health, Member, MemberDocument, MemberInput, MoneyBudget, MoneyHolding, MoneyHoldings, MoneySummary, PaperlessInbox, DocsMeta, DocsPage, PaperlessDetail, Occurrence, SearchResults, Task, TaskInput } from '../../shared/types';
+import type { GroceryList, AppConfig, CalendarEvent, EventDraft, EventInput, Health, Member, MemberDocument, MemberInput, MoneyBudget, MoneyHolding, MoneyHoldings, MoneySummary, DocsMeta, DocsPage, PaperlessDetail, Occurrence, SearchResults, Task, TaskInput } from '../../shared/types';
 
 export interface GoogleStatus {
   connected: boolean;
@@ -107,7 +107,6 @@ export const api = {
   doc: (id: number) => request<PaperlessDetail>(`/docs/${id}`),
   saveDoc: (id: number, change: { tags?: number[]; approve?: boolean }) =>
     request<PaperlessDetail>(`/docs/${id}`, json('PATCH', change)),
-  paperless: () => request<PaperlessInbox>('/money/paperless'),
   editMoney: (budget: MoneyBudget, id: string, change: { category?: string; review?: boolean; note?: string }) => request<{ ok: true }>('/money/edit', json('POST', { budget, id, ...change })),
 
 };

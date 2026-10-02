@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { MoneyBudget, MoneyGroup, MoneyHolding, MoneyHoldings, MoneySummary, MoneyTransaction, MoneyWorth, PaperlessInbox } from '../../../shared/types';
+import type { MoneyBudget, MoneyGroup, MoneyHolding, MoneyHoldings, MoneySummary, MoneyTransaction, MoneyWorth } from '../../../shared/types';
 import { api } from '../api';
 import { BillsCard, BillsSheet } from './Bills';
 import { Icon } from './Icon';
@@ -43,19 +43,6 @@ export function MoneyView({ meName }: { meName: string }) {
   const [source, setSource] = useState<string | null>(null); // an income source, to list its transactions
   const [holdingsOpen, setHoldingsOpen] = useState(false);
   const [owedOpen, setOwedOpen] = useState(false);
-  // The Paperless inbox (company documents to review); null when Paperless isn't set up or this isn't for us.
-  const [inbox, setInbox] = useState<PaperlessInbox | null>(null);
-  const [inboxError, setInboxError] = useState<string | null>(null);
-  const [inboxOpen, setInboxOpen] = useState(false);
-  const hasCompany = !!data?.budgets.includes('company');
-  const loadInbox = useCallback(() => {
-    api.paperless().then((x) => { setInbox(x); setInboxError(null); }).catch((e: Error) => {
-      if (!/not set up|Not available/.test(e.message)) setInboxError(e.message);
-    });
-  }, []);
-  useEffect(() => {
-    if (hasCompany) loadInbox();
-  }, [hasCompany, loadInbox]);
   const [billsOpen, setBillsOpen] = useState(false);
   const [busy, setBusy] = useState(false);
 
@@ -67,7 +54,6 @@ export function MoneyView({ meName }: { meName: string }) {
 
   async function refresh() {
     setBusy(true);
-    if (hasCompany) loadInbox();
     await api.refreshMoney().catch(() => {});
     setBusy(false);
     load();
@@ -113,7 +99,6 @@ export function MoneyView({ meName }: { meName: string }) {
           {data.budgets.map((b) => (
             <button key={b} className={budget === b ? 'on' : ''} aria-pressed={budget === b} onClick={() => { setBudget(b); setData(null); }}>
               {b === 'family' ? 'Família' : 'Empresa'}
-              {b === 'company' && !!inbox?.count && <span className="switch-count" aria-label={`${inbox.count} documents to review`}>{inbox.count}</span>}
             </button>
           ))}
         </div>
@@ -130,7 +115,6 @@ export function MoneyView({ meName }: { meName: string }) {
       {data && (
         <>
           <BalanceCard data={data} busy={busy} onRefresh={refresh} onOwed={() => setOwedOpen(true)} />
-          {company && (inbox || inboxError) && <PaperlessCard inbox={inbox} error={inboxError} onOpen={() => setInboxOpen(true)} onRetry={loadInbox} />}
           <div className="month-bar">
             <button className="round ghost" aria-label="Previous month" disabled={at <= 0} onClick={() => go(-1)}>
               <Icon name="left" />
@@ -168,7 +152,6 @@ export function MoneyView({ meName }: { meName: string }) {
           <TxList tx={data.income.transactions.filter((t) => sourceOf(t) === source)} showCategory={false} edit={{ data, budget, onChanged: load }} />
         </Sheet>
       )}
-      {inboxOpen && inbox && <PaperlessSheet inbox={inbox} onClose={() => setInboxOpen(false)} />}
       {owedOpen && data?.owed && (
         <Sheet title={`To come back · ${eur(data.owed.total)}`} onClose={() => setOwedOpen(false)}>
           {data.owed.open.length > 0 ? (
@@ -582,75 +565,6 @@ function TransfersCard({ data, budget, onChanged }: { data: MoneySummary; budget
       </ul>
       {error && <p className="error small">{error}</p>}
     </section>
-  );
-}
-
-/** How many documents wait in the Paperless inbox (to file, or to enter as an expense). */
-function PaperlessCard({ inbox, error, onOpen, onRetry }: { inbox: PaperlessInbox | null; error: string | null; onOpen: () => void; onRetry: () => void }) {
-  if (!inbox) {
-    return (
-      <section className="card money-card review done">
-        <span className="error small">Paperless: {error}</span>
-        <button className="chip" onClick={onRetry}>Try again</button>
-      </section>
-    );
-  }
-  if (!inbox.count) {
-    return (
-      <section className="card money-card review done">
-        <Icon name="check" size={18} /> <span>Paperless inbox is empty</span>
-      </section>
-    );
-  }
-  return (
-    <button className="card money-card review" onClick={onOpen}>
-      <span className="review-count">{inbox.count}</span>
-      <span className="review-text">
-        <b>{inbox.count === 1 ? 'document' : 'documents'} in the Paperless inbox</b>
-        <span className="muted small">newest {shortDate(inbox.documents[0]!.added.slice(0, 10))}</span>
-      </span>
-      <Icon name="right" />
-    </button>
-  );
-}
-
-/** The inbox documents with what Paperless knows about them, each a tap away from Paperless. */
-function PaperlessSheet({ inbox, onClose }: { inbox: PaperlessInbox; onClose: () => void }) {
-  return (
-    <Sheet title={`Paperless inbox · ${inbox.count}`} onClose={onClose}>
-      <ul className="paper-list">
-        {inbox.documents.map((d) => (
-          <li key={d.id} className="card doc paper">
-            <a className="paper-thumb" href={d.url} target="_blank" rel="noreferrer" aria-label={`Open ${d.title} in Paperless`}>
-              <img src={`/api/docs/${d.id}/thumb`} alt="" loading="lazy" onError={(e) => ((e.target as HTMLImageElement).style.visibility = 'hidden')} />
-            </a>
-            <div className="paper-info">
-              <b className="paper-title">{d.title}</b>
-              <span className="muted small">
-                {[d.correspondent, d.type].filter(Boolean).join(' · ') || 'No correspondent or type yet'}
-              </span>
-              <span className="muted small">
-                {shortDate(d.created)}{d.pages ? ` · ${d.pages} page${d.pages === 1 ? '' : 's'}` : ''}{d.asn ? ` · ASN ${d.asn}` : ''} · added {shortDate(d.added.slice(0, 10))}
-              </span>
-              {(d.fields.length > 0 || d.tags.length > 0) && (
-                <span className="paper-chips">
-                  {d.fields.map((f) => <span key={f.name} className="paper-chip"><span className="muted">{f.name}</span> {f.value}</span>)}
-                  {d.tags.map((t) => <span key={t} className="paper-chip tag">{t}</span>)}
-                </span>
-              )}
-              {d.note && <span className="muted small paper-note">{d.note}</span>}
-            </div>
-            <a className="chip paper-open" href={d.url} target="_blank" rel="noreferrer">
-              <Icon name="open" size={16} /> Open
-            </a>
-          </li>
-        ))}
-      </ul>
-      {inbox.count > inbox.documents.length && <p className="muted small">Showing the newest {inbox.documents.length}.</p>}
-      <p className="money-note small">
-        <a href={inbox.url} target="_blank" rel="noreferrer">Open the inbox in Paperless</a>. A document leaves this list when the inbox tag comes off.
-      </p>
-    </Sheet>
   );
 }
 

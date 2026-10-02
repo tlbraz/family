@@ -52,8 +52,7 @@ Install it on a phone with *Share → Add to Home Screen*.
   matches highlighted, filters by type, correspondent and tag; each document can be previewed, viewed, downloaded or
   opened in Paperless. The **Inbox** lists what's still tagged inbox: fix the tags if needed (Paperless's suggestions
   are one tap away) and **Approve** takes the inbox tag off. Tags are the only thing changed from the app; nothing is
-  added. The token stays on the server; files go through the app. The Empresa money tab also shows
-  the inbox count. (This replaced the fridge notes tab.)
+  added. The token stays on the server; files go through the app. (This replaced the fridge notes tab.)
 - **Tap someone** for their profile. Parents also see their documents (Cartão de Cidadão, NIF, NISS, utente, passport,
   driving licence…) with copy buttons, expiry warnings and a link to the scan in Paperless. Served only to signed-in parents.
 - **Telegram** (`TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`): 07:30 "today" message, 20:00 "tomorrow" message with
