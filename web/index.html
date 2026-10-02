@@ -12,17 +12,45 @@
     <link rel="manifest" href="/manifest.webmanifest" />
     <title>Family</title>
     <script>
-      // A page kept from before a deploy can ask for a script that no longer exists: reload once to get the new one.
+      // If the app can't start, say why on screen instead of staying blank (and reload once for a missing file:
+      // a page kept from before a deploy can ask for a script that no longer exists).
+      var bootErrors = [];
       addEventListener('error', function (e) {
         var t = e.target;
-        if (!t || (t.tagName !== 'SCRIPT' && t.tagName !== 'LINK')) return;
-        try {
-          var last = Number(sessionStorage.getItem('family:reloaded') || 0);
-          if (Date.now() - last < 30000) return;
-          sessionStorage.setItem('family:reloaded', String(Date.now()));
-        } catch (_) {}
-        location.reload();
+        if (t && (t.tagName === 'SCRIPT' || t.tagName === 'LINK')) {
+          bootErrors.push('Could not load ' + (t.src || t.href));
+          try {
+            var last = Number(sessionStorage.getItem('family:reloaded') || 0);
+            if (Date.now() - last < 30000) return;
+            sessionStorage.setItem('family:reloaded', String(Date.now()));
+          } catch (_) {}
+          location.reload();
+        } else {
+          bootErrors.push((e.message || 'Error') + (e.filename ? ' (' + e.filename.split('/').pop() + ':' + e.lineno + ')' : ''));
+        }
       }, true);
+      addEventListener('unhandledrejection', function (e) {
+        bootErrors.push('Unhandled: ' + ((e.reason && e.reason.message) || e.reason));
+      });
+      window.showBootError = function (extra) {
+        var root = document.getElementById('root');
+        if (!root || root.querySelector('.boot-error')) return;
+        if (extra) bootErrors.push(extra);
+        root.innerHTML =
+          '<div class="boot-error" style="padding:24px 20px;font-family:system-ui,sans-serif;color:#e8e6f0;background:#16141d;min-height:100vh">' +
+          '<h2 style="margin:0 0 8px">The app didn\'t start</h2>' +
+          '<p style="color:#a9a4bd;margin:0 0 12px">Send a screenshot of this to fix it.</p>' +
+          '<pre style="white-space:pre-wrap;word-break:break-word;font-size:12px;background:#22202c;padding:12px;border-radius:10px"></pre>' +
+          '<button style="margin-top:12px;padding:10px 16px;border-radius:12px;border:0;font-weight:700" onclick="location.reload()">Reload</button></div>';
+        root.querySelector('pre').textContent =
+          (bootErrors.join('\n') || 'No error was reported.') + '\n\n' + navigator.userAgent + '\n' + location.href + ' · ' + new Date().toISOString();
+      };
+      addEventListener('load', function () {
+        setTimeout(function () {
+          var root = document.getElementById('root');
+          if (root && !root.children.length) window.showBootError('Nothing was drawn 5 s after loading.');
+        }, 5000);
+      });
     </script>
   </head>
   <body>
