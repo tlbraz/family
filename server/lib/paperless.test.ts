@@ -78,6 +78,11 @@ describe('paperless inbox', () => {
     expect(sentBodies.at(-1)).toEqual({ tags: [1, 2, 5] });
   });
 
+  it('says which address it could not reach', async () => {
+    const down = (async () => { throw Object.assign(new TypeError('fetch failed'), { cause: { code: 'ECONNREFUSED' } }); }) as unknown as typeof fetch;
+    await expect(searchDocs({}, down)).rejects.toThrow("Can't reach Paperless at http://paperless.lan:8000 (ECONNREFUSED)");
+  });
+
   it('turns custom field values into text', () => {
     expect(fieldText({ id: 1, name: 'x', data_type: 'monetary' }, 'USD10.5')).toBe('10,50 USD');
     expect(fieldText({ id: 1, name: 'x', data_type: 'boolean' }, false)).toBe('no');

@@ -31,7 +31,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     window.dispatchEvent(new Event(DEPLOYING_EVENT));
     throw new DeployingError('The app is updating, back in a moment');
   }
-  if (!res.ok && res.status !== 503) {
+  // A failure is an error, never data, except /health: its 503 ("db down") is still a health report.
+  if (!res.ok && !(path === '/health' && res.status === 503)) {
     const body = await res.json().catch(() => ({}));
     throw new Error(body.error ?? `Something went wrong (${res.status})`);
   }
