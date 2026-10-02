@@ -9,14 +9,14 @@ import { BpEntrySheet } from './components/BloodPressure';
 import { CalendarView } from './components/CalendarView';
 import { EventSheet } from './components/EventSheet';
 import { FamilyView } from './components/FamilyView';
-import { FridgeNotes } from './components/FridgeNotes';
+import { DocsView } from './components/DocsView';
 import { Groceries } from './components/Groceries';
 import { Icon } from './components/Icon';
 import { MoneyView } from './components/MoneyView';
 import { SignIn } from './components/SignIn';
 import { TaskSheet } from './components/TaskSheet';
 
-type Tab = 'calendar' | 'groceries' | 'notes' | 'family' | 'money';
+type Tab = 'calendar' | 'groceries' | 'docs' | 'family' | 'money';
 type Open = { kind: 'event'; occurrence: Occurrence | null; day: string; shared?: Shared; fromDay?: boolean } | { kind: 'task'; task: Task | null; day: string; fromDay?: boolean } | null;
 
 export function App() {
@@ -103,17 +103,7 @@ export function App() {
           />
         )}
         {tab === 'groceries' && <Groceries />}
-        {tab === 'notes' && (
-          <div>
-            <header className="cal-head">
-              <div className="cal-title">
-                <span className="eyebrow">For everyone</span>
-                <h1>Fridge notes</h1>
-              </div>
-            </header>
-            <FridgeNotes />
-          </div>
-        )}
+        {tab === 'docs' && config?.features.docs && <DocsView />}
         {tab === 'money' && me && config?.features.money && <MoneyView meName={me.name} />}
         {tab === 'family' && <FamilyView members={members} canEdit={canEdit} googleOn={!!config?.features.google} telegramOn={!!config?.features.telegram} onChanged={loadAll} />}
 
@@ -146,7 +136,7 @@ export function App() {
           [
             ['calendar', 'calendar', 'Calendar'],
             ['groceries', 'cart', 'Groceries'],
-            ['notes', 'notes', 'Notes'],
+            ...(config?.features.docs ? ([['docs', 'docs', 'Docs']] as const) : []),
             ...(config?.features.money ? ([['money', 'money', 'Money']] as const) : []),
             ['family', 'people', 'Family'],
           ] as const

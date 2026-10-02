@@ -6,7 +6,7 @@ import { AiError, draftEvent, aiEnabled, type ImageInput } from './lib/ai';
 import { type AuthEnv, loadMember, requireParent } from './lib/auth';
 import { todayDigest, tomorrowDigest, weekDigest } from './lib/digest';
 import { googleEnabled, googleStatus, saveGoogleKey, syncRound } from './lib/google';
-import { paperlessEnabled, paperlessFetch, paperlessInbox } from './lib/paperless';
+import { paperlessEnabled, paperlessInbox } from './lib/paperless';
 import { cleanHoldings, lastValuations, loadHoldings, revalueNow, saveHoldings } from './lib/valuations';
 import { budgetsFor, editTransaction, linkTransfer, moneyEnabled, moneySnapshot, refreshMoney, ReviewError, reviewTransaction, summarise } from './lib/money';
 import { addTelegramChat, removeTelegramChat, sendTelegram, telegramStatus } from './lib/telegram';
@@ -15,6 +15,7 @@ import { type EventHooks, eventRoutes } from './routes/events';
 import { memberRoutes, toMember } from './routes/members';
 import { groceryRoutes } from './routes/groceries';
 import { noteRoutes } from './routes/notes';
+import { docRoutes } from './routes/docs';
 import { shareRoutes } from './routes/share';
 import { taskRoutes } from './routes/tasks';
 import { bpRoutes } from './routes/bp';
@@ -57,7 +58,7 @@ export function createApp(db: Db, hooks: AppHooks = noop) {
     const body: AppConfig = {
       me: me ? toMember(me) : null,
       meTracksBp: me?.role === 'parent' && !!(await bpSettingsOf(db, me.id)),
-      features: { ai: aiEnabled(), google: googleEnabled(), telegram: !!process.env.TELEGRAM_BOT_TOKEN, money: moneyEnabled() && me?.role === 'parent' },
+      features: { ai: aiEnabled(), google: googleEnabled(), telegram: !!process.env.TELEGRAM_BOT_TOKEN, money: moneyEnabled() && me?.role === 'parent', docs: paperlessEnabled() && me?.role === 'parent' },
     };
     return c.json(body);
   });
@@ -65,6 +66,7 @@ export function createApp(db: Db, hooks: AppHooks = noop) {
   api.route('/auth', authRoutes(db));
   api.route('/members', memberRoutes(db, hooks.membersChanged));
   api.route('/notes', noteRoutes(db));
+  api.route('/docs', docRoutes());
   api.route('/groceries', groceryRoutes(db));
   api.route('/share', shareRoutes());
   api.route('/tasks', taskRoutes(db));
@@ -189,16 +191,6 @@ export function createApp(db: Db, hooks: AppHooks = noop) {
       return c.json(await paperlessInbox());
     } catch (e) {
       return c.json({ error: (e as Error).message }, 503);
-    }
-  });
-  // A document's thumbnail, through us (Paperless wants the token, which stays on the server).
-  api.get('/money/paperless/thumb/:id{[0-9]+}', requireParent, async (c) => {
-    if (!paperlessEnabled() || !companyViewer(c.get('me')!.name)) return c.body(null, 404);
-    try {
-      const res = await paperlessFetch(`/api/documents/${c.req.param('id')}/thumb/`);
-      return new Response(res.body, { headers: { 'content-type': res.headers.get('content-type') ?? 'image/webp', 'cache-control': 'private, max-age=86400' } });
-    } catch {
-      return c.body(null, 404);
     }
   });
   // What the investment accounts hold, for the daily values (edited on the Money tab).

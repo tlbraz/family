@@ -125,7 +125,7 @@ export type TaskInput = Pick<Task, 'title' | 'due' | 'memberId'>;
 export interface AppConfig {
   me: Member | null;
   meTracksBp: boolean; // show the quick "log blood pressure" button
-  features: { ai: boolean; google: boolean; telegram: boolean; money?: boolean };
+  features: { ai: boolean; google: boolean; telegram: boolean; money?: boolean; docs?: boolean };
 }
 
 /** What Claude reads out of a photo or a sentence; the user confirms it in the event form. */
@@ -255,13 +255,17 @@ export interface MoneyHoldings {
   accounts: string[]; // off-budget accounts in Actual, to pick names from
 }
 
-/** A document waiting in the Paperless inbox (company Money tab). */
+/** A document in Paperless (Docs tab, and the inbox on the company Money tab). */
 export interface PaperlessDoc {
   id: number;
   title: string;
   correspondent: string | null;
+  correspondentId: number | null;
   type: string | null; // document type
+  typeId: number | null;
   tags: string[]; // other than the inbox tag
+  tagIds: number[]; // all of them, inbox included
+  inbox: boolean; // still to approve
   created: string; // YYYY-MM-DD, the document's own date
   added: string; // when it came into Paperless (ISO)
   pages: number | null;
@@ -269,6 +273,35 @@ export interface PaperlessDoc {
   fields: { name: string; value: string }[]; // custom fields, as text
   note: string | null; // the latest note
   url: string; // to open it in Paperless
+  snippet: { text: string; hit: boolean }[] | null; // where a search matched
+}
+
+/** One document with its text, notes and what Paperless suggests for filing it. */
+export interface PaperlessDetail extends PaperlessDoc {
+  content: string; // the start of its text (OCR)
+  mime: string | null;
+  filename: string | null;
+  notes: { note: string; created: string }[];
+  suggestions: { correspondents: DocsName[]; types: DocsName[]; tags: DocsName[]; dates: string[] };
+}
+
+export interface DocsName {
+  id: number;
+  name: string;
+}
+
+export interface DocsMeta {
+  tags: DocsName[];
+  correspondents: DocsName[];
+  types: DocsName[];
+  inboxTag: number | null;
+  url: string; // Paperless in the browser
+}
+
+export interface DocsPage {
+  count: number;
+  next: boolean; // more pages after this one
+  documents: PaperlessDoc[];
 }
 
 export interface PaperlessInbox {

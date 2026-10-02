@@ -34,6 +34,10 @@ const PATHS: Record<string, string> = {
   down: 'M6 9l6 6 6-6',
   edit: 'M4 20h4L19 9l-4-4L4 16zM13.5 6.5l4 4',
   open: 'M14 4h6v6M20 4l-9 9M18 14v6H4V6h6',
+  download: 'M12 4v11M7 10l5 5 5-5M5 20h14',
+  inbox: 'M4 13l2.5-8h11L20 13v6H4zM4 13h5l1 2h4l1-2h5',
+  eye: 'M2 12s3.5-6.5 10-6.5S22 12 22 12s-3.5 6.5-10 6.5S2 12 2 12zM12 9a3 3 0 1 0 0 6a3 3 0 1 0 0-6',
+  docs: 'M7 3h8l4 4v14H7zM14 3v5h5M4 7v14h11',
   copy: 'M9 9h11v11H9zM5 15H4V4h11v1',
 };
 

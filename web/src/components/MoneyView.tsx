@@ -622,7 +622,7 @@ function PaperlessSheet({ inbox, onClose }: { inbox: PaperlessInbox; onClose: ()
         {inbox.documents.map((d) => (
           <li key={d.id} className="card doc paper">
             <a className="paper-thumb" href={d.url} target="_blank" rel="noreferrer" aria-label={`Open ${d.title} in Paperless`}>
-              <img src={`/api/money/paperless/thumb/${d.id}`} alt="" loading="lazy" onError={(e) => ((e.target as HTMLImageElement).style.visibility = 'hidden')} />
+              <img src={`/api/docs/${d.id}/thumb`} alt="" loading="lazy" onError={(e) => ((e.target as HTMLImageElement).style.visibility = 'hidden')} />
             </a>
             <div className="paper-info">
               <b className="paper-title">{d.title}</b>

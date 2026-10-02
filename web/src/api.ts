@@ -1,4 +1,4 @@
-import type { GroceryList, AppConfig, CalendarEvent, EventDraft, EventInput, Health, Member, MemberDocument, MemberInput, MoneyBudget, MoneyHolding, MoneyHoldings, MoneySummary, Note, PaperlessInbox, Occurrence, SearchResults, Task, TaskInput } from '../../shared/types';
+import type { GroceryList, AppConfig, CalendarEvent, EventDraft, EventInput, Health, Member, MemberDocument, MemberInput, MoneyBudget, MoneyHolding, MoneyHoldings, MoneySummary, PaperlessInbox, DocsMeta, DocsPage, PaperlessDetail, Occurrence, SearchResults, Task, TaskInput } from '../../shared/types';
 
 export interface GoogleStatus {
   connected: boolean;
@@ -97,10 +97,24 @@ export const api = {
   billAction: (action: 'ignore' | 'unignore' | 'track' | 'untrack', key: string, name: string) => request<{ ok: true }>('/money/bills', json('POST', { action, key, name })),
   refreshMoney: () => request<{ ok: true }>('/money/refresh', json('POST')),
   transferMoney: (budget: MoneyBudget, out: string, into: string, action: 'link' | 'ignore') => request<{ ok: true }>('/money/transfer', json('POST', { budget, out, in: into, action })),
+  docsMeta: () => request<DocsMeta>('/docs/meta'),
+  docs: (q: { q?: string; inbox?: boolean; tag?: number; correspondent?: number; type?: number; page?: number }) => {
+    const p = new URLSearchParams();
+    for (const [k, v] of Object.entries(q)) if (v !== undefined && v !== '' && v !== false) p.set(k, v === true ? '1' : String(v));
+    return request<DocsPage>(`/docs?${p}`);
+  },
+  doc: (id: number) => request<PaperlessDetail>(`/docs/${id}`),
+  saveDoc: (id: number, change: { title?: string; created?: string; correspondent?: number | null; type?: number | null; tags?: number[]; approve?: boolean }) =>
+    request<PaperlessDetail>(`/docs/${id}`, json('PATCH', change)),
+  uploadDocs: async (files: File[]) => {
+    const form = new FormData();
+    for (const f of files) form.append('file', f, f.name);
+    const res = await fetch('/api/docs/upload', { method: 'POST', body: form });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.error ?? `Something went wrong (${res.status})`);
+    return body as { ok: true; sent: number };
+  },
   paperless: () => request<PaperlessInbox>('/money/paperless'),
   editMoney: (budget: MoneyBudget, id: string, change: { category?: string; review?: boolean; note?: string }) => request<{ ok: true }>('/money/edit', json('POST', { budget, id, ...change })),
 
-  notes: () => request<Note[]>('/notes'),
-  addNote: (text: string, author: string) => request<Note>('/notes', json('POST', { text, author })),
-  deleteNote: (id: number) => request<void>(`/notes/${id}`, json('DELETE')),
 };
