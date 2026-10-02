@@ -61,14 +61,23 @@ export async function runDocumentAlerts(db: Db, now = new Date()) {
 // ---- Bank links --------------------------------------------------------------------------------
 
 const STALE_HOURS = 36;
+// One failed sync is usually the bank having a bad moment (1 Oct 2026: Revolut and Activo failed at 19:00, fine at 07:00).
+// Syncs run at 07, 13 and 19 (the longest gap is 12 h overnight), so a failure only counts once the last good sync is
+// more than 13 h old, i.e. at least two syncs in a row didn't work.
+const FAILED_HOURS = 13;
 
-/** Linked accounts that stopped syncing: Actual says the last sync failed, or none worked for a day and a half. */
+/** Linked accounts that stopped syncing: failing for two syncs in a row, or none worked for a day and a half. */
 export function staleBankLinks(links: NonNullable<Snapshot['bankLinks']>, now: Date) {
-  return links.filter((l) => (l.status && l.status !== 'ok') || !l.lastSync || now.getTime() - new Date(l.lastSync).getTime() > STALE_HOURS * 3_600_000);
+  return links.filter((l) => {
+    if (!l.lastSync) return true;
+    const hours = (now.getTime() - new Date(l.lastSync).getTime()) / 3_600_000;
+    return hours > STALE_HOURS || (!!l.status && l.status !== 'ok' && hours > FAILED_HOURS);
+  });
 }
 
 export function staleMessage(l: NonNullable<Snapshot['bankLinks']>[number]): string {
-  const since = l.lastSync ? `hasn't synced since ${new Date(l.lastSync).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'short' })}` : 'has never synced';
+  const when = (d: Date) => d.toLocaleString('en-GB', { weekday: 'long', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Lisbon' });
+  const since = l.lastSync ? `last synced ${when(new Date(l.lastSync))}` : 'has never synced';
   const failing = l.status && l.status !== 'ok' ? ` (Actual says: ${esc(l.status)})` : '';
   return `⚠️ <b>${esc(l.name)}</b> ${since}${failing}. The bank link may have expired: re-link it in Actual → Bank Sync.`;
 }
