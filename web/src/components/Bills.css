@@ -1,0 +1,34 @@
+/* Bills & subscriptions (Money tab) */
+.bills-card { display: flex; flex-direction: column; align-items: stretch; gap: 8px; text-align: left; }
+.bills-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.bills-main { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; }
+.bills-num { font-size: 1.6rem; font-weight: 800; letter-spacing: -0.01em; font-variant-numeric: tabular-nums; }
+.bills-bar { display: flex; gap: 2px; height: 8px; }
+.bills-bar i { flex: 1; border-radius: 3px; background: var(--soft); }
+.bills-bar i.paid { background: var(--ok); }
+.bills-bar i.missing { background: var(--danger); }
+.bills-flags { display: flex; flex-direction: column; gap: 4px; margin-top: 2px; }
+.bills-flag { display: flex; align-items: baseline; gap: 8px; font-size: 0.9rem; }
+.bills-flag-icon { width: 18px; height: 18px; flex: none; border-radius: 9px; display: inline-grid; place-items: center; font-size: 0.65rem; font-weight: 800; color: var(--card); transform: translateY(2px); }
+.bills-flag.missing .bills-flag-icon { background: var(--danger); }
+.bills-flag.rise .bills-flag-icon { background: var(--holiday-ink); }
+.bills-flag.fall .bills-flag-icon { background: var(--ok); }
+
+.bills-section { margin-bottom: 18px; }
+.bills-section h3 { font-size: 0.8rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin: 0 0 6px; }
+.bills-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.bill { border-bottom: 1px solid var(--line); }
+.bill-row { width: 100%; display: flex; align-items: center; gap: 12px; padding: 10px 0; background: none; border: 0; color: inherit; font: inherit; text-align: left; }
+.bill-dot { width: 22px; height: 22px; flex: none; border-radius: 11px; display: grid; place-items: center; font-size: 0.75rem; font-weight: 800; color: var(--card); }
+.bill-dot.paid { background: var(--ok); }
+.bill-dot.due { border: 2px dashed var(--muted); }
+.bill-dot.missing { background: var(--danger); }
+.bill-text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.bill-amount { font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.bill.paid .bill-amount { color: var(--muted); }
+.bill-change { font-size: 0.8rem; font-weight: 800; }
+.bill-change.rise { color: var(--holiday-ink); }
+.bill-change.fall { color: var(--ok); }
+.bill-more { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; padding: 0 0 12px 34px; }
+.bill-history { list-style: none; margin: 0; padding: 0; width: 100%; font-size: 0.85rem; font-variant-numeric: tabular-nums; }
+.bill-history li { display: flex; justify-content: space-between; padding: 2px 0; color: var(--muted); }

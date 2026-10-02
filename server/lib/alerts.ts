@@ -2,6 +2,7 @@ import { eq } from 'drizzle-orm';
 import { DOCUMENT_KINDS, type DocumentKind } from '../../shared/types';
 import type { Db } from '../db';
 import { memberDocuments, members, settings } from '../schema';
+import { type BillOverrides, billAlerts, billsFor } from './bills';
 import { moneyEnabled, moneySnapshot, stillOwed, type Snapshot } from './money';
 import { tiagoChat } from './payroll';
 import { esc, sendTelegram, telegramEnabled } from './telegram';
@@ -106,4 +107,28 @@ export async function runOwedAlerts(db: Db, now = new Date()) {
   for (const t of overdueOwed(snap?.owed ?? [], now)) {
     await once(db, `owed:${t.id}`, () => sendTelegram(owedMessage(t), tiagoChat()));
   }
+}
+
+// ---- Bills -------------------------------------------------------------------------------------
+
+const OVERRIDES_KEY = 'bills:family';
+
+/** "Not a bill" and "Track as a bill" choices made on the Money tab. */
+export async function billOverrides(db: Db): Promise<BillOverrides> {
+  const [row] = await db.select().from(settings).where(eq(settings.key, OVERRIDES_KEY));
+  return row ? (JSON.parse(row.value) as BillOverrides) : { ignored: [], tracked: [] };
+}
+
+export async function saveBillOverrides(db: Db, o: BillOverrides) {
+  const value = JSON.stringify(o);
+  await db.insert(settings).values({ key: OVERRIDES_KEY, value }).onConflictDoUpdate({ target: settings.key, set: { value } });
+}
+
+/** After each read of Actual: tell Tiago about a price change or a bill that didn't come, once each. */
+export async function runBillAlerts(db: Db, now = new Date()) {
+  if (!moneyEnabled() || !tiagoChat() || !daytime(now)) return;
+  const snap = await moneySnapshot('family').catch(() => null);
+  if (!snap) return;
+  const bills = billsFor(snap, dateKey(now).slice(0, 7), now, await billOverrides(db));
+  for (const a of billAlerts(bills, now)) await once(db, a.key, () => sendTelegram(a.text, tiagoChat()));
 }

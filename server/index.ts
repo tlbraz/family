@@ -7,7 +7,7 @@ import { deleteGoogleEvent, googleEnabled, loadGoogleKey, pushEvent, shareWithPa
 import { runMoney } from './lib/money';
 import { runPayrollAlert } from './lib/payroll';
 import { runReminders } from './lib/reminders';
-import { runBankAlerts, runDocumentAlerts, runOwedAlerts } from './lib/alerts';
+import { runBankAlerts, runBillAlerts, runDocumentAlerts, runOwedAlerts } from './lib/alerts';
 import { runValuations } from './lib/valuations';
 import { bpFromTelegram } from './lib/bp';
 import { loadTelegramChats, pollTelegram } from './lib/telegram';
@@ -53,6 +53,7 @@ const afterMoney = (read: Promise<unknown> | undefined) =>
     ?.then(() => runPayrollAlert(db))
     .then(() => runBankAlerts(db))
     .then(() => runOwedAlerts(db))
+    .then(() => runBillAlerts(db))
     .then(() => runValuations(db).catch(logErr('valuations')))
     .catch(logErr('actual'));
 const timers = [

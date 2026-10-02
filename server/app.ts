@@ -17,6 +17,7 @@ import { noteRoutes } from './routes/notes';
 import { shareRoutes } from './routes/share';
 import { taskRoutes } from './routes/tasks';
 import { bpRoutes } from './routes/bp';
+import { billOverrides, saveBillOverrides } from './lib/alerts';
 import { bpSettingsOf } from './lib/bp';
 import { upcomingRoutes } from './routes/upcoming';
 import { members } from './schema';
@@ -118,7 +119,7 @@ export function createApp(db: Db, hooks: AppHooks = noop) {
     const now = new Date();
     const month = /^\d{4}-\d{2}$/.test(c.req.query('month') ?? '') ? c.req.query('month')! : `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
     try {
-      return c.json(summarise(await moneySnapshot(budget), budget, budgets, month, now));
+      return c.json(summarise(await moneySnapshot(budget), budget, budgets, month, now, budget === 'family' ? await billOverrides(db) : undefined));
     } catch (e) {
       return c.json({ error: (e as Error).message }, 503);
     }
@@ -172,6 +173,23 @@ export function createApp(db: Db, hooks: AppHooks = noop) {
     await saveHoldings(db, holdings);
     await revalueNow(db).catch((e: Error) => console.error('valuation:', e.message));
     return c.json({ holdings, last: await lastValuations(db), accounts: [] });
+  });
+  // "Not a bill" / "Track as a bill" (family budget). Changes what the Bills card and the alerts consider.
+  api.post('/money/bills', requireParent, async (c) => {
+    const body = (await c.req.json().catch(() => ({}))) as { action?: unknown; key?: unknown; name?: unknown };
+    const actions = ['ignore', 'unignore', 'track', 'untrack'];
+    if (typeof body.action !== 'string' || !actions.includes(body.action) || typeof body.key !== 'string' || !body.key || body.key.length > 80) {
+      return c.json({ error: 'Pick a bill' }, 400);
+    }
+    const key = body.key;
+    const name = typeof body.name === 'string' ? body.name.slice(0, 80) : key;
+    const o = await billOverrides(db);
+    const without = (list: { key: string; name: string }[]) => list.filter((x) => x.key !== key);
+    if (body.action === 'ignore') await saveBillOverrides(db, { ignored: [...without(o.ignored), { key, name }], tracked: without(o.tracked) });
+    if (body.action === 'unignore') await saveBillOverrides(db, { ...o, ignored: without(o.ignored) });
+    if (body.action === 'track') await saveBillOverrides(db, { ignored: without(o.ignored), tracked: [...without(o.tracked), { key, name }] });
+    if (body.action === 'untrack') await saveBillOverrides(db, { ...o, tracked: without(o.tracked) });
+    return c.json({ ok: true });
   });
   api.post('/money/refresh', requireParent, async (c) => {
     if (!moneyEnabled()) return c.json({ error: 'Actual Budget is not set up on the server' }, 404);

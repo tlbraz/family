@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { MoneyBudget, MoneyGroup, MoneyHolding, MoneyHoldings, MoneySummary, MoneyTransaction, MoneyWorth } from '../../../shared/types';
 import { api } from '../api';
+import { BillsCard, BillsSheet } from './Bills';
 import { Icon } from './Icon';
 import { Sheet } from './Sheet';
 
@@ -42,6 +43,7 @@ export function MoneyView({ meName }: { meName: string }) {
   const [source, setSource] = useState<string | null>(null); // an income source, to list its transactions
   const [holdingsOpen, setHoldingsOpen] = useState(false);
   const [owedOpen, setOwedOpen] = useState(false);
+  const [billsOpen, setBillsOpen] = useState(false);
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(() => {
@@ -124,6 +126,7 @@ export function MoneyView({ meName }: { meName: string }) {
           </div>
           <div key={data.month} className={`money-cards slide ${slide}`} onAnimationEnd={() => setSlide('')}>
             <SpentCard data={data} />
+            <BillsCard data={data} onOpen={() => setBillsOpen(true)} />
             <ReviewCard review={data.review} onOpen={() => setReviewing(true)} />
             <GroupsCard data={data} onOpen={setOpen} />
             <IncomeCard data={data} onOpen={setSource} />
@@ -165,6 +168,7 @@ export function MoneyView({ meName }: { meName: string }) {
           </p>
         </Sheet>
       )}
+      {billsOpen && data?.bills && <BillsSheet data={data} onChanged={load} onClose={() => setBillsOpen(false)} />}
       {holdingsOpen && <HoldingsSheet onClose={() => setHoldingsOpen(false)} onSaved={load} />}
       {reviewing && data && <ReviewSheet data={data} budget={budget} onChanged={load} onClose={() => setReviewing(false)} />}
     </div>
