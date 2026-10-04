@@ -20,6 +20,13 @@ const eur = (cents: number, decimals = false) => {
   return `${cents < 0 ? '−' : ''}€${int!.replace(/\B(?=(\d{3})+(?!\d))/g, ' ')}${dec ? `.${dec}` : ''}`;
 };
 const monthName = (m: string) => new Date(`${m}-15T12:00`).toLocaleDateString('en-GB', { month: 'long', year: m.slice(0, 4) === String(new Date().getFullYear()) ? undefined : 'numeric' });
+// The description, unless it only repeats the payee (banks often copy their text into the note).
+const squash = (x: string) => x.toLowerCase().replace(/[^a-z0-9]/g, '');
+const descOf = (t: MoneyTransaction) => {
+  const note = squash(t.note ?? '');
+  const payee = squash(t.payee ?? '');
+  return note && !(payee && (note.includes(payee) || payee.includes(note))) ? t.note : null;
+};
 const shortDate = (d: string) => new Date(`${d}T12:00`).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
 // "today at 13:02", "yesterday at 19:00" or "28 Sept at 07:00".
 const when = (iso: string) => {
@@ -157,13 +164,22 @@ export function MoneyView({ meName }: { meName: string }) {
           {data.owed.open.length > 0 ? (
             <>
               <h3 className="sheet-sub">Not paid back yet</h3>
-              <TxList tx={data.owed.open} showCategory={false} />
+              <TxList tx={data.owed.open} showCategory={false} edit={{ data, budget, onChanged: load }} />
             </>
           ) : (
             <p className="muted">Everything has come back ✓</p>
           )}
-          <h3 className="sheet-sub">Latest</h3>
-          <TxList tx={data.owed.recent} showCategory edit={{ data, budget, onChanged: load }} />
+          {(() => {
+            // What's settled: money that came back and expenses fully paid back (the open ones are listed above).
+            const open = new Set(data.owed.open.map((t) => t.id));
+            const settled = data.owed.recent.filter((t) => !open.has(t.id));
+            return settled.length > 0 && (
+              <>
+                <h3 className="sheet-sub">Paid back</h3>
+                <TxList tx={settled} showCategory={false} edit={{ data, budget, onChanged: load }} />
+              </>
+            );
+          })()}
           <p className="muted small money-note">
             Paid for the company (or anyone else) and to come back: categories in the "A receber" group, or with "reembolso" in the name. They don't count as spending. Give the money back the same category, and the oldest expenses count as paid first.
           </p>
@@ -310,7 +326,7 @@ function TxList({ tx, showCategory, edit }: { tx: MoneyTransaction[]; showCatego
           <>
             <span>
               {t.payee || '—'}
-              {t.note && <span className="tx-desc">{t.note}</span>}
+              {descOf(t) && <span className="tx-desc">{descOf(t)}</span>}
               <span className="sub">
                 {shortDate(t.date)} · {t.account}{showCategory ? ` · ${t.category}` : ''}
                 {t.review && <span className="tag"> #review</span>}
@@ -494,7 +510,7 @@ function ReviewSheet({ data, budget, onChanged, onClose }: { data: MoneySummary;
             <button className="review-row" aria-expanded={openId === t.id} onClick={() => toggle(t)}>
               <span>
                 {t.payee || '—'}
-                {t.note && <span className="tx-desc">{t.note}</span>}
+                {descOf(t) && <span className="tx-desc">{descOf(t)}</span>}
                 <span className="sub">{shortDate(t.date)} · {t.account} · {t.category}</span>
               </span>
               <span className={`amt ${t.amount < 0 ? 'in' : ''}`}>{t.amount < 0 ? `+${eur(-t.amount, true)}` : eur(t.amount, true)}</span>
