@@ -25,16 +25,17 @@ describe('bank links', () => {
   const links = [
     { name: 'CGD', lastSync: '2026-09-29T07:00:00Z', status: 'ok' },
     { name: 'ABanca', lastSync: '2026-09-27T19:00:00Z', status: 'ok' }, // 41 h ago
-    { name: 'Millennium', lastSync: '2026-09-29T07:00:00Z', status: 'failed' },
+    { name: 'Millennium', lastSync: '2026-09-28T18:00:00Z', status: 'failed' }, // failed at 07:00 and 13:00
     { name: 'New', lastSync: null, status: null },
+    { name: 'Revolut', lastSync: '2026-09-29T06:00:00Z', status: 'failed' }, // one failed sync: a bank hiccup, no alert yet
   ];
 
-  it('flags accounts that stopped syncing or whose last sync failed', () => {
+  it('flags accounts that stopped syncing or failed two syncs in a row', () => {
     expect(staleBankLinks(links, now).map((l) => l.name)).toEqual(['ABanca', 'Millennium', 'New']);
   });
 
   it('says what to do', () => {
-    expect(staleMessage(links[1]!)).toContain('<b>ABanca</b> hasn\'t synced since Sunday 27 Sept');
+    expect(staleMessage(links[1]!)).toContain('<b>ABanca</b> last synced Sunday 27 Sept, 20:00');
     expect(staleMessage(links[1]!)).toContain('Bank Sync');
     expect(staleMessage(links[2]!)).toContain('(Actual says: failed)');
   });
