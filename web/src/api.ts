@@ -109,6 +109,7 @@ export const api = {
     request<PaperlessDetail>(`/docs/${id}`, json('PATCH', change)),
   watchHealth: () => request<WatchHealth>('/watch/health'),
   watchGenres: (kind: WatchKind) => request<WatchGenre[]>(`/watch/genres?kind=${kind}`),
+  watchSearch: (q: string, page: number) => request<WatchPage>(`/watch/search?q=${encodeURIComponent(q)}&page=${page}`),
   releases: (kind: WatchKind, section: WatchSection, page: number, genre?: number) =>
     request<WatchPage>(`/watch/releases?kind=${kind}&section=${section}&page=${page}${genre ? `&genre=${genre}` : ''}`),
   watchTitle: (kind: WatchKind, id: number) => request<WatchDetail>(`/watch/title/${kind}/${id}`),

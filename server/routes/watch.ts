@@ -9,7 +9,7 @@ import {
 } from '../lib/arr';
 import { arrivals, hookTokenMatches, parseArrHook } from '../lib/arrivals';
 import { memo } from '../lib/memo';
-import { genres, releases, TmdbError, tmdbCheck, tmdbEnabled, tmdbIdForTvdb, titleDetail } from '../lib/tmdb';
+import { genres, releases, search, TmdbError, tmdbCheck, tmdbEnabled, tmdbIdForTvdb, titleDetail } from '../lib/tmdb';
 
 const KINDS: WatchKind[] = ['movie', 'tv'];
 const SECTIONS: WatchSection[] = ['out', 'soon', 'popular'];
@@ -58,6 +58,20 @@ export function watchRoutes() {
     if (!tmdbEnabled()) return c.json({ error: 'TMDB key missing' }, 503);
     try {
       return c.json(await releases({ kind, section, genre: num('genre'), page: Math.min(num('page') ?? 1, 50) || 1 }, await statusLookup()));
+    } catch (e) {
+      const f = fail(e);
+      return c.json({ error: f.error }, f.status);
+    }
+  });
+
+  // Films and series by name, from the search box.
+  r.get('/search', async (c) => {
+    const q = (c.req.query('q') ?? '').trim().slice(0, 100);
+    if (q.length < 2) return c.json({ items: [], next: false });
+    const page = /^\d{1,2}$/.test(c.req.query('page') ?? '') ? Math.min(Math.max(Number(c.req.query('page')), 1), 20) : 1;
+    if (!tmdbEnabled()) return c.json({ error: 'TMDB key missing' }, 503);
+    try {
+      return c.json(await search(q, page, await statusLookup()));
     } catch (e) {
       const f = fail(e);
       return c.json({ error: f.error }, f.status);

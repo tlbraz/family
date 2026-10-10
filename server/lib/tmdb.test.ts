@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { digitalDate, omdbToRatings, pickTrailer, seasonAirs, toCard } from './tmdb';
+import { digitalDate, omdbToRatings, pickTrailer, searchHits, seasonAirs, toCard } from './tmdb';
 
 const rd = (...countries: [string, [number, string][]][]) => ({
   results: countries.map(([iso, dates]) => ({ iso_3166_1: iso, release_dates: dates.map(([type, d]) => ({ type, release_date: `${d}T00:00:00.000Z` })) })),
@@ -90,5 +90,18 @@ describe('trailer and ratings', () => {
       { source: 'IMDb', value: '7.8/10' },
       { source: 'Rotten Tomatoes', value: '91%' },
     ]);
+  });
+});
+
+describe('search', () => {
+  it('keeps films and series with a poster, drops people and repeats', () => {
+    const hits = searchHits([
+      { id: 1, media_type: 'movie', title: 'Dune', poster_path: '/d.jpg' },
+      { id: 2, media_type: 'person', name: 'Denis Villeneuve' } as never,
+      { id: 3, media_type: 'tv', name: 'Dune: Prophecy', poster_path: '/p.jpg' },
+      { id: 4, media_type: 'movie', title: 'Dune (1984 TV cut)', poster_path: null },
+      { id: 1, media_type: 'movie', title: 'Dune', poster_path: '/d.jpg' },
+    ]);
+    expect(hits.map((h) => [h.kind, h.t.id])).toEqual([['movie', 1], ['tv', 3]]);
   });
 });

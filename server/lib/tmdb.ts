@@ -16,6 +16,7 @@ export class TmdbError extends Error {}
 const API = 'https://api.themoviedb.org/3';
 const IMG = 'https://image.tmdb.org/t/p';
 const HOURS_6 = 6 * 3_600_000;
+const HOUR = 3_600_000;
 const OUT_DAYS = 45; // "Out now": released in the last 45 days
 const SOON_DAYS = 90; // "Coming soon": in the next 90 days
 const WINDOW_PAGES = 6; // the 120 most popular titles of a window, re-sorted by date
@@ -59,6 +60,7 @@ export interface TmdbListItem {
   popularity?: number;
 }
 interface ListPage { page: number; total_pages: number; results: TmdbListItem[] }
+export interface SearchItem extends TmdbListItem { media_type?: string }
 export interface ReleaseDates { results: { iso_3166_1: string; release_dates: { type: number; release_date: string }[] }[] }
 export interface Video { key: string; site: string; type: string; official?: boolean; iso_639_1?: string; published_at?: string }
 interface Credits { cast: { name: string; character?: string; profile_path?: string | null; order?: number }[] }
@@ -226,6 +228,29 @@ export async function releases(
     items: window.slice(start, start + PAGE).map(({ t, when }) => toCard(q.kind, t, when, statusOf(q.kind, t.id))),
     next: window.length > start + PAGE,
   };
+}
+
+/** What a search found worth showing: films and series with a poster (TMDB also finds people), in TMDB's order. */
+export function searchHits(results: SearchItem[]): { kind: WatchKind; t: SearchItem }[] {
+  const seen = new Set<string>();
+  return results
+    .filter((t) => (t.media_type === 'movie' || t.media_type === 'tv') && t.poster_path)
+    .map((t) => ({ kind: t.media_type as WatchKind, t }))
+    .filter(({ kind, t }) => !seen.has(`${kind}:${t.id}`) && !!seen.add(`${kind}:${t.id}`));
+}
+
+/** Films and series by name (TMDB's multi search, kept an hour), with the same dates and badges as the releases. */
+export async function search(
+  query: string,
+  page: number,
+  statusOf: (kind: WatchKind, id: number) => WatchStatus | null,
+  now = new Date(),
+  get: Fetch = fetch,
+): Promise<{ items: WatchCard[]; next: boolean }> {
+  const today = dateKey(now);
+  const res = await tmdb<{ page: number; total_pages: number; results: SearchItem[] }>('/search/multi', { query, page: String(page), include_adult: 'false' }, get, HOUR);
+  const items = await mapLimit(searchHits(res.results), 8, async ({ kind, t }) => toCard(kind, t, await whenOf(kind, t.id, 'popular', today, get), statusOf(kind, t.id)));
+  return { items, next: res.page < Math.min(res.total_pages, 20) };
 }
 
 // ---- One title ---------------------------------------------------------------------------------

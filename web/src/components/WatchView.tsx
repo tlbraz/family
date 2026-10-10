@@ -20,6 +20,9 @@ export function WatchView() {
   const [changed, setChanged] = useState(0); // something was added or deleted: refresh the badges
   const health = useWatchHealth();
   const [healthOpen, setHealthOpen] = useState(false);
+  const [text, setText] = useState('');
+  const query = useDebounced(text.trim(), 350);
+  const searching = mode === 'releases' && query.length >= 2;
 
   return (
     <div className="watch">
@@ -38,7 +41,7 @@ export function WatchView() {
           <button className={mode === 'releases' ? 'on' : ''} aria-pressed={mode === 'releases'} onClick={() => setMode('releases')}>Releases</button>
           <button className={mode === 'list' ? 'on' : ''} aria-pressed={mode === 'list'} onClick={() => setMode('list')}>My list</button>
         </div>
-        {mode === 'releases' && (
+        {mode === 'releases' && !searching && (
           <div className="segmented" role="group" aria-label="Films or TV">
             <button className={kind === 'movie' ? 'on' : ''} aria-pressed={kind === 'movie'} onClick={() => setKind('movie')} aria-label="Films"><Icon name="film" size={16} /> Films</button>
             <button className={kind === 'tv' ? 'on' : ''} aria-pressed={kind === 'tv'} onClick={() => setKind('tv')} aria-label="TV"><Icon name="tv" size={16} /> TV</button>
@@ -46,7 +49,20 @@ export function WatchView() {
         )}
       </div>
 
-      {mode === 'releases' ? <Releases kind={kind} changed={changed} onOpen={setOpen} /> : <MyList changed={changed} onOpen={setOpen} />}
+      {mode === 'releases' && (
+        <div className="docs-search watch-search">
+          <Icon name="search" size={18} />
+          <input type="search" value={text} onChange={(e) => setText(e.target.value)} placeholder="Search films and series…" aria-label="Search films and series" />
+        </div>
+      )}
+
+      {mode === 'list' ? (
+        <MyList changed={changed} onOpen={setOpen} />
+      ) : searching ? (
+        <SearchResults query={query} changed={changed} onOpen={setOpen} />
+      ) : (
+        <Releases kind={kind} changed={changed} onOpen={setOpen} />
+      )}
 
       {open && <TitleSheet {...open} onClose={() => setOpen(null)} onChanged={() => setChanged((n) => n + 1)} />}
     </div>
@@ -63,6 +79,16 @@ function useWatchHealth() {
     api.watchHealth().then(setHealth).catch(() => setHealth(null));
   }, []);
   return health;
+}
+
+/** The value once it has stopped changing for a moment (typing in the search box). */
+function useDebounced<T>(value: T, ms: number) {
+  const [settled, setSettled] = useState(value);
+  useEffect(() => {
+    const t = setTimeout(() => setSettled(value), ms);
+    return () => clearTimeout(t);
+  }, [value, ms]);
+  return settled;
 }
 
 function HealthDot({ health, expanded, onToggle }: { health: WatchHealth | null; expanded: boolean; onToggle: () => void }) {
@@ -95,6 +121,86 @@ function Badge({ status }: { status: WatchStatus | null }) {
   if (!status || status.state === 'none') return null;
   const text = status.state === 'downloading' && status.progress !== undefined ? `${Math.round(status.progress * 100)} %` : BADGE[status.state];
   return <span className={`watch-badge ${status.state}`}>{text}</span>;
+}
+
+/** One poster in a grid (releases and search). */
+function PosterCard({ t, showKind = false, onOpen }: { t: WatchCard; showKind?: boolean; onOpen: (o: Open) => void }) {
+  return (
+    <button className="watch-card" onClick={() => onOpen({ kind: t.kind, id: t.id })}>
+      <span className="watch-poster">
+        {t.poster ? <img src={t.poster} alt="" loading="lazy" /> : <Icon name={t.kind === 'movie' ? 'film' : 'tv'} size={28} />}
+        <Badge status={t.status} />
+      </span>
+      <b className="watch-title">{t.title}</b>
+      <span className="muted small watch-meta">
+        {[showKind ? (t.kind === 'movie' ? 'Film' : 'Series') : null, t.year, t.rating ? `★ ${t.rating.toFixed(1)}` : null].filter(Boolean).join(' · ')}
+      </span>
+      {t.date && <span className="small watch-date">{t.dateLabel ?? (t.kind === 'movie' ? 'Digital' : 'Aired')} {shortDate(t.date)}</span>}
+    </button>
+  );
+}
+
+/** Search results: films and series together, in TMDB's order, more as you scroll. */
+function SearchResults({ query, changed, onOpen }: { query: string; changed: number; onOpen: (o: Open) => void }) {
+  const [items, setItems] = useState<WatchCard[]>([]);
+  const [page, setPage] = useState(1);
+  const [next, setNext] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const sentinel = useRef<HTMLDivElement>(null);
+  const asked = useRef(0); // ignore answers to an older search
+
+  const load = useCallback(
+    (pageNo: number) => {
+      const ask = ++asked.current;
+      setLoading(true);
+      setError(null);
+      api
+        .watchSearch(query, pageNo)
+        .then((p) => {
+          if (ask !== asked.current) return;
+          setItems((list) => (pageNo === 1 ? p.items : [...list, ...p.items.filter((x) => !list.some((y) => y.kind === x.kind && y.id === x.id))]));
+          setNext(p.next);
+          setPage(pageNo);
+        })
+        .catch((e: Error) => ask === asked.current && setError(e.message))
+        .finally(() => ask === asked.current && setLoading(false));
+    },
+    [query],
+  );
+  useEffect(() => {
+    setItems([]);
+    load(1);
+  }, [load, changed]);
+
+  useEffect(() => {
+    const el = sentinel.current;
+    if (!el || !next || loading) return;
+    const seen = new IntersectionObserver((entries) => entries.some((e) => e.isIntersecting) && load(page + 1), { rootMargin: '600px' });
+    seen.observe(el);
+    return () => seen.disconnect();
+  }, [next, loading, page, load]);
+
+  return (
+    <>
+      {error && (
+        <section className="card watch-error">
+          <p className="error">{error}</p>
+          {error !== 'TMDB key missing' && <button className="chip" onClick={() => load(1)}>Try again</button>}
+        </section>
+      )}
+      {!error && !loading && !items.length && <p className="muted watch-empty">Nothing found for “{query}”.</p>}
+      <ul className="watch-grid">
+        {items.map((t) => (
+          <li key={`${t.kind}:${t.id}`}>
+            <PosterCard t={t} showKind onOpen={onOpen} />
+          </li>
+        ))}
+      </ul>
+      <div ref={sentinel} />
+      {loading && <p className="muted small watch-loading">{page === 1 && !items.length ? 'Searching…' : 'Loading more…'}</p>}
+    </>
+  );
 }
 
 /** The poster grid: out now / coming soon / popular, by genre, loading more as you scroll. */
@@ -174,17 +280,7 @@ function Releases({ kind, changed, onOpen }: { kind: WatchKind; changed: number;
       <ul className="watch-grid">
         {items.map((t) => (
           <li key={t.id}>
-            <button className="watch-card" onClick={() => onOpen({ kind: t.kind, id: t.id })}>
-              <span className="watch-poster">
-                {t.poster ? <img src={t.poster} alt="" loading="lazy" /> : <Icon name={t.kind === 'movie' ? 'film' : 'tv'} size={28} />}
-                <Badge status={t.status} />
-              </span>
-              <b className="watch-title">{t.title}</b>
-              <span className="muted small watch-meta">
-                {[t.year, t.rating ? `★ ${t.rating.toFixed(1)}` : null].filter(Boolean).join(' · ')}
-              </span>
-              {t.date && <span className="small watch-date">{t.dateLabel ?? (t.kind === 'movie' ? 'Digital' : 'Aired')} {shortDate(t.date)}</span>}
-            </button>
+            <PosterCard t={t} onOpen={onOpen} />
           </li>
         ))}
       </ul>

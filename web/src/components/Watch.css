@@ -1,5 +1,6 @@
 /* Entertainment tab (TMDB + Radarr/Sonarr + Jellyfin) */
 .watch-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+.watch-search { margin-bottom: 12px; }
 .watch-bar .segmented button { display: inline-flex; align-items: center; gap: 6px; padding: 0 14px; }
 .watch-sections { display: flex; margin-bottom: 10px; }
 .watch-sections button { flex: 1; padding: 0 8px; white-space: nowrap; }
