@@ -121,3 +121,26 @@ describe('money', () => {
     expect(res.status).toBe(401);
   });
 });
+
+describe('Entertainment tab', () => {
+  it('is for signed-in parents only', async () => {
+    for (const path of ['/api/watch/health', '/api/watch/releases?kind=movie&section=out', '/api/watch/title/movie/550', '/api/watch/list', '/api/watch/players']) {
+      expect((await up().request(path)).status).toBe(401);
+    }
+    const res = await up().request('/api/watch/title/movie/550', { method: 'POST', body: '{"search":true}', headers: { 'content-type': 'application/json' } });
+    expect(res.status).toBe(401);
+    expect((await up().request('/api/watch/title/movie/550', { method: 'DELETE' })).status).toBe(401);
+  });
+
+  it('takes Radarr/Sonarr webhooks only with the token', async () => {
+    const post = (q: string) => up().request(`/api/hooks/arr${q}`, { method: 'POST', body: JSON.stringify({ eventType: 'Test' }), headers: { 'content-type': 'application/json' } });
+    expect((await post('?token=x')).status).toBe(401); // not set up
+    process.env.ARR_WEBHOOK_TOKEN = 'shared-secret-for-the-arrs';
+    expect((await post('')).status).toBe(401);
+    expect((await post('?token=wrong')).status).toBe(401);
+    const ok = await post('?token=shared-secret-for-the-arrs');
+    expect(ok.status).toBe(200);
+    expect(await ok.json()).toEqual({ ok: true });
+    delete process.env.ARR_WEBHOOK_TOKEN;
+  });
+});

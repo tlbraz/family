@@ -16,6 +16,7 @@ import { memberRoutes, toMember } from './routes/members';
 import { groceryRoutes } from './routes/groceries';
 import { noteRoutes } from './routes/notes';
 import { docRoutes } from './routes/docs';
+import { hookRoutes, watchRoutes } from './routes/watch';
 import { shareRoutes } from './routes/share';
 import { taskRoutes } from './routes/tasks';
 import { bpRoutes } from './routes/bp';
@@ -58,7 +59,7 @@ export function createApp(db: Db, hooks: AppHooks = noop) {
     const body: AppConfig = {
       me: me ? toMember(me) : null,
       meTracksBp: me?.role === 'parent' && !!(await bpSettingsOf(db, me.id)),
-      features: { ai: aiEnabled(), google: googleEnabled(), telegram: !!process.env.TELEGRAM_BOT_TOKEN, money: moneyEnabled() && me?.role === 'parent', docs: paperlessEnabled() && me?.role === 'parent' },
+      features: { ai: aiEnabled(), google: googleEnabled(), telegram: !!process.env.TELEGRAM_BOT_TOKEN, money: moneyEnabled() && me?.role === 'parent', docs: paperlessEnabled() && me?.role === 'parent', watch: me?.role === 'parent' },
     };
     return c.json(body);
   });
@@ -67,6 +68,8 @@ export function createApp(db: Db, hooks: AppHooks = noop) {
   api.route('/members', memberRoutes(db, hooks.membersChanged));
   api.route('/notes', noteRoutes(db));
   api.route('/docs', docRoutes());
+  api.route('/watch', watchRoutes());
+  api.route('/hooks', hookRoutes(db));
   api.route('/groceries', groceryRoutes(db));
   api.route('/share', shareRoutes());
   api.route('/tasks', taskRoutes(db));

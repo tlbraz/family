@@ -46,7 +46,19 @@ export async function sendTelegram(html: string, only?: string): Promise<boolean
   return results.some(Boolean);
 }
 
-export const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+/** A picture (by URL) with an HTML caption to every recipient; a chat where the picture fails gets the text. */
+export async function sendTelegramPhoto(photo: string, caption: string): Promise<boolean> {
+  if (!process.env.TELEGRAM_BOT_TOKEN) return false;
+  const results = await Promise.all(
+    recipientIds().map(async (chat_id) =>
+      (await call('sendPhoto', { chat_id, photo, caption: caption.slice(0, 1000), parse_mode: 'HTML' })) ??
+      call('sendMessage', { chat_id, text: caption.slice(0, 4000), parse_mode: 'HTML', disable_web_page_preview: true }),
+    ),
+  );
+  return results.some(Boolean);
+}
+
+export const esc =(s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
 async function getSetting(db: Db, key: string) {
   const [row] = await db.select().from(settings).where(eq(settings.key, key));

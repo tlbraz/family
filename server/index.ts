@@ -9,6 +9,7 @@ import { runPayrollAlert } from './lib/payroll';
 import { runReminders } from './lib/reminders';
 import { runBankAlerts, runBillAlerts, runDocumentAlerts, runOwedAlerts } from './lib/alerts';
 import { runValuations } from './lib/valuations';
+import { runWantedSearch } from './lib/arr';
 import { bpFromTelegram } from './lib/bp';
 import { loadTelegramChats, pollTelegram } from './lib/telegram';
 import { seed } from './seed';
@@ -74,6 +75,8 @@ const timers = [
   setInterval(() => void runReminders(db).catch(logErr('reminders')), 60_000),
   setInterval(() => void runDocumentAlerts(db).catch(logErr('document alerts')), 60_000),
   setInterval(() => void afterMoney(runMoney()), 20 * 60_000),
+  // Wanted films that are out but still missing: Radarr searches for them once a day.
+  setInterval(() => void runWantedSearch(db).catch(logErr('wanted search')), 60 * 60_000),
 ];
 void afterMoney(runMoney());
 void syncRound(db);
