@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { dueForSearch, etaText, movieStatus, seriesStatus, type RadarrMovie } from './arr';
+import { dueForSearch, etaText, healthIssues, movieStatus, posterOf, seriesStatus, type RadarrMovie } from './arr';
 
 const now = new Date('2026-10-10T15:00:00');
 const movie = (m: Partial<RadarrMovie>): RadarrMovie => ({ id: 1, tmdbId: 550, title: 'Weapons', monitored: true, hasFile: false, ...m });
@@ -70,5 +70,23 @@ describe('daily search for wanted films', () => {
       movie({ id: 6 }), // no date
     ];
     expect(dueForSearch(movies, { 5: '2026-10-10', 1: '2026-10-09' }, '2026-10-10')).toEqual([1]);
+  });
+});
+
+describe('health and posters', () => {
+  it('warns about real problems, not about updates', () => {
+    const issues = [
+      { source: 'UpdateCheck', type: 'notice', message: 'New update is available: v6.4.4' },
+      { source: 'UpdateCheck', type: 'warning', message: 'New update is available: v4.0.20.3014' },
+      { source: 'IndexerStatusCheck', type: 'warning', message: 'Indexers unavailable due to failures: Nyaa' },
+      { source: 'DownloadClientCheck', type: 'error', message: 'Unable to communicate with qBittorrent' },
+      { source: 'Other', type: 'notice', message: 'fyi' },
+    ];
+    expect(healthIssues(issues).map((i) => i.source)).toEqual(['IndexerStatusCheck', 'DownloadClientCheck']);
+  });
+
+  it('asks TMDB for a thumbnail-sized poster', () => {
+    expect(posterOf([{ coverType: 'fanart', remoteUrl: 'x' }, { coverType: 'poster', remoteUrl: 'https://image.tmdb.org/t/p/original/a.jpg' }])).toBe('https://image.tmdb.org/t/p/w342/a.jpg');
+    expect(posterOf([])).toBeNull();
   });
 });

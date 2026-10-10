@@ -117,10 +117,15 @@ interface HistoryRecord {
   episode?: { seasonNumber: number; episodeNumber: number };
 }
 
+/** The poster Radarr/Sonarr point to; TMDB ones at thumbnail size rather than the original (several MB). */
 export const posterOf = (images: Image[] | undefined) => {
   const p = images?.find((i) => i.coverType === 'poster');
-  return p?.remoteUrl ?? null;
+  return p?.remoteUrl?.replace('image.tmdb.org/t/p/original/', 'image.tmdb.org/t/p/w342/') ?? null;
 };
+
+/** Health checks worth a warning: not "a new version is available". */
+export const healthIssues = (issues: { source?: string; type: string; message: string }[]) =>
+  issues.filter((i) => (i.type === 'warning' || i.type === 'error') && i.source !== 'UpdateCheck' && !/^New update is available/i.test(i.message));
 
 // ---- Status (pure, tested) ---------------------------------------------------------------------
 
@@ -446,8 +451,7 @@ export async function arrHealth(): Promise<{ problems: string[]; ok: string[] }>
   await Promise.all([
     ...(['radarr', 'sonarr'] as Arr[]).filter(arrEnabled).map(async (a) => {
       try {
-        const issues = await arrFetch<{ type: string; message: string }[]>(a, '/health');
-        const bad = issues.filter((i) => i.type === 'warning' || i.type === 'error');
+        const bad = healthIssues(await arrFetch<{ source?: string; type: string; message: string }[]>(a, '/health'));
         for (const i of bad) problems.push(`${NAME[a]}: ${i.message}`);
         if (!bad.length) ok.push(NAME[a]);
       } catch (e) {
