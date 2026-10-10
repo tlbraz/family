@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { dueForSearch, etaText, healthIssues, movieStatus, posterOf, seriesStatus, type RadarrMovie } from './arr';
+import { bytesText, dueForSearch, etaText, fileSpecs, healthIssues, mbpsOf, movieStatus, posterOf, seriesStatus, type RadarrMovie } from './arr';
 
 const now = new Date('2026-10-10T15:00:00');
 const movie = (m: Partial<RadarrMovie>): RadarrMovie => ({ id: 1, tmdbId: 550, title: 'Weapons', monitored: true, hasFile: false, ...m });
@@ -11,7 +11,8 @@ describe('film status', () => {
 
   it('is downloading while it is in the queue, with progress and ETA', () => {
     const st = movieStatus(movie({}), [{ movieId: 1, size: 1000, sizeleft: 570, estimatedCompletionTime: '2026-10-10T21:30:00' }, { movieId: 2, size: 5 }], now);
-    expect(st).toEqual({ state: 'downloading', arrId: 1, text: 'Downloading 43 % · ETA 21:30', progress: 0.43 });
+    expect(st).toMatchObject({ state: 'downloading', arrId: 1, progress: 0.43 });
+    expect(st.text).toMatch(/^Downloading 43 % · 1 MB of 1 MB · 1 MB\/s · ETA 21:30$/);
   });
 
   it('says when a finished download waits to be imported', () => {
@@ -41,8 +42,8 @@ describe('series status', () => {
   });
 
   it('shows several episodes downloading together', () => {
-    const q = [{ seriesId: 7, size: 100, sizeleft: 50 }, { seriesId: 7, size: 100, sizeleft: 100 }];
-    expect(seriesStatus({ ...s, statistics: { episodeFileCount: 3 } }, q, now)).toMatchObject({ state: 'downloading', text: 'Downloading 2 episodes 25 %', progress: 0.25 });
+    const q = [{ seriesId: 7, size: 2e9, sizeleft: 1e9 }, { seriesId: 7, size: 2e9, sizeleft: 2e9 }];
+    expect(seriesStatus({ ...s, statistics: { episodeFileCount: 3 } }, q, now)).toMatchObject({ state: 'downloading', text: 'Downloading 2 episodes 25 % · 1.0 GB of 4.0 GB', progress: 0.25, file: { size: 4e9, left: 3e9, release: null } });
   });
 
   it('is wanted until the next episode airs', () => {
@@ -88,5 +89,27 @@ describe('health and posters', () => {
   it('asks TMDB for a thumbnail-sized poster', () => {
     expect(posterOf([{ coverType: 'fanart', remoteUrl: 'x' }, { coverType: 'poster', remoteUrl: 'https://image.tmdb.org/t/p/original/a.jpg' }])).toBe('https://image.tmdb.org/t/p/w342/a.jpg');
     expect(posterOf([])).toBeNull();
+  });
+});
+
+describe('file size, speed and specs', () => {
+  const now = new Date('2026-10-10T17:00:00');
+  it('shows size and speed while downloading', () => {
+    const q = [{ movieId: 1, title: 'Weapons.2025.2160p.WEB-DL.DDP5.1.Atmos.DV.HDR.H.265-X', quality: { quality: { name: 'WEBDL-2160p', source: 'webdl', resolution: 2160 } }, size: 26.5e9, sizeleft: 15.1e9, estimatedCompletionTime: new Date(now.getTime() + 600_000).toISOString() }];
+    const st = movieStatus({ id: 1, tmdbId: 9, title: 'Weapons', monitored: true, hasFile: false }, q, now);
+    expect(st.text).toMatch(/^Downloading 43 % · 11\.4 GB of 26\.5 GB · 25 MB\/s · ETA /);
+    expect(st.file).toMatchObject({ size: 26.5e9, left: 15.1e9, release: q[0]!.title, specs: ['WEB-DL', '4K'] });
+  });
+
+  it('describes a file in the library', () => {
+    expect(fileSpecs({ quality: { source: 'webdl', resolution: 2160 } }, { resolution: '3840x1600', videoCodec: 'x265', videoBitDepth: 10, videoDynamicRangeType: 'DV HDR10', audioCodec: 'EAC3 Atmos', audioChannels: 5.1 }))
+      .toEqual(['WEB-DL', '4K', 'HEVC 10-bit', 'Dolby Vision + HDR10', 'DD+ 5.1 Atmos']);
+    expect(fileSpecs({ quality: { source: 'bluray', modifier: 'remux', resolution: 1080 } }, { resolution: '1920x1080', videoCodec: 'AVC', videoBitDepth: 8, videoDynamicRangeType: '', audioCodec: 'TrueHD Atmos', audioChannels: 7.1 }))
+      .toEqual(['Remux', '1080p', 'H.264', 'SDR', 'TrueHD 7.1 Atmos']);
+    expect(mbpsOf(26.5e9, '2:09:01', 129)).toBe(27.4);
+    expect(mbpsOf(26.5e9, undefined, 129)).toBe(27.4);
+    expect(bytesText(850e6)).toBe('850 MB');
+    const st = movieStatus({ id: 1, tmdbId: 9, title: 'W', monitored: true, hasFile: true, runtime: 129, movieFile: { size: 26.5e9, quality: { quality: { source: 'webdl', resolution: 2160 } }, mediaInfo: { resolution: '3840x2160', runTime: '2:09:00' } } }, [], now);
+    expect(st.file).toMatchObject({ size: 26.5e9, mbps: 27.4, specs: ['WEB-DL', '4K', 'SDR'] });
   });
 });

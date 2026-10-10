@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { WatchCard, WatchDetail, WatchGenre, WatchHealth, WatchKind, WatchList, WatchListItem, WatchSection, WatchSession, WatchStatus } from '../../../shared/types';
+import type { WatchCard, WatchDetail, WatchFile, WatchGenre, WatchHealth, WatchKind, WatchList, WatchListItem, WatchSection, WatchSession, WatchStatus } from '../../../shared/types';
 import { api } from '../api';
 import { Icon } from './Icon';
 import { Sheet } from './Sheet';
@@ -347,6 +347,39 @@ type Monitor = 'all' | 'latestSeason' | 'future';
 const MONITORS: [Monitor, string][] = [['all', 'Whole series'], ['latestSeason', 'Latest season'], ['future', 'Only new episodes']];
 
 /** One title: trailer, details, where it stands, and Get it / Want it / Play / Delete. */
+const gb = (n: number) => (n >= 1e9 ? `${(n / 1e9).toFixed(1)} GB` : `${Math.max(1, Math.round(n / 1e6))} MB`);
+
+/** Size, speed and what the file is: while downloading, and once it's in the library. */
+function FileFacts({ state, file }: { state: WatchStatus['state']; file: WatchFile }) {
+  if (state === 'downloading') {
+    const done = file.left !== undefined ? file.size - file.left : null;
+    return (
+      <>
+        <dt>Download</dt>
+        <dd>{[done !== null ? `${gb(done)} of ${gb(file.size)}` : gb(file.size), file.speed ? `${gb(file.speed)}/s` : null].filter(Boolean).join(' · ')}</dd>
+        {file.release && (
+          <>
+            <dt>Release</dt>
+            <dd className="small watch-release">{file.release}</dd>
+          </>
+        )}
+      </>
+    );
+  }
+  return (
+    <>
+      <dt>File</dt>
+      <dd>{[gb(file.size), file.episodes ? `${file.episodes} episode${file.episodes === 1 ? '' : 's'}` : null, file.mbps ? `${file.mbps} Mbps` : null].filter(Boolean).join(' · ')}</dd>
+      {file.specs.length > 0 && (
+        <>
+          <dt>Specs</dt>
+          <dd>{file.specs.join(' · ')}</dd>
+        </>
+      )}
+    </>
+  );
+}
+
 function TitleSheet({ kind, id, onClose, onChanged }: Open & { onClose: () => void; onChanged: () => void }) {
   const [t, setT] = useState<WatchDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -440,9 +473,10 @@ function TitleSheet({ kind, id, onClose, onChanged }: Open & { onClose: () => vo
             {st && (
               <>
                 <dt>Status</dt>
-                <dd className={`watch-state ${st.state}`}>{st.text}</dd>
+                <dd className={`watch-state ${st.state}`}>{st.state === 'downloading' ? st.text.split(' · ')[0] : st.text}</dd>
               </>
             )}
+            {st?.file && <FileFacts state={st.state} file={st.file} />}
           </dl>
           {st?.state === 'downloading' && st.progress !== undefined && <span className="watch-progress"><span style={{ width: `${Math.round(st.progress * 100)}%` }} /></span>}
 

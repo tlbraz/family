@@ -82,7 +82,8 @@ export interface RadarrMovie {
   digitalRelease?: string;
   physicalRelease?: string;
   added?: string;
-  movieFile?: { dateAdded?: string };
+  runtime?: number; // minutes
+  movieFile?: { dateAdded?: string; size?: number; relativePath?: string; quality?: Quality; mediaInfo?: MediaInfo };
   images?: Image[];
 }
 export interface SonarrSeries {
@@ -96,9 +97,21 @@ export interface SonarrSeries {
   previousAiring?: string;
   added?: string;
   images?: Image[];
-  statistics?: { episodeFileCount?: number; episodeCount?: number; totalEpisodeCount?: number };
+  statistics?: { episodeFileCount?: number; episodeCount?: number; totalEpisodeCount?: number; sizeOnDisk?: number };
+}
+interface Quality { quality?: { name?: string; source?: string; resolution?: number; modifier?: string } }
+export interface MediaInfo {
+  resolution?: string; // "3840x1600"
+  videoCodec?: string; // "x265", "h265", "HEVC", "AVC"
+  videoBitDepth?: number;
+  videoDynamicRangeType?: string; // "DV HDR10", "HDR10Plus", "HDR10", "HLG", "DV", ""
+  audioCodec?: string; // "EAC3 Atmos", "EAC3", "AAC", "TrueHD Atmos", "DTS-HD MA"
+  audioChannels?: number; // 5.1
+  runTime?: string; // "2:09:01"
 }
 export interface QueueRecord {
+  title?: string;
+  quality?: Quality;
   movieId?: number;
   seriesId?: number;
   size?: number;
@@ -147,12 +160,51 @@ function progressOf(q: QueueRecord[]) {
   return size > 0 ? Math.round(Math.max(0, Math.min(1, 1 - left / size)) * 1000) / 1000 : 0;
 }
 
+/** "26.5 GB", "850 MB". */
+export const bytesText = (n: number) => (n >= 1e9 ? `${(n / 1e9).toFixed(1)} GB` : `${Math.max(1, Math.round(n / 1e6))} MB`);
+
+const SOURCE: Record<string, string> = { webdl: 'WEB-DL', webrip: 'WEBRip', bluray: 'Blu-ray', television: 'TV', dvd: 'DVD', web: 'WEB-DL' };
+const HDR: Record<string, string> = { 'DV HDR10': 'Dolby Vision + HDR10', 'DV HDR10Plus': 'Dolby Vision + HDR10+', 'DV HLG': 'Dolby Vision + HLG', 'DV SDR': 'Dolby Vision', DV: 'Dolby Vision', HDR10Plus: 'HDR10+', HDR10: 'HDR10', HLG: 'HLG', PQ: 'HDR' };
+const VIDEO: [RegExp, string][] = [[/x265|h\.?265|hevc/i, 'HEVC'], [/x264|h\.?264|avc/i, 'H.264'], [/av1/i, 'AV1'], [/vp9/i, 'VP9']];
+const AUDIO: [RegExp, string][] = [[/^e-?ac-?3/i, 'DD+'], [/^ac-?3/i, 'DD'], [/truehd/i, 'TrueHD'], [/dts/i, 'DTS'], [/aac/i, 'AAC'], [/opus/i, 'Opus'], [/flac/i, 'FLAC']];
+
+/** What a file is, in a few words: source, resolution, video, HDR, audio. Missing parts are left out. */
+export function fileSpecs(quality: Quality | undefined, mi: MediaInfo | undefined): string[] {
+  const q = quality?.quality;
+  const source = q?.modifier === 'remux' ? 'Remux' : q?.source ? SOURCE[q.source] : undefined;
+  const [w = 0, h = 0] = (mi?.resolution ?? '').split('x').map(Number);
+  const res = w >= 3200 || h >= 2000 ? '4K' : w >= 1800 || h >= 1000 ? '1080p' : w >= 1200 ? '720p' : h > 0 ? `${h}p` : q?.resolution ? (q.resolution >= 2160 ? '4K' : `${q.resolution}p`) : undefined;
+  const codec = mi?.videoCodec ? (VIDEO.find(([re]) => re.test(mi.videoCodec!))?.[1] ?? mi.videoCodec) : undefined;
+  const video = codec ? `${codec}${mi?.videoBitDepth && mi.videoBitDepth > 8 ? ` ${mi.videoBitDepth}-bit` : ''}` : undefined;
+  const range = mi ? (mi.videoDynamicRangeType ? (HDR[mi.videoDynamicRangeType] ?? mi.videoDynamicRangeType) : 'SDR') : undefined;
+  const ac = mi?.audioCodec ? (AUDIO.find(([re]) => re.test(mi.audioCodec!))?.[1] ?? mi.audioCodec.split(' ')[0]) : undefined;
+  const audio = ac ? [ac, mi?.audioChannels ? String(mi.audioChannels) : null, /atmos/i.test(mi?.audioCodec ?? '') ? 'Atmos' : null].filter(Boolean).join(' ') : undefined;
+  return [source, res, video, range, audio].filter((x): x is string => !!x);
+}
+
+/** Seconds in "2:09:01" (or "49:12"). */
+const seconds = (t: string | undefined) => (t && /^\d+(:\d{1,2}){1,2}(\.\d+)?$/.test(t) ? t.split(':').reduce((s, p) => s * 60 + Number(p), 0) : 0);
+
+/** Average bitrate in Mbit/s: size over running time. */
+export function mbpsOf(size: number | undefined, runTime: string | undefined, runtimeMinutes: number | undefined): number | null {
+  const secs = seconds(runTime) || (runtimeMinutes ?? 0) * 60;
+  return size && secs > 0 ? Math.round((size * 8) / secs / 1e5) / 10 : null;
+}
+
 function downloading(q: QueueRecord[], arrId: number, now: Date, what = ''): WatchStatus {
   const progress = progressOf(q);
   const eta = q.map((r) => r.estimatedCompletionTime).filter(Boolean).sort().at(-1);
   const stuck = q.every((r) => r.trackedDownloadState === 'importPending' || r.trackedDownloadState === 'importBlocked');
-  const text = stuck ? `Downloaded${what} · waiting to import` : [`Downloading${what} ${Math.round(progress * 100)} %`, etaText(eta, now)].filter(Boolean).join(' · ');
-  return { state: 'downloading', arrId, text, progress };
+  const size = q.reduce((s, r) => s + (r.size ?? 0), 0);
+  const left = q.reduce((s, r) => s + (r.sizeleft ?? 0), 0);
+  const secs = eta ? (new Date(eta).getTime() - now.getTime()) / 1000 : 0;
+  const speed = !stuck && left > 0 && secs > 0 ? left / secs : undefined;
+  const amount = size > 0 ? `${bytesText(size - left)} of ${bytesText(size)}` : null;
+  const text = stuck
+    ? `Downloaded${what} · waiting to import`
+    : [`Downloading${what} ${Math.round(progress * 100)} %`, amount, speed ? `${bytesText(speed)}/s` : null, etaText(eta, now)].filter(Boolean).join(' · ');
+  const file = size > 0 ? { size, left, speed, release: q.length === 1 ? (q[0]!.title ?? null) : null, specs: q.length === 1 ? fileSpecs(q[0]!.quality, undefined) : [] } : undefined;
+  return { state: 'downloading', arrId, text, progress, ...(file ? { file } : {}) };
 }
 
 const NONE: WatchStatus = { state: 'none', arrId: null, text: 'Not in the library' };
@@ -162,7 +214,11 @@ export function movieStatus(m: RadarrMovie | undefined, queue: QueueRecord[], no
   if (!m) return NONE;
   const q = queue.filter((r) => r.movieId === m.id);
   if (q.length) return downloading(q, m.id, now);
-  if (m.hasFile) return { state: 'library', arrId: m.id, text: 'In library' };
+  if (m.hasFile) {
+    const f = m.movieFile;
+    const file = f?.size ? { size: f.size, release: f.relativePath ?? null, specs: fileSpecs(f.quality, f.mediaInfo), mbps: mbpsOf(f.size, f.mediaInfo?.runTime, m.runtime) } : undefined;
+    return { state: 'library', arrId: m.id, text: 'In library', ...(file ? { file } : {}) };
+  }
   if (!m.monitored) return { ...NONE, arrId: m.id };
   const out = m.digitalRelease ?? m.physicalRelease;
   const text = !out ? 'Wanted — no digital date yet' : out.slice(0, 10) > dateKey(now) ? `Wanted — out on ${shortDate(out)}` : 'Wanted — looking for a copy';
@@ -176,7 +232,10 @@ export function seriesStatus(s: SonarrSeries | undefined, queue: QueueRecord[], 
   if (q.length) return downloading(q, s.id, now, q.length > 1 ? ` ${q.length} episodes` : '');
   const have = s.statistics?.episodeFileCount ?? 0;
   const aired = s.statistics?.episodeCount ?? 0; // monitored episodes that have aired
-  if (have > 0) return { state: 'library', arrId: s.id, text: have < aired ? `In library · ${have} of ${aired} episodes` : 'In library' };
+  if (have > 0) {
+    const size = s.statistics?.sizeOnDisk ?? 0;
+    return { state: 'library', arrId: s.id, text: have < aired ? `In library · ${have} of ${aired} episodes` : 'In library', ...(size ? { file: { size, episodes: have, specs: [] } } : {}) };
+  }
   if (!s.monitored) return { ...NONE, arrId: s.id };
   const text = s.nextAiring && s.nextAiring.slice(0, 10) >= dateKey(now) ? `Wanted — next episode on ${shortDate(s.nextAiring)}` : 'Wanted — looking for episodes';
   return { state: 'wanted', arrId: s.id, text };
@@ -397,7 +456,9 @@ export async function myList(tmdbOf: (tvdbId: number) => Promise<number | null>,
     const m = r.movie ?? (r.movieId ? movieById.get(r.movieId) : undefined);
     if (!m || seenMovies.has(m.id) || !movieById.get(m.id)?.hasFile) continue;
     seenMovies.add(m.id);
-    recent.push(movieRow(m, `Added ${shortDate(r.date)}`, r.date));
+    const f = movieById.get(m.id)?.movieFile;
+    const specs = f ? fileSpecs(f.quality, f.mediaInfo).filter((x) => x !== 'SDR').slice(1, 4) : [];
+    recent.push(movieRow(m, [`Added ${shortDate(r.date)}`, f?.size ? bytesText(f.size) : null, ...specs].filter(Boolean).join(' · '), r.date));
   }
   const bySeries = new Map<number, HistoryRecord[]>();
   for (const r of sh) if (r.seriesId && seriesById.has(r.seriesId)) bySeries.set(r.seriesId, [...(bySeries.get(r.seriesId) ?? []), r]);

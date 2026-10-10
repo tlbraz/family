@@ -315,6 +315,18 @@ export interface WatchStatus {
   arrId: number | null; // the movie in Radarr / the series in Sonarr (null = not added)
   text: string; // "In library", "Downloading 43 % · ETA 21:30", "Wanted — out on 14 Nov", "Not in the library"
   progress?: number; // 0..1 while downloading
+  file?: WatchFile;
+}
+
+/** The file behind a status: size and specs once it's in the library; size, speed and release while downloading. */
+export interface WatchFile {
+  size: number; // bytes (a series: all its episodes on disk)
+  left?: number; // bytes still to download
+  speed?: number; // bytes per second, from the download's ETA
+  release?: string | null; // what's downloading / the file's name
+  specs: string[]; // ["WEB-DL", "4K", "HEVC 10-bit", "Dolby Vision + HDR10", "DD+ 5.1 Atmos"]
+  mbps?: number | null; // average bitrate: size over running time
+  episodes?: number; // a series: episodes on disk
 }
 
 /** A poster in the releases grid. */

@@ -62,6 +62,7 @@
 .watch-ratings { display: flex; flex-wrap: wrap; gap: 6px; }
 .watch-rating { display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: 12px; background: var(--card); color: var(--ink); text-decoration: none; }
 .watch-rating svg { color: #e0a300; fill: currentColor; }
+.watch-release { overflow-wrap: anywhere; color: var(--muted); }
 .watch-state.library { color: var(--ok); }
 .watch-state.wanted { color: var(--holiday-ink); }
 .watch-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
