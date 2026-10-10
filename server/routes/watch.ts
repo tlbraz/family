@@ -178,7 +178,9 @@ export function hookRoutes(db: Db) {
   const arrived = arrivals(db);
   r.post('/arr', async (c) => {
     if (!hookTokenMatches(c.req.query('token'))) return c.json({ error: 'Wrong token' }, 401);
-    const event = parseArrHook(await c.req.json().catch(() => null));
+    const body = (await c.req.json().catch(() => null)) as { eventType?: string; isUpgrade?: boolean; movie?: { title?: string }; series?: { title?: string } } | null;
+    const event = parseArrHook(body);
+    console.log(`arr hook: ${body?.eventType ?? '?'} ${body?.movie?.title ?? body?.series?.title ?? ''}${body?.isUpgrade ? ' (upgrade)' : ''} → ${event === 'test' ? 'test' : event ? 'queued' : 'ignored'}`);
     if (event && event !== 'test') void arrived(event).catch((e: Error) => console.error('arr hook:', e.message));
     return c.json({ ok: true });
   });

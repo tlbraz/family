@@ -20,7 +20,7 @@ describe('Radarr/Sonarr webhook', () => {
   it('reads an imported film', () => {
     expect(parseArrHook(radarr)).toEqual({
       batch: 'movie:12', kind: 'movie', title: 'Weapons', year: 2025, tmdbId: 1078605,
-      poster: 'https://image.tmdb.org/t/p/original/p.jpg', episodes: [], keys: ['arrived:movie:1078605:301'],
+      poster: 'https://image.tmdb.org/t/p/original/p.jpg', episodes: [], keys: ['arrived:movie:1078605:301'], upgrade: false, titleKey: 'arrived:movie:1078605:',
     });
   });
 
@@ -28,9 +28,10 @@ describe('Radarr/Sonarr webhook', () => {
     expect(parseArrHook(sonarr([[2, 5]], 88))).toMatchObject({ batch: 'series:7', kind: 'tv', tmdbId: 95480, episodes: [{ season: 2, episode: 5 }], keys: ['arrived:series:393199:88'] });
   });
 
-  it('answers tests and ignores upgrades and other events', () => {
+  it('answers tests, flags upgrades and ignores other events', () => {
     expect(parseArrHook({ eventType: 'Test' })).toBe('test');
-    expect(parseArrHook({ ...radarr, isUpgrade: true })).toBeNull();
+    expect(parseArrHook({ ...radarr, isUpgrade: true })).toMatchObject({ upgrade: true, titleKey: expect.stringMatching(/^arrived:movie:\d+:$/) });
+    expect(parseArrHook(radarr)).toMatchObject({ upgrade: false });
     expect(parseArrHook({ ...radarr, eventType: 'Grab' })).toBeNull();
     expect(parseArrHook(null)).toBeNull();
     expect(parseArrHook({ eventType: 'Download' })).toBeNull();

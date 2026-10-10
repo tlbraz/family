@@ -1,5 +1,5 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
-import { inArray } from 'drizzle-orm';
+import { inArray, like } from 'drizzle-orm';
 import type { Db } from '../db';
 import { settings } from '../schema';
 import { refreshJellyfin } from './arr';
@@ -31,6 +31,8 @@ export interface Arrival {
   poster: string | null; // from Radarr/Sonarr, if TMDB isn't set up
   episodes: Episode[];
   keys: string[]; // remembered in settings so a file is announced once
+  upgrade: boolean; // Radarr/Sonarr replaced a file: only worth a message if this title was never announced
+  titleKey: string; // prefix of this title's keys ("was it ever announced?")
 }
 
 interface Image { coverType?: string; remoteUrl?: string }
@@ -48,13 +50,15 @@ interface Hook {
 const posterIn = (images: Image[] | undefined) => images?.find((i) => i.coverType === 'poster')?.remoteUrl ?? null;
 
 /**
- * What a Radarr/Sonarr webhook means for us: a test, a new film or episodes, or nothing (grabs, renames, upgrades
- * of something we already had…).
+ * What a Radarr/Sonarr webhook means for us: a test, a new film or episodes, or nothing (grabs, renames…).
+ * Upgrades come back flagged: a file replacing one we announced stays quiet, but a title whose old copy was removed
+ * and fetched again (10 Oct 2026: the 4K re-downloads, which Radarr reports as upgrades) still gets its message.
  */
 export function parseArrHook(body: unknown): Arrival | 'test' | null {
   const h = (body && typeof body === 'object' ? body : {}) as Hook;
   if (h.eventType === 'Test') return 'test';
-  if (h.eventType !== 'Download' || h.isUpgrade) return null;
+  if (h.eventType !== 'Download') return null;
+  const upgrade = !!h.isUpgrade;
   if (h.movie) {
     const id = h.movie.id ?? h.movie.tmdbId;
     const tmdbId = h.movie.tmdbId ?? h.remoteMovie?.tmdbId ?? null;
@@ -68,6 +72,8 @@ export function parseArrHook(body: unknown): Arrival | 'test' | null {
       poster: posterIn(h.movie.images),
       episodes: [],
       keys: [`arrived:movie:${tmdbId || id}:${h.movieFile?.id ?? h.movieFile?.relativePath ?? ''}`],
+      upgrade,
+      titleKey: `arrived:movie:${tmdbId || id}:`,
     };
   }
   if (h.series) {
@@ -85,6 +91,8 @@ export function parseArrHook(body: unknown): Arrival | 'test' | null {
       poster: posterIn(h.series.images),
       episodes,
       keys: [`arrived:series:${h.series.tvdbId ?? id}:${h.episodeFile?.id ?? episodes.map((e) => `${e.season}x${e.episode}`).join(',')}`],
+      upgrade,
+      titleKey: `arrived:series:${h.series.tvdbId ?? id}:`,
     };
   }
   return null;
@@ -98,6 +106,7 @@ export function mergeArrivals(a: Arrival, b: Arrival): Arrival {
     poster: a.poster ?? b.poster,
     episodes: [...eps.values()].sort((x, y) => x.season - y.season || x.episode - y.episode),
     keys: [...new Set([...a.keys, ...b.keys])],
+    upgrade: a.upgrade && b.upgrade,
   };
 }
 
@@ -159,11 +168,16 @@ async function announce(db: Db, a: Arrival) {
   const seen = await seenKeys(db, a.keys);
   const fresh = a.keys.filter((k) => !seen.has(k));
   if (!fresh.length) return;
+  if (a.upgrade && (await db.select({ key: settings.key }).from(settings).where(like(settings.key, `${a.titleKey}%`)).limit(1)).length) {
+    console.log(`arrival: ${a.title} is an upgrade of something already announced — no message`);
+    return;
+  }
   let poster = a.poster;
   if (a.tmdbId && tmdbEnabled()) poster = posterUrl((await details(a.kind, a.tmdbId).catch(() => null))?.poster_path) ?? poster;
   const text = arrivalMessage(a);
   const sent = poster ? await sendTelegramPhoto(poster, text) : await sendTelegram(text);
   if (sent) await db.insert(settings).values(fresh.map((key) => ({ key, value: new Date().toISOString() }))).onConflictDoNothing();
+  console.log(`arrival: ${a.title}${a.episodes.length ? ` (${a.episodes.length} episode(s))` : ''} ${sent ? 'announced' : 'NOT sent (Telegram refused or no recipients)'}`);
 }
 
 let lastRefresh = 0;
