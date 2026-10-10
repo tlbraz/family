@@ -198,11 +198,13 @@ function downloading(q: QueueRecord[], arrId: number, now: Date, what = ''): Wat
   const size = q.reduce((s, r) => s + (r.size ?? 0), 0);
   const left = q.reduce((s, r) => s + (r.sizeleft ?? 0), 0);
   const secs = eta ? (new Date(eta).getTime() - now.getTime()) / 1000 : 0;
-  const speed = !stuck && left > 0 && secs > 0 ? left / secs : undefined;
-  const amount = size > 0 ? `${bytesText(size - left)} of ${bytesText(size)}` : null;
+  const started = size > 0 && left < size; // a job waiting its turn: its ETA includes the wait, so no speed from it
+  const speed = !stuck && started && left > 0 && secs > 0 ? left / secs : undefined;
   const text = stuck
     ? `Downloaded${what} · waiting to import`
-    : [`Downloading${what} ${Math.round(progress * 100)} %`, amount, speed ? `${bytesText(speed)}/s` : null, etaText(eta, now)].filter(Boolean).join(' · ');
+    : !started && size > 0
+      ? [`Queued${what}`, bytesText(size), etaText(eta, now)].filter(Boolean).join(' · ')
+      : [`Downloading${what} ${Math.round(progress * 100)} %`, size > 0 ? `${bytesText(size - left)} of ${bytesText(size)}` : null, speed ? `${bytesText(speed)}/s` : null, etaText(eta, now)].filter(Boolean).join(' · ');
   const file = size > 0 ? { size, left, speed, release: q.length === 1 ? (q[0]!.title ?? null) : null, specs: q.length === 1 ? fileSpecs(q[0]!.quality, undefined) : [] } : undefined;
   return { state: 'downloading', arrId, text, progress, ...(file ? { file } : {}) };
 }

@@ -13,6 +13,9 @@ describe('film status', () => {
     const st = movieStatus(movie({}), [{ movieId: 1, size: 1000, sizeleft: 570, estimatedCompletionTime: '2026-10-10T21:30:00' }, { movieId: 2, size: 5 }], now);
     expect(st).toMatchObject({ state: 'downloading', arrId: 1, progress: 0.43 });
     expect(st.text).toMatch(/^Downloading 43 % · 1 MB of 1 MB · 1 MB\/s · ETA 21:30$/);
+    const waiting = movieStatus(movie({}), [{ movieId: 1, size: 26.5e9, sizeleft: 26.5e9, estimatedCompletionTime: '2026-10-10T21:30:00' }], now);
+    expect(waiting).toMatchObject({ text: 'Queued · 26.5 GB · ETA 21:30', file: { size: 26.5e9, left: 26.5e9 } });
+    expect(waiting.file?.speed).toBeUndefined();
   });
 
   it('says when a finished download waits to be imported', () => {

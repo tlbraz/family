@@ -352,11 +352,11 @@ const gb = (n: number) => (n >= 1e9 ? `${(n / 1e9).toFixed(1)} GB` : `${Math.max
 /** Size, speed and what the file is: while downloading, and once it's in the library. */
 function FileFacts({ state, file }: { state: WatchStatus['state']; file: WatchFile }) {
   if (state === 'downloading') {
-    const done = file.left !== undefined ? file.size - file.left : null;
+    const done = file.left !== undefined && file.left < file.size ? file.size - file.left : null;
     return (
       <>
         <dt>Download</dt>
-        <dd>{[done !== null ? `${gb(done)} of ${gb(file.size)}` : gb(file.size), file.speed ? `${gb(file.speed)}/s` : null].filter(Boolean).join(' · ')}</dd>
+        <dd>{[done !== null ? `${gb(done)} of ${gb(file.size)}` : `${gb(file.size)} · waiting its turn`, file.speed ? `${gb(file.speed)}/s` : null].filter(Boolean).join(' · ')}</dd>
         {file.release && (
           <>
             <dt>Release</dt>
@@ -473,7 +473,7 @@ function TitleSheet({ kind, id, onClose, onChanged }: Open & { onClose: () => vo
             {st && (
               <>
                 <dt>Status</dt>
-                <dd className={`watch-state ${st.state}`}>{st.state === 'downloading' ? st.text.split(' · ')[0] : st.text}</dd>
+                <dd className={`watch-state ${st.state}`}>{st.state === 'downloading' ? st.text.split(' · ').filter((p) => !/\b(GB|MB)\b/.test(p)).join(' · ') : st.text}</dd>
               </>
             )}
             {st?.file && <FileFacts state={st.state} file={st.file} />}
