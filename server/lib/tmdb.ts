@@ -172,7 +172,8 @@ async function whenOf(kind: WatchKind, id: number, section: WatchSection, today:
   if (!d) return { date: null, label: null };
   if (kind === 'movie') return { date: digitalDate(d.release_dates)?.date ?? null, label: null };
   const a = seasonAirs(d, today);
-  const pick = section === 'soon' ? (a.premiere ?? a.nextEpisode) : section === 'out' ? a.premiered : (a.nextEpisode ?? a.lastEpisode);
+  // Coming soon / out now: new series and new seasons only (not every weekly episode); popular: the latest episode.
+  const pick = section === 'soon' ? a.premiere : section === 'out' ? a.premiered : (a.nextEpisode ?? a.lastEpisode);
   return pick ?? { date: null, label: null };
 }
 
@@ -205,6 +206,7 @@ export async function releases(
       q.kind === 'movie'
         ? { with_release_type: String(DIGITAL), region: 'US', 'release_date.gte': from, 'release_date.lte': to }
         : { 'air_date.gte': from, 'air_date.lte': to, with_type: '2|4' }; // scripted and miniseries: no talk shows, news or reality
+    if (q.section === 'out') params['vote_count.gte'] = q.kind === 'movie' ? '10' : '3'; // out a while and nobody voted: noise
     const pages = await Promise.all(
       Array.from({ length: WINDOW_PAGES }, (_, i) =>
         tmdb<ListPage>(`/discover/${q.kind}`, { ...params, ...genre, sort_by: 'popularity.desc', include_adult: 'false', page: String(i + 1) }, get).catch((e) => {
