@@ -185,7 +185,7 @@ export function MoneyView({ meName }: { meName: string }) {
       {cat && data && (() => {
         const tx = data.transactions.filter((t) => t.groupId === cat.groupId && t.category === cat.name);
         return (
-          <Sheet title={`${cat.name} · ${eur(tx.reduce((sum, t) => sum + t.amount, 0))}`} onClose={() => setCat(null)}>
+          <Sheet title={`${cat.name} · ${eur(tx.reduce((sum, t) => sum + t.amount, 0))}`} icon={<SheetIcon name={categoryIcon(cat.name)} colour={levels(data).colour(cat.groupId)} />} onClose={() => setCat(null)}>
             {tx.length ? <TxList tx={tx} showCategory={false} edit={{ data, budget, onChanged: load }} /> : <p className="muted small">Nothing here any more.</p>}
           </Sheet>
         );
@@ -354,6 +354,11 @@ function GroupsCard({ data, onOpen, onCategory }: { data: MoneySummary; onOpen: 
         {top ? <button onClick={() => setPath([])}>Where it went</button> : 'Where it went'}
         {top && <><span className="muted"> › </span>{group && group !== top ? <button onClick={() => setPath([top.id])}>{top.name}</button> : top.name}</>}
         {group && group !== top && <><span className="muted"> › </span>{group.name}</>}
+        {top && (
+          <button className="chip money-reset" onClick={() => setPath([])} aria-label="Back to all categories">
+            <Icon name="repeat" size={14} /> Reset
+          </button>
+        )}
       </h2>
       <div className="donut-wrap">
         <Donut groups={shown} colour={colour} total={levelTotal} label={label} onPick={pick} onCentre={depth ? () => setPath(path.slice(0, -1)) : undefined} />
@@ -381,13 +386,16 @@ function GroupsCard({ data, onOpen, onCategory }: { data: MoneySummary; onOpen: 
   );
 }
 
+/** A category's icon in its colour, for a sheet's title. */
+const SheetIcon = ({ name, colour }: { name: string; colour: string }) => <span style={{ color: colour, display: 'flex' }}><Icon name={name} size={22} /></span>;
+
 /** A top level ("Casa"): each of its groups ("Energia", "Habitação") with its categories and their transactions. */
 function TopSheet({ top, data, edit, onClose }: { top: TopItem; data: MoneySummary; edit: Editing; onClose: () => void }) {
   const children = top.children ?? [];
   const colour = children[0] ? levels(data).colour(children[0].id) : 'var(--m-other)';
   const [all, toggleAll] = useOpenAll();
   return (
-    <Sheet title={`${top.name} · ${eur(top.amount)}`} onClose={onClose}>
+    <Sheet title={`${top.name} · ${eur(top.amount)}`} icon={<SheetIcon name={categoryIcon(top.name)} colour={colour} />} onClose={onClose}>
       {!children.length && <p className="muted small">Nothing here any more.</p>}
       {children.length > 0 && <OpenAllButton all={all} onClick={toggleAll} />}
       {children.map((g) => (
@@ -434,7 +442,7 @@ function categoryNames(group: MoneyGroup, data: MoneySummary) {
 function GroupSheet({ group, data, edit, onClose }: { group: MoneyGroup; data: MoneySummary; edit: Editing; onClose: () => void }) {
   const [all, toggleAll] = useOpenAll();
   return (
-    <Sheet title={`${group.name} · ${eur(group.amount)}`} onClose={onClose}>
+    <Sheet title={`${group.name} · ${eur(group.amount)}`} icon={<SheetIcon name={categoryIcon(group.name)} colour={levels(data).colour(group.id)} />} onClose={onClose}>
       {data.transactions.some((t) => t.groupId === group.id) && <OpenAllButton all={all} onClick={toggleAll} />}
       <CategoryTx group={group} data={data} edit={edit} colour={levels(data).colour(group.id)} all={all} />
       {group.id === 'uncategorised' && data.link && (

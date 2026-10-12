@@ -3,7 +3,7 @@ import { useBack } from '../back';
 import { Icon } from './Icon';
 
 /** Bottom sheet on phones, centred dialog on wider screens. */
-export function Sheet({ title, onClose, actions, children }: { title: string; onClose: () => void; actions?: ReactNode; children: ReactNode }) {
+export function Sheet({ title, icon, onClose, actions, children }: { title: string; icon?: ReactNode; onClose: () => void; actions?: ReactNode; children: ReactNode }) {
   useBack(onClose);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
@@ -19,7 +19,7 @@ export function Sheet({ title, onClose, actions, children }: { title: string; on
     <div className="scrim" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div className="sheet" role="dialog" aria-modal="true" aria-label={title}>
         <div className="sheet-head">
-          <h2>{title}</h2>
+          <h2>{icon && <span className="sheet-icon">{icon}</span>}{title}</h2>
           <div className="sheet-actions">
             {actions}
             <button className="round ghost" aria-label="Close" onClick={onClose}>
