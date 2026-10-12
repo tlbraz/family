@@ -162,11 +162,11 @@ export function MoneyView({ meName }: { meName: string }) {
           </p>
         </>
       )}
-      {openTop && data && !open && (
+      {openTop && data && (
         <TopSheet
           top={levels(data).items.find((t) => t.id === openTop.id) ?? { ...openTop, amount: 0, children: [] }}
           data={data}
-          onPick={setOpen}
+          edit={{ data, budget, onChanged: load }}
           onClose={() => setOpenTop(null)}
         />
       )}
@@ -294,69 +294,63 @@ function GroupsCard({ data, onOpen }: { data: MoneySummary; onOpen: (g: TopItem)
           </li>
         ))}
       </ul>
-      <p className="muted small">Tap a category to see what's inside it.</p>
+      <p className="muted small">Tap a category to see its transactions.</p>
     </section>
   );
 }
 
-/** A top level ("Casa") with its groups ("Energia", "Manutenção"); tap one for its categories and transactions. */
-function TopSheet({ top, data, onPick, onClose }: { top: TopItem; data: MoneySummary; onPick: (g: MoneyGroup) => void; onClose: () => void }) {
+/** A top level ("Casa"): each of its groups ("Energia", "Habitação") with its categories and their transactions. */
+function TopSheet({ top, data, edit, onClose }: { top: TopItem; data: MoneySummary; edit: Editing; onClose: () => void }) {
   const children = top.children ?? [];
-  const lv = levels(data);
-  const colour = children[0] ? lv.colour(children[0].id) : 'var(--m-other)';
-  const max = Math.max(1, ...children.map((g) => g.amount));
+  const colour = children[0] ? levels(data).colour(children[0].id) : 'var(--m-other)';
   return (
     <Sheet title={`${top.name} · ${eur(top.amount)}`} onClose={onClose}>
       {!children.length && <p className="muted small">Nothing here any more.</p>}
-      <ul className="legend sub">
-        {children.map((g) => (
-          <li key={g.id}>
-            <button onClick={() => onPick(g)}>
-              <span className="name">{g.name}<span className="pct">{Math.round((g.amount / top.amount) * 100)}%</span></span>
-              <span className="amt">{eur(g.amount)} <Icon name="right" size={14} /></span>
-              <span className="track"><span style={{ width: `${(g.amount / max) * 100}%`, background: colour }} /></span>
-            </button>
-          </li>
-        ))}
-      </ul>
-      <p className="muted small">Tap a group to see its categories and transactions.</p>
+      {children.map((g) => (
+        <section key={g.id} className="money-sub">
+          <div className="row money-tx-head">
+            <h3><span className="dot" style={{ background: colour }} />{g.name}<span className="muted"> · {Math.round((g.amount / top.amount) * 100)}%</span></h3>
+            <span className="amt">{eur(g.amount)}</span>
+          </div>
+          <CategoryTx group={g} data={data} edit={edit} />
+        </section>
+      ))}
     </Sheet>
   );
 }
 
 function GroupSheet({ group, data, edit, onClose }: { group: MoneyGroup; data: MoneySummary; edit: Editing; onClose: () => void }) {
-  const [only, setOnly] = useState<string | null>(null); // a category name, to see just its transactions
-  const colour = levels(data).colour(group.id);
-  const max = Math.max(...group.categories.map((c) => c.amount));
-  const tx = data.transactions.filter((t) => t.groupId === group.id && (!only || t.category === only));
-  const several = group.categories.length > 1;
   return (
     <Sheet title={`${group.name} · ${eur(group.amount)}`} onClose={onClose}>
-      {several && (
-        <ul className="legend sub">
-          {group.categories.map((c) => (
-            <li key={c.id}>
-              <button className={only && only !== c.name ? 'dim' : ''} aria-pressed={only === c.name} onClick={() => setOnly(only === c.name ? null : c.name)}>
-                <span className="name">{c.name}<span className="pct">{Math.round((c.amount / group.amount) * 100)}%</span></span>
-                <span className="amt">{eur(c.amount)}</span>
-                <span className="track"><span style={{ width: `${(c.amount / max) * 100}%`, background: colour }} /></span>
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-      {several && (
-        <div className="row money-tx-head">
-          <h3>{only ?? 'All transactions'}<span className="muted"> · {tx.length}</span></h3>
-          {only ? <button className="chip" onClick={() => setOnly(null)}>Show all</button> : <span className="muted small">Tap a category to filter</span>}
-        </div>
-      )}
-      <TxList tx={tx} showCategory={several && !only} edit={edit} />
-      {!tx.length && <p className="muted small">Nothing here any more.</p>}
+      <CategoryTx group={group} data={data} edit={edit} />
       {group.id === 'uncategorised' && data.link && (
         <p className="muted small money-note">Give these a category in <a href={data.link} target="_blank" rel="noreferrer">Actual</a> and they'll move to the right place.</p>
       )}
     </Sheet>
+  );
+}
+
+/** A group's transactions under each of its categories (biggest first). A lone category named like its group gets no heading. */
+function CategoryTx({ group, data, edit }: { group: MoneyGroup; data: MoneySummary; edit: Editing }) {
+  const tx = data.transactions.filter((t) => t.groupId === group.id);
+  if (!tx.length) return <p className="muted small">Nothing here any more.</p>;
+  const names = [...new Set([...group.categories.map((c) => c.name), ...tx.map((t) => t.category)])].filter((n) => tx.some((t) => t.category === n));
+  const amountOf = (n: string) => group.categories.find((c) => c.name === n)?.amount ?? tx.filter((t) => t.category === n).reduce((s, t) => s + t.amount, 0);
+  const plain = names.length === 1 && (names[0] === group.name || group.categories.length <= 1);
+  return (
+    <>
+      {names.map((n) => (
+        <div key={n} className="money-cat">
+          {!plain && (
+            <div className="money-cat-head">
+              <span>{n}</span>
+              <span>{eur(amountOf(n))}</span>
+            </div>
+          )}
+          <TxList tx={tx.filter((t) => t.category === n)} showCategory={false} edit={edit} />
+        </div>
+      ))}
+    </>
   );
 }
 
