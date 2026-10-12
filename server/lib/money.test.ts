@@ -295,3 +295,11 @@ describe('descriptionOf', () => {
     expect(descriptionOf(' #review', 'X', 'Y')).toBeNull();
   });
 });
+
+describe('parts of a split', () => {
+  it('say which bank line they were split from, and its whole amount', () => {
+    const part = { ...t('2026-09-12', -4125, 'super', 'Gymnastics'), parentId: 'p1', splitFrom: 'GINASIO CLUBE PORTO', splitTotal: -9000 };
+    const s = summarise(snap([part]), 'family', ['family'], '2026-09', new Date(2026, 8, 20));
+    expect(s.transactions[0]).toMatchObject({ splitOf: 'p1', splitFrom: 'GINASIO CLUBE PORTO', splitTotal: 9000, amount: 4125 });
+  });
+});

@@ -425,7 +425,8 @@ function TxList({ tx, showCategory, edit }: { tx: MoneyTransaction[]; showCatego
             <span>
               {descOf(t) ?? (t.payee || '—')}
               <span className="sub">
-                {descOf(t) && t.payee ? `${t.payee} · ` : ''}{shortDate(t.date)} · {t.account}{showCategory ? ` · ${t.category}` : ''}
+                {splitLabel(t) ?? (descOf(t) && t.payee ? `${t.payee} · ` : '')}
+                {shortDate(t.date)} · {t.account}{showCategory ? ` · ${t.category}` : ''}
                 {t.review && <span className="tag"> #review</span>}
               </span>
             </span>
@@ -590,6 +591,9 @@ function NoteRuleCheck({ t, note, checked, onChange }: { t: MoneyTransaction; no
 }
 
 // A plain transaction or a part of a split (not a transfer) can be recategorised and split.
+// A part of a split names the bank's line it comes from: "Split from CONTINENTE (€90.00) · ".
+const splitLabel = (t: MoneyTransaction) =>
+  t.splitOf && t.splitFrom ? `Split from ${t.splitFrom}${t.splitTotal ? ` (${eur(Math.abs(t.splitTotal), true)})` : ''} · ` : null;
 const editable = (t: MoneyTransaction) => !!(t.fixable || t.splitOf);
 const canSplit = (t: MoneyTransaction) => !!(t.id && editable(t) && t.amount);
 const toCents = (s: string) => Math.round(Number(s.replace(',', '.').trim() || 'NaN') * 100);
@@ -714,7 +718,7 @@ function ReviewSheet({ data, budget, onChanged, onClose }: { data: MoneySummary;
             <button className="review-row" aria-expanded={openId === t.id} onClick={() => toggle(t)}>
               <span>
                 {descOf(t) ?? (t.payee || '—')}
-                <span className="sub">{descOf(t) && t.payee ? `${t.payee} · ` : ''}{shortDate(t.date)} · {t.account} · {t.category}</span>
+                <span className="sub">{splitLabel(t) ?? (descOf(t) && t.payee ? `${t.payee} · ` : '')}{shortDate(t.date)} · {t.account} · {t.category}</span>
               </span>
               <span className={`amt ${t.amount < 0 ? 'in' : ''}`}>{t.amount < 0 ? `+${eur(-t.amount, true)}` : eur(t.amount, true)}</span>
             </button>

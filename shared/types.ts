@@ -180,6 +180,8 @@ export interface MoneyTransaction {
   categoryId?: string | null;
   fixable?: boolean; // false for splits and transfers: their category is changed in Actual
   splitOf?: string | null; // a part of this split: its category and note change through the split, and it can be split further
+  splitFrom?: string | null; // for a part: the bank's line it was split from
+  splitTotal?: number | null; // for a part: the whole payment, same sign as amount
   review?: boolean; // tagged #review
   note?: string | null; // the description (Actual's note, without the #review tag)
 }
