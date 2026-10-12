@@ -8,7 +8,7 @@ import { todayDigest, tomorrowDigest, weekDigest } from './lib/digest';
 import { googleEnabled, googleStatus, saveGoogleKey, syncRound } from './lib/google';
 import { paperlessEnabled } from './lib/paperless';
 import { cleanHoldings, lastValuations, loadHoldings, revalueNow, saveHoldings } from './lib/valuations';
-import { budgetsFor, editTransaction, linkTransfer, moneyEnabled, moneySnapshot, refreshMoney, ReviewError, reviewTransaction, summarise } from './lib/money';
+import { budgetsFor, editTransaction, splitTransaction, type SplitPart, linkTransfer, moneyEnabled, moneySnapshot, refreshMoney, ReviewError, reviewTransaction, summarise } from './lib/money';
 import { addTelegramChat, removeTelegramChat, sendTelegram, telegramStatus } from './lib/telegram';
 import { authRoutes } from './routes/auth';
 import { type EventHooks, eventRoutes } from './routes/events';
@@ -156,6 +156,22 @@ export function createApp(db: Db, hooks: AppHooks = noop) {
     if (bad) return c.json({ error: 'Pick a transaction' }, 400);
     try {
       await editTransaction(budget, body.id as string, { category: body.category as string | undefined, review: body.review as boolean | undefined, note: body.note as string | undefined });
+      return c.json({ ok: true });
+    } catch (e) {
+      return c.json({ error: (e as Error).message }, e instanceof ReviewError ? 400 : 503);
+    }
+  });
+  // Split one transaction in two parts, each with its own category and description.
+  api.post('/money/split', requireParent, async (c) => {
+    if (!moneyEnabled()) return c.json({ error: 'Actual Budget is not set up on the server' }, 404);
+    const body = (await c.req.json().catch(() => ({}))) as { budget?: string; id?: unknown; parts?: unknown };
+    const budget = (body.budget ?? 'family') as MoneyBudget;
+    if (!budgetsFor(c.get('me')!.name).includes(budget)) return c.json({ error: 'Not available' }, 403);
+    const parts = Array.isArray(body.parts) ? (body.parts as Record<string, unknown>[]) : [];
+    const ok = typeof body.id === 'string' && parts.length === 2 && parts.every((p) => p && typeof p.amount === 'number' && typeof p.category === 'string' && (p.note === undefined || typeof p.note === 'string'));
+    if (!ok) return c.json({ error: 'Give each of the two parts an amount and a category' }, 400);
+    try {
+      await splitTransaction(budget, body.id as string, parts.map((p) => ({ amount: p.amount as number, category: p.category as string, note: (p.note as string | undefined) ?? '' })) as SplitPart[]);
       return c.json({ ok: true });
     } catch (e) {
       return c.json({ error: (e as Error).message }, e instanceof ReviewError ? 400 : 503);

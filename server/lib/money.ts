@@ -298,6 +298,52 @@ export function linkTransfer(budget: MoneyBudget, outId: string, inId: string) {
   });
 }
 
+export interface SplitPart {
+  amount: number; // cents, positive: how much of the transaction this part is
+  category: string;
+  note: string;
+}
+
+/**
+ * Checks the parts of a split against the transaction they come from (`amount` as Actual has it: negative is money
+ * out) and gives them back with Actual's sign. Throws a ReviewError with the reason when they don't fit.
+ */
+export function splitParts(amount: number, parts: SplitPart[], categories: Set<string>): SplitPart[] {
+  if (parts.length !== 2) throw new ReviewError('Split it in two parts');
+  if (parts.some((p) => !Number.isInteger(p.amount) || p.amount <= 0)) throw new ReviewError('Each part needs an amount');
+  if (parts.reduce((sum, p) => sum + p.amount, 0) !== Math.abs(amount)) throw new ReviewError('The parts must add up to the whole amount');
+  if (parts.some((p) => !categories.has(p.category))) throw new ReviewError('Pick a category for each part');
+  const sign = amount < 0 ? -1 : 1;
+  return parts.map((p) => ({ amount: sign * p.amount, category: p.category, note: p.note.trim().slice(0, 500) }));
+}
+
+/**
+ * Splits one transaction in two, each part with its own category and description, as a split in Actual (so the
+ * bank's single line stays one line there). Splitting it is reviewing it: the #review tag comes out.
+ */
+export function splitTransaction(budget: MoneyBudget, id: string, parts: SplitPart[]) {
+  return serial(async () => {
+    const snap = snapshots.get(budget);
+    const item = snap?.tx.find((t) => t.id === id) ?? snap?.review.find((t) => t.id === id);
+    if (!snap || !item) throw new ReviewError('That transaction is no longer here; pull to refresh');
+    if (!item.fixable) throw new ReviewError('That one is already a split or a transfer: change it in Actual');
+    const known = new Set(snap.groups.flatMap((g) => g.categories.map((c) => c.id)));
+    const api = await actual();
+    await api.downloadBudget(SYNC_IDS[budget]!);
+    const current = (await api.getTransactions(item.accountId, item.date, item.date)).find((t) => t.id === id);
+    if (!current) throw new ReviewError('That transaction is no longer in Actual');
+    if (current.subtransactions?.length || current.is_child || current.transfer_id) throw new ReviewError('That one is already a split or a transfer: change it in Actual');
+    const checked = splitParts(current.amount, parts, known);
+    await api.updateTransaction(id, {
+      category: null,
+      notes: withoutReviewTag(current.notes) ?? '',
+      subtransactions: checked.map((p) => ({ amount: p.amount, category: p.category, notes: p.note })),
+    } as unknown as Parameters<Api['updateTransaction']>[1]); // a split's own line has no category
+    await api.sync();
+    snapshots.set(budget, await load(budget, false));
+  });
+}
+
 /** Done reviewing: optionally a new category, and the #review tag comes out. */
 export const reviewTransaction = (budget: MoneyBudget, id: string, category?: string) => editTransaction(budget, id, { category, review: false });
 export class ReviewError extends Error {}

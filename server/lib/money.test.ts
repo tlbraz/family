@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { budgetsFor, netWorth, reimbursable, stillOwed, summarise, transferPairs, withoutReviewTag, type Snapshot } from './money';
+import { budgetsFor, netWorth, ReviewError, reimbursable, splitParts, stillOwed, summarise, transferPairs, withoutReviewTag, type Snapshot } from './money';
 
 const snap = (tx: Snapshot['tx'], extra: Partial<Snapshot> = {}): Snapshot => ({
   fetchedAt: '2026-09-29T10:00:00Z',
@@ -223,5 +223,25 @@ describe('transfers between our accounts', () => {
     const s = snap([], { loose: [l('o1', 'cgd', '2026-09-29', -10000, 'emp'), l('i1', 'abanca', '2026-09-29', 10000)] });
     s.groups.push({ id: 'gar', name: 'A receber', income: false, categories: [{ id: 'emp', name: 'Empresa' }] });
     expect(transferPairs(s)).toEqual([]);
+  });
+});
+
+describe('splitting a transaction in two', () => {
+  const cats = new Set(['super', 'luz']);
+  const part = (amount: number, category = 'super', note = '') => ({ amount, category, note });
+
+  it('gives the parts the sign of the transaction', () => {
+    expect(splitParts(-5000, [part(3000, 'super', ' food '), part(2000, 'luz')], cats)).toEqual([
+      { amount: -3000, category: 'super', note: 'food' },
+      { amount: -2000, category: 'luz', note: '' },
+    ]);
+    expect(splitParts(5000, [part(4999), part(1)], cats).map((p) => p.amount)).toEqual([4999, 1]);
+  });
+
+  it('refuses parts that do not add up, are empty or have no known category', () => {
+    expect(() => splitParts(-5000, [part(3000), part(1000)], cats)).toThrow('add up');
+    expect(() => splitParts(-5000, [part(5000), part(0)], cats)).toThrow('amount');
+    expect(() => splitParts(-5000, [part(2500), part(2500, 'nope')], cats)).toThrow(ReviewError);
+    expect(() => splitParts(-5000, [part(5000)], cats)).toThrow('two');
   });
 });

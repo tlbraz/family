@@ -423,6 +423,7 @@ function CategoryPicker({ data, value, onChange }: { data: MoneySummary; value: 
 
 /** Change one transaction: its category and whether it's tagged #review. Saved in Actual. */
 function TxEditor({ t, edit, onDone }: { t: MoneyTransaction; edit: Editing; onDone: () => void }) {
+  const [splitting, setSplitting] = useState(false);
   const [pick, setPick] = useState(t.categoryId ?? '');
   const [review, setReview] = useState(!!t.review);
   const [note, setNote] = useState(t.note ?? '');
@@ -446,6 +447,7 @@ function TxEditor({ t, edit, onDone }: { t: MoneyTransaction; edit: Editing; onD
       setBusy(false);
     }
   }
+  if (splitting) return <SplitEditor t={t} data={edit.data} budget={edit.budget} onCancel={() => setSplitting(false)} onDone={() => { onDone(); edit.onChanged(); }} />;
   return (
     <div className="review-fix">
       {t.fixable ? (
@@ -459,6 +461,7 @@ function TxEditor({ t, edit, onDone }: { t: MoneyTransaction; edit: Editing; onD
       </label>
       {error && <p className="error small">{error}</p>}
       <div className="review-actions">
+        {canSplit(t) && <button className="chip split-btn" onClick={() => setSplitting(true)} disabled={busy}>Split in two</button>}
         <button className="chip" onClick={onDone} disabled={busy}>Cancel</button>
         <button className="primary" onClick={save} disabled={busy || !Object.keys(change).length}>{busy ? 'Saving…' : 'Save'}</button>
       </div>
@@ -466,8 +469,69 @@ function TxEditor({ t, edit, onDone }: { t: MoneyTransaction; edit: Editing; onD
   );
 }
 
+const canSplit = (t: MoneyTransaction) => !!(t.id && t.fixable && t.amount);
+const toCents = (s: string) => Math.round(Number(s.replace(',', '.').trim() || 'NaN') * 100);
+const fromCents = (c: number) => (c / 100).toFixed(2);
+
+/**
+ * One payment, two things (groceries and a gift in one card payment): two parts, each with its own amount, category
+ * and description. Type one amount and the other becomes the rest. Saved as a split in Actual.
+ */
+function SplitEditor({ t, data, budget, onCancel, onDone }: { t: MoneyTransaction; data: MoneySummary; budget: MoneyBudget; onCancel: () => void; onDone: () => void }) {
+  const total = Math.abs(t.amount);
+  const [amounts, setAmounts] = useState(['', '']);
+  const [cats, setCats] = useState([t.categoryId ?? '', '']);
+  const [notes, setNotes] = useState([t.note ?? '', '']);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const cents = amounts.map(toCents);
+  const ready = cents.every((c) => c > 0) && cents[0]! + cents[1]! === total && cats.every(Boolean);
+  function setAmount(i: number, value: string) {
+    const c = toCents(value);
+    const next = [...amounts];
+    next[i] = value;
+    next[1 - i] = c > 0 && c < total ? fromCents(total - c) : '';
+    setAmounts(next);
+  }
+  const at = <T,>(list: T[], i: number, v: T) => list.map((x, j) => (j === i ? v : x));
+  async function save() {
+    setBusy(true);
+    setError(null);
+    try {
+      await api.splitMoney(budget, t.id!, [0, 1].map((i) => ({ amount: cents[i]!, category: cats[i]!, note: notes[i]!.trim() })));
+      onDone();
+    } catch (e) {
+      setError((e as Error).message);
+      setBusy(false);
+    }
+  }
+  return (
+    <div className="review-fix split">
+      <p className="small"><b>Split {eur(total, true)}</b> <span className="muted">in two, each with its own category</span></p>
+      {[0, 1].map((i) => (
+        <fieldset key={i} className="split-part">
+          <legend>Part {i + 1}</legend>
+          <label className="split-amount">
+            <span>€</span>
+            <input inputMode="decimal" value={amounts[i]} onChange={(e) => setAmount(i, e.target.value)} placeholder="0.00" aria-label={`Amount of part ${i + 1}`} />
+          </label>
+          <CategoryPicker data={data} value={cats[i]!} onChange={(id) => setCats(at(cats, i, id))} />
+          <input className="tx-note" value={notes[i]} onChange={(e) => setNotes(at(notes, i, e.target.value))} placeholder="Description (optional)" maxLength={500} aria-label={`Description of part ${i + 1}`} />
+        </fieldset>
+      ))}
+      {cents.every((c) => c > 0) && cents[0]! + cents[1]! !== total && <p className="error small">The two parts must add up to {eur(total, true)}.</p>}
+      {error && <p className="error small">{error}</p>}
+      <div className="review-actions">
+        <button className="chip" onClick={onCancel} disabled={busy}>Back</button>
+        <button className="primary" onClick={save} disabled={busy || !ready}>{busy ? 'Saving…' : 'Split'}</button>
+      </div>
+    </div>
+  );
+}
+
 /** Go through the #review transactions: fix the category or description (or keep them) and the tag comes out, in Actual. */
 function ReviewSheet({ data, budget, onChanged, onClose }: { data: MoneySummary; budget: MoneyBudget; onChanged: () => void; onClose: () => void }) {
+  const [splitting, setSplitting] = useState<string | null>(null); // id of the one being split
   const [openId, setOpenId] = useState<string | null>(null);
   const [pick, setPick] = useState('');
   const [note, setNote] = useState('');
@@ -515,7 +579,10 @@ function ReviewSheet({ data, budget, onChanged, onClose }: { data: MoneySummary;
               </span>
               <span className={`amt ${t.amount < 0 ? 'in' : ''}`}>{t.amount < 0 ? `+${eur(-t.amount, true)}` : eur(t.amount, true)}</span>
             </button>
-            {openId === t.id && (
+            {openId === t.id && splitting === t.id && (
+              <SplitEditor t={t} data={data} budget={budget} onCancel={() => setSplitting(null)} onDone={() => { setSplitting(null); setOpenId(null); onChanged(); }} />
+            )}
+            {openId === t.id && splitting !== t.id && (
               <div className="review-fix">
                 {t.fixable ? (
                   <CategoryPicker data={data} value={pick} onChange={setPick} />
@@ -525,6 +592,7 @@ function ReviewSheet({ data, budget, onChanged, onClose }: { data: MoneySummary;
                 <input className="tx-note" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Description (optional)" maxLength={500} aria-label="Description" />
                 {error && <p className="error small">{error}</p>}
                 <div className="review-actions">
+                  {canSplit(t) && <button className="chip split-btn" disabled={busy} onClick={() => setSplitting(t.id!)}>Split in two</button>}
                   <button className="chip" disabled={busy} onClick={() => setOpenId(null)}>Cancel</button>
                   <button className="primary" disabled={busy} onClick={() => finish(t)}>
                     {busy ? 'Saving…' : Object.keys(changes(t)).length ? 'Save ✓' : 'Looks fine ✓'}

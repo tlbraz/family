@@ -119,6 +119,7 @@ export const api = {
   players: () => request<WatchSession[]>('/watch/players'),
   playTitle: (kind: WatchKind, id: number, session: string) => request<{ ok: true }>(`/watch/title/${kind}/${id}/play`, json('POST', { session })),
   watchList: () => request<WatchList>('/watch/list'),
+  splitMoney: (budget: MoneyBudget, id: string, parts: { amount: number; category: string; note: string }[]) => request<{ ok: true }>('/money/split', json('POST', { budget, id, parts })),
   editMoney: (budget: MoneyBudget, id: string, change: { category?: string; review?: boolean; note?: string }) => request<{ ok: true }>('/money/edit', json('POST', { budget, id, ...change })),
 
 };
