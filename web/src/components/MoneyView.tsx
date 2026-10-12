@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
 import type { MoneyBudget, MoneyGroup, MoneyHolding, MoneyHoldings, MoneySummary, MoneyTransaction, MoneyWorth } from '../../../shared/types';
 import { api } from '../api';
 import { BillsCard, BillsSheet, FixedForm, fixedFor } from './Bills';
@@ -308,11 +308,12 @@ function TopSheet({ top, data, edit, onClose }: { top: TopItem; data: MoneySumma
       {!children.length && <p className="muted small">Nothing here any more.</p>}
       {children.map((g) => (
         <section key={g.id} className="money-sub">
-          <div className="row money-tx-head">
-            <h3><span className="dot" style={{ background: colour }} />{g.name}<span className="muted"> · {Math.round((g.amount / top.amount) * 100)}%</span></h3>
+          <div className="money-sub-head" style={{ borderColor: colour }}>
+            <h3>{g.name}</h3>
+            {children.length > 1 && <span className="pct">{Math.round((g.amount / top.amount) * 100)}%</span>}
             <span className="amt">{eur(g.amount)}</span>
           </div>
-          <CategoryTx group={g} data={data} edit={edit} />
+          <CategoryTx group={g} data={data} edit={edit} colour={colour} />
         </section>
       ))}
     </Sheet>
@@ -322,7 +323,7 @@ function TopSheet({ top, data, edit, onClose }: { top: TopItem; data: MoneySumma
 function GroupSheet({ group, data, edit, onClose }: { group: MoneyGroup; data: MoneySummary; edit: Editing; onClose: () => void }) {
   return (
     <Sheet title={`${group.name} · ${eur(group.amount)}`} onClose={onClose}>
-      <CategoryTx group={group} data={data} edit={edit} />
+      <CategoryTx group={group} data={data} edit={edit} colour={levels(data).colour(group.id)} />
       {group.id === 'uncategorised' && data.link && (
         <p className="muted small money-note">Give these a category in <a href={data.link} target="_blank" rel="noreferrer">Actual</a> and they'll move to the right place.</p>
       )}
@@ -331,7 +332,7 @@ function GroupSheet({ group, data, edit, onClose }: { group: MoneyGroup; data: M
 }
 
 /** A group's transactions under each of its categories (biggest first). A lone category named like its group gets no heading. */
-function CategoryTx({ group, data, edit }: { group: MoneyGroup; data: MoneySummary; edit: Editing }) {
+function CategoryTx({ group, data, edit, colour }: { group: MoneyGroup; data: MoneySummary; edit: Editing; colour: string }) {
   const tx = data.transactions.filter((t) => t.groupId === group.id);
   if (!tx.length) return <p className="muted small">Nothing here any more.</p>;
   const names = [...new Set([...group.categories.map((c) => c.name), ...tx.map((t) => t.category)])].filter((n) => tx.some((t) => t.category === n));
@@ -340,11 +341,11 @@ function CategoryTx({ group, data, edit }: { group: MoneyGroup; data: MoneySumma
   return (
     <>
       {names.map((n) => (
-        <div key={n} className="money-cat">
+        <div key={n} className={`money-cat${plain ? ' plain' : ''}`} style={{ '--c': colour } as CSSProperties}>
           {!plain && (
             <div className="money-cat-head">
               <span>{n}</span>
-              <span>{eur(amountOf(n))}</span>
+              <span className="amt">{eur(amountOf(n))}</span>
             </div>
           )}
           <TxList tx={tx.filter((t) => t.category === n)} showCategory={false} edit={edit} />
