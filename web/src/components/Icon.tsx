@@ -71,6 +71,12 @@ const PATHS: Record<string, string> = {
   broom: 'M15 3l-4 9M7 12h8l2 9H5zM9 16v5M13 16v5',
   wrench: 'M14.5 6.5a4 4 0 0 0 5 5l-9 9a2 2 0 0 1-3-3l9-9a4 4 0 0 0-2-2zM14.5 6.5L17 4',
   tag: 'M3 12V4h8l10 10-8 8zM7.5 8.5h.01',
+  schoolhouse: 'M3 10l9-6 9 6M5 9v11h14V9M10 20v-5h4v5M12 7.5v3M3 20h18',
+  backpack: 'M8 6V5a4 4 0 0 1 8 0v1M6 6h12a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2zM8 13h8v4H8z',
+  tray: 'M2 18h20M4 18a8 8 0 0 1 16 0M12 7v3M10.5 7h3',
+  medal: 'M8 3l2.5 6M16 3l-2.5 6M12 9a6 6 0 1 0 0 12a6 6 0 1 0 0-12M12 12.5l1 2 2 .3-1.5 1.4.4 2-1.9-1-1.9 1 .4-2-1.5-1.4 2-.3z',
+  basketball: 'M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18M3 12h18M12 3v18M5.6 5.6a12 12 0 0 1 0 12.8M18.4 5.6a12 12 0 0 0 0 12.8',
+  gymnast: 'M10.5 5.5a1.5 1.5 0 1 0 3 0a1.5 1.5 0 1 0-3 0M6 3l6 6 6-6M12 9v5l-3 7M12 14l7 1',
 };
 
 export function Icon({ name, size = 18, stroke = 2 }: { name: string; size?: number; stroke?: number }) {

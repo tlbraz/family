@@ -452,6 +452,11 @@ button.link { border: 0; padding: 0; background: none; color: var(--accent, inhe
 .money-sub-head .pct { color: var(--muted); font-size: 0.85rem; }
 .money-sub-head .amt { font-weight: 800; font-size: 1.1rem; font-variant-numeric: tabular-nums; }
 .money-sub-head .cat-icon { align-self: center; display: flex; }
+button.money-sub-head { width: 100%; background: none; border-top: 0; border-right: 0; border-bottom: 0; color: var(--ink); font: inherit; text-align: left; cursor: pointer; }
+.money-sub-head h3 .muted { font-size: 0.85rem; font-weight: 600; }
+.money-sub-head .chev { align-self: center; display: flex; color: var(--muted); transition: transform 0.15s; }
+.money-sub.open .money-sub-head .chev { transform: rotate(90deg); }
+.money-sub > .money-cat { border-bottom: 0; margin-top: 6px; }
 .money-cat { border-bottom: 1px solid var(--line); }
 .money-cat-head { display: flex; align-items: center; gap: 10px; width: 100%; padding: 10px 0; background: none; border: 0; color: var(--ink); font: inherit; font-weight: 800; text-align: left; cursor: pointer; }
 .money-cat-head .cat-icon { display: flex; color: var(--c); }

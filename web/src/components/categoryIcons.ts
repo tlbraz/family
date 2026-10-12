@@ -1,7 +1,10 @@
 // An icon for a Money category or level, guessed from its name (pt-PT, with some English), so renaming in Actual
 // keeps working. The first match wins: specific names first, then the top levels ("Casa", "Miúdos"…).
 const RULES: [RegExp, string][] = [
-  [/sa[uú]de d|miúdos.*sa[uú]de/i, 'heart'],
+  [/\batl\b/i, 'backpack'],
+  [/almo[cç]o/i, 'tray'],
+  [/basket/i, 'basketball'],
+  [/gin[aá]stica/i, 'gymnast'],
   [/supermerc|mercearia|grocer/i, 'cart'],
   [/restaur|eating|jantar/i, 'fork'],
   [/take.?away|entrega/i, 'box'],
@@ -19,8 +22,8 @@ const RULES: [RegExp, string][] = [
   [/portage|via verde|toll/i, 'road'],
   [/p[uú]blic|metro|comboio|autocarro/i, 'train'],
   [/carro|viatura|\biuc\b|inspe/i, 'car'],
-  [/escola|educa|propina|school/i, 'school'],
-  [/atividad|desport/i, 'sports'],
+  [/escola|educa|propina|school/i, 'schoolhouse'],
+  [/atividad|desport/i, 'medal'],
   [/m[eé]dic|consult|hospital|cl[ií]nic|doctor/i, 'medical'],
   [/farm[aá]c|pharm/i, 'pill'],
   [/gin[aá]s|fitness/i, 'dumbbell'],
@@ -35,6 +38,7 @@ const RULES: [RegExp, string][] = [
   [/poupan|saving/i, 'safe'],
   [/reembols|a receber/i, 'money'],
   [/prenda|presente/i, 'party'],
+  [/(^|\/\s*)outros$/i, 'tag'],
   // top levels
   [/^casa\b/i, 'home'],
   [/^alimenta/i, 'fork'],
