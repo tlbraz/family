@@ -411,11 +411,6 @@ button.link { border: 0; padding: 0; background: none; color: var(--accent, inhe
 .review-count { min-width: 40px; height: 40px; padding: 0 8px; border-radius: 20px; display: grid; place-items: center; background: var(--holiday); color: var(--holiday-ink); font-weight: 800; font-size: 1.15rem; }
 .review-text { display: flex; flex-direction: column; flex: 1; }
 .donut-wrap { display: flex; justify-content: center; margin: 4px 0 14px; }
-.donut-seg, .donut-back { cursor: pointer; }
-.donut-seg:hover path:first-child { opacity: 0.85; }
-.money-crumbs { display: flex; align-items: center; flex-wrap: wrap; gap: 0 4px; }
-.money-crumbs .money-reset { margin-left: auto; height: 30px; padding: 0 10px; font-size: 0.8rem; color: var(--ink); border: 1px solid var(--line); background: var(--card); }
-.money-crumbs button { background: none; border: 0; padding: 0; font: inherit; color: var(--muted); cursor: pointer; }
 .donut-total { font: 800 22px 'Nunito Variable', sans-serif; fill: var(--ink); }
 .donut-sub { font: 700 12px 'Nunito Variable', sans-serif; fill: var(--muted); }
 .legend { list-style: none; margin: 0 0 10px; padding: 0; display: flex; flex-direction: column; gap: 10px; }

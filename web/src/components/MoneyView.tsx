@@ -6,8 +6,6 @@ import { Icon } from './Icon';
 import { categoryIcon } from './categoryIcons';
 import { colourOf, groupColours, splitGroup } from './moneyColours';
 import { Sheet } from './Sheet';
-import { useBack } from '../back';
-import { MAX_SHADES, shadesOf } from './shades';
 
 
 type TopItem = MoneyGroup & { children?: MoneyGroup[] };
@@ -67,7 +65,6 @@ export function MoneyView({ meName }: { meName: string }) {
   const [openTop, setOpenTop] = useState<TopItem | null>(null); // a top level ("Casa") with its groups
   const [reviewing, setReviewing] = useState(false);
   const [source, setSource] = useState<string | null>(null); // an income source, to list its transactions
-  const [cat, setCat] = useState<{ groupId: string; name: string } | null>(null); // one category's transactions, from the donut
   const [holdingsOpen, setHoldingsOpen] = useState(false);
   const [owedOpen, setOwedOpen] = useState(false);
   const [billsOpen, setBillsOpen] = useState(false);
@@ -156,7 +153,7 @@ export function MoneyView({ meName }: { meName: string }) {
             <BillsCard data={data} onOpen={() => setBillsOpen(true)} />
             <ReviewCard review={data.review} onOpen={() => setReviewing(true)} />
             <TransfersCard data={data} budget={budget} onChanged={load} />
-            <GroupsCard data={data} onOpen={(g) => (g.children?.length ? setOpenTop(g) : setOpen(g))} onCategory={(groupId, name) => setCat({ groupId, name })} />
+            <GroupsCard data={data} onOpen={(g) => (g.children?.length ? setOpenTop(g) : setOpen(g))} />
             <IncomeCard data={data} onOpen={setSource} />
           </div>
           {data.worth && <WorthCard worth={data.worth} />}
@@ -182,14 +179,6 @@ export function MoneyView({ meName }: { meName: string }) {
           onClose={() => setOpen(null)}
         />
       )}
-      {cat && data && (() => {
-        const tx = data.transactions.filter((t) => t.groupId === cat.groupId && t.category === cat.name);
-        return (
-          <Sheet title={`${cat.name} · ${eur(tx.reduce((sum, t) => sum + t.amount, 0))}`} icon={<SheetIcon name={categoryIcon(cat.name)} colour={levels(data).colour(cat.groupId)} />} onClose={() => setCat(null)}>
-            {tx.length ? <TxList tx={tx} showCategory={false} edit={{ data, budget, onChanged: load }} /> : <p className="muted small">Nothing here any more.</p>}
-          </Sheet>
-        );
-      })()}
       {source && data && (
         <Sheet title={`${source} · ${eur(data.income.sources.find((x) => x.name === source)?.amount ?? 0)}`} onClose={() => setSource(null)}>
           <TxList tx={data.income.transactions.filter((t) => sourceOf(t) === source)} showCategory={false} edit={{ data, budget, onChanged: load }} />
@@ -255,62 +244,30 @@ function SpentCard({ data }: { data: MoneySummary }) {
   );
 }
 
-function Donut({ groups, colour, total, label, onPick, onCentre }: { groups: MoneyGroup[]; colour: (id: string) => string; total: number; label: string; onPick?: (g: MoneyGroup) => void; onCentre?: () => void }) {
+function Donut({ groups, colour, total }: { groups: MoneyGroup[]; colour: (id: string) => string; total: number }) {
   const size = 210, r = size / 2 - 16, c = size / 2, gap = groups.length > 1 ? 0.02 : 0;
   let a = -Math.PI / 2;
   const at = (t: number) => `${c + r * Math.cos(t)} ${c + r * Math.sin(t)}`;
   return (
-    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} role="img" aria-label={`Spending by category: ${label}`}>
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} role="img" aria-label="Spending by category">
       {groups.map((g) => {
         const span = (g.amount / total) * Math.PI * 2;
         const a0 = a + gap / 2, a1 = a + Math.min(span, Math.PI * 2 - 0.0001) - gap / 2;
         a += span;
-        const d = `M ${at(a0)} A ${r} ${r} 0 ${a1 - a0 > Math.PI ? 1 : 0} 1 ${at(a1)}`;
         return (
-          <g key={g.id} className={onPick ? 'donut-seg' : undefined} onClick={onPick && (() => onPick(g))}>
-            <path d={d} stroke={colour(g.id)} strokeWidth={26} fill="none" />
-            {/* A wider invisible ring so a thin slice is still easy to tap. */}
-            {onPick && <path d={d} stroke="transparent" strokeWidth={44} fill="none" />}
+          <path key={g.id} d={`M ${at(a0)} A ${r} ${r} 0 ${a1 - a0 > Math.PI ? 1 : 0} 1 ${at(a1)}`} stroke={colour(g.id)} strokeWidth={26} fill="none">
             <title>{`${g.name} ${eur(g.amount)}`}</title>
-          </g>
+          </path>
         );
       })}
-      <g className={onCentre ? 'donut-back' : undefined} onClick={onCentre}>
-        {onCentre && <circle cx={c} cy={c} r={r - 20} fill="transparent" />}
-        <text x={c} y={onCentre ? c - 10 : c - 4} textAnchor="middle" className="donut-total">{eur(total)}</text>
-        <text x={c} y={onCentre ? c + 12 : c + 18} textAnchor="middle" className="donut-sub">{label}</text>
-        {onCentre && <text x={c} y={c + 32} textAnchor="middle" className="donut-sub">‹ back</text>}
-      </g>
+      <text x={c} y={c - 4} textAnchor="middle" className="donut-total">{eur(total)}</text>
+      <text x={c} y={c + 18} textAnchor="middle" className="donut-sub">spent</text>
     </svg>
   );
 }
 
-/** The live hex of a CSS colour like var(--m3), to work out its shades. */
-const cssHex = (v: string) => {
-  const name = v.match(/var\((--[\w-]+)\)/)?.[1];
-  return name ? getComputedStyle(document.documentElement).getPropertyValue(name).trim() : v;
-};
-const darkCards = () => window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? false;
-
-/**
- * Where the month's spending went, as a donut you can drill into: top level ("Casa") → its groups ("Habitação")
- * → their categories ("Luz"); tapping a category lists its transactions. The parts of a slice keep its hue, in
- * shades. The list under the donut does the same as tapping a slice; back goes up a level.
- */
-function GroupsCard({ data, onOpen, onCategory }: { data: MoneySummary; onOpen: (g: TopItem) => void; onCategory: (groupId: string, name: string) => void }) {
-  const [path, setPath] = useState<string[]>([]); // ids: [top] or [top, group]
+function GroupsCard({ data, onOpen }: { data: MoneySummary; onOpen: (g: TopItem) => void }) {
   const total = data.groups.reduce((s, g) => s + g.amount, 0);
-  const { items, order } = levels(data);
-  const top = items.find((t) => t.id === path[0]);
-  const group = top && (path[1] ? top.children?.find((g) => g.id === path[1]) : top.children?.length ? undefined : top);
-  const depth = !top ? 0 : group && group !== top ? 2 : 1;
-  useBack(() => setPath((p) => p.slice(0, -1)), depth > 0);
-  useEffect(() => {
-    // A level that went away (month changed, a transaction moved): go back up.
-    if (path[0] && !top) setPath([]);
-    else if (path[1] && (!group || group === top)) setPath([path[0]!]);
-  }, [path, top, group]);
-
   if (!total) {
     return (
       <section className="card money-card">
@@ -319,69 +276,26 @@ function GroupsCard({ data, onOpen, onCategory }: { data: MoneySummary; onOpen: 
       </section>
     );
   }
-
-  // What this level shows: top levels, a top level's groups, or a group's categories.
-  const cats = (g: MoneyGroup): MoneyGroup[] => g.categories.filter((c) => c.amount > 0).sort((x, y) => y.amount - x.amount).map((c) => ({ ...c, categories: [] }));
-  const shown: MoneyGroup[] = !top ? items : group ? cats(group) : top.children!;
-  const levelTotal = !top ? total : (group ?? top).amount;
-  const base = top ? colourOf(top.id, order) : '';
-  const shades = top ? shadesOf(cssHex(base), shown.length, darkCards()) : [];
-  const colour = (id: string) => {
-    if (!top) return colourOf(id, order);
-    const i = shown.findIndex((x) => x.id === id);
-    return i >= 0 && i < MAX_SHADES ? shades[i] ?? base : 'var(--m-other)';
-  };
-
-  const pick = (g: MoneyGroup) => {
-    if (!top) {
-      const t = g as TopItem;
-      if (t.children?.length || cats(t).length > 1) setPath([t.id]);
-      else if (cats(t).length === 1) onCategory(t.id, cats(t)[0]!.name);
-      else onOpen(t);
-    } else if (!group) {
-      if (cats(g).length > 1) setPath([top.id, g.id]);
-      else if (cats(g).length === 1) onCategory(g.id, cats(g)[0]!.name);
-      else onOpen(g);
-    } else onCategory(group.id, g.name);
-  };
-  const max = Math.max(...shown.map((g) => g.amount));
-  const label = !top ? 'spent' : (group && group !== top ? group : top).name;
-  const iconOf = (g: MoneyGroup) => categoryIcon(!top ? g.name : group ? g.name : `${top.name} / ${g.name}`);
-
+  const { items, order } = levels(data);
+  const colour = (id: string) => colourOf(id, order);
+  const max = Math.max(...items.map((g) => g.amount));
   return (
     <section className="card money-card">
-      <h2 className="money-crumbs">
-        {top ? <button onClick={() => setPath([])}>Where it went</button> : 'Where it went'}
-        {top && <><span className="muted"> › </span>{group && group !== top ? <button onClick={() => setPath([top.id])}>{top.name}</button> : top.name}</>}
-        {group && group !== top && <><span className="muted"> › </span>{group.name}</>}
-        {top && (
-          <button className="chip money-reset" onClick={() => setPath([])} aria-label="Back to all categories">
-            <Icon name="repeat" size={14} /> Reset
-          </button>
-        )}
-      </h2>
-      <div className="donut-wrap">
-        <Donut groups={shown} colour={colour} total={levelTotal} label={label} onPick={pick} onCentre={depth ? () => setPath(path.slice(0, -1)) : undefined} />
-      </div>
+      <h2>Where it went</h2>
+      <div className="donut-wrap"><Donut groups={items} colour={colour} total={total} /></div>
       <ul className="legend icons">
-        {shown.map((g) => (
+        {items.map((g) => (
           <li key={g.id}>
-            <button onClick={() => pick(g)}>
-              <span className="dot icon" style={{ color: colour(g.id) }}><Icon name={iconOf(g)} size={16} /></span>
-              <span className="name">{g.name}<span className="pct">{Math.round((g.amount / levelTotal) * 100)}%</span></span>
+            <button onClick={() => onOpen(g)}>
+              <span className="dot icon" style={{ color: colour(g.id) }}><Icon name={categoryIcon(g.name)} size={16} /></span>
+              <span className="name">{g.name}<span className="pct">{Math.round((g.amount / total) * 100)}%</span></span>
               <span className="amt">{eur(g.amount)}</span>
               <span className="track"><span style={{ width: `${(g.amount / max) * 100}%`, background: colour(g.id) }} /></span>
             </button>
           </li>
         ))}
       </ul>
-      {top ? (
-        <button className="chip" onClick={() => onOpen(group && group !== top ? group : top)}>
-          <Icon name="right" size={14} /> All transactions in {label}
-        </button>
-      ) : (
-        <p className="muted small">Tap a slice or a category to see what's inside.</p>
-      )}
+      <p className="muted small">Tap a category to see its transactions.</p>
     </section>
   );
 }
