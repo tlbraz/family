@@ -179,6 +179,7 @@ export interface MoneyTransaction {
   id?: string;
   categoryId?: string | null;
   fixable?: boolean; // false for splits and transfers: their category is changed in Actual
+  splitOf?: string | null; // a part of this split: its category and note change through the split, and it can be split further
   review?: boolean; // tagged #review
   note?: string | null; // the description (Actual's note, without the #review tag)
 }

@@ -276,6 +276,8 @@ describe('splitting a transaction in two', () => {
     expect(() => splitParts(-5000, [part(3000), part(1000)], cats)).toThrow('add up');
     expect(() => splitParts(-5000, [part(5000), part(0)], cats)).toThrow('amount');
     expect(() => splitParts(-5000, [part(2500), part(2500, 'nope')], cats)).toThrow(ReviewError);
-    expect(() => splitParts(-5000, [part(5000)], cats)).toThrow('two');
+    expect(() => splitParts(-5000, [part(5000)], cats)).toThrow('2 to 10');
+    expect(splitParts(-5000, [part(2000), part(1500), part(1500)], cats).map((p) => p.amount)).toEqual([-2000, -1500, -1500]); // more than two
+    expect(() => splitParts(-1100, Array.from({ length: 11 }, () => part(100)), cats)).toThrow('2 to 10');
   });
 });

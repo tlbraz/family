@@ -169,8 +169,8 @@ export function createApp(db: Db, hooks: AppHooks = noop) {
     const budget = (body.budget ?? 'family') as MoneyBudget;
     if (!budgetsFor(c.get('me')!.name).includes(budget)) return c.json({ error: 'Not available' }, 403);
     const parts = Array.isArray(body.parts) ? (body.parts as Record<string, unknown>[]) : [];
-    const ok = typeof body.id === 'string' && parts.length === 2 && parts.every((p) => p && typeof p.amount === 'number' && typeof p.category === 'string' && (p.note === undefined || typeof p.note === 'string'));
-    if (!ok) return c.json({ error: 'Give each of the two parts an amount and a category' }, 400);
+    const ok = typeof body.id === 'string' && parts.length >= 2 && parts.length <= 10 && parts.every((p) => p && typeof p.amount === 'number' && typeof p.category === 'string' && (p.note === undefined || typeof p.note === 'string'));
+    if (!ok) return c.json({ error: 'Give each part (2 to 10) an amount and a category' }, 400);
     try {
       await splitTransaction(budget, body.id as string, parts.map((p) => ({ amount: p.amount as number, category: p.category as string, note: (p.note as string | undefined) ?? '' })) as SplitPart[]);
       return c.json({ ok: true });

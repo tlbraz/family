@@ -30,11 +30,12 @@ export interface Snapshot {
   accounts: { id: string; name: string; offBudget: boolean; balance: number; days?: [string, number][] }[];
   groups: { id: string; name: string; income: boolean; hidden?: boolean; categories: { id: string; name: string }[] }[];
   /** Expense-side transactions of on-budget accounts: no transfers, no starting balances, splits flattened. */
-  tx: { id: string; accountId: string; fixable: boolean; review: boolean; note: string | null; date: string; amount: number; account: string; category: string | null; payee: string }[];
+  /** parentId: the split this is a part of (its own category and note are changed through the split). */
+  tx: { id: string; accountId: string; fixable: boolean; parentId?: string | null; review: boolean; note: string | null; date: string; amount: number; account: string; category: string | null; payee: string }[];
   dataFrom: string | null; // earliest real transaction, to know which months are complete
   bankSyncedAt?: string | null; // the latest bank sync of any linked account (ours, Actual's button or another tool)
   bankLinks?: { name: string; lastSync: string | null; status: string | null }[]; // accounts linked to a bank
-  review: { id: string; accountId: string; fixable: boolean; note?: string | null; date: string; amount: number; account: string; category: string | null; payee: string }[]; // tagged #review
+  review: { id: string; accountId: string; fixable: boolean; parentId?: string | null; note?: string | null; date: string; amount: number; account: string; category: string | null; payee: string }[]; // tagged #review
   /** Every transaction ever in a "to be reimbursed" category (see reimbursable), oldest first. */
   owed?: Snapshot['tx'];
   /** Recent plain transactions in any account (not transfers or splits), to spot transfers between our accounts. */
@@ -146,7 +147,7 @@ async function load(budget: MoneyBudget, bankSync: boolean): Promise<Snapshot> {
       const tagged = parts.find((p) => REVIEW_TAG.test(p.notes ?? ''));
       if (tagged) {
         const plain = !t.subtransactions?.length && !t.is_child && !t.transfer_id;
-        review.push({ id: tagged.id, accountId: a.id, fixable: plain, note: withoutReviewTag(tagged.notes), date: t.date, amount: tagged.amount, account: a.name, category: tagged.category ?? null, payee: (t.payee && payees.get(t.payee)) || t.imported_payee || '' });
+        review.push({ id: tagged.id, accountId: a.id, fixable: plain, parentId: tagged !== t && !tagged.transfer_id && !t.transfer_id ? t.id : null, note: withoutReviewTag(tagged.notes), date: t.date, amount: tagged.amount, account: a.name, category: tagged.category ?? null, payee: (t.payee && payees.get(t.payee)) || t.imported_payee || '' });
       }
     }
     for (const t of all) {
@@ -161,7 +162,7 @@ async function load(budget: MoneyBudget, bankSync: boolean): Promise<Snapshot> {
       for (const p of split ? t.subtransactions! : [t]) {
         if (!p.category || !owedCats.has(p.category)) continue;
         const payee = (t.payee && payees.get(t.payee)) || t.imported_payee || '';
-        owed.push({ id: p.id, accountId: a.id, fixable: !split, review: REVIEW_TAG.test(p.notes ?? ''), note: withoutReviewTag(p.notes), date: t.date, amount: p.amount, account: a.name, category: p.category, payee });
+        owed.push({ id: p.id, accountId: a.id, fixable: !split, parentId: split ? t.id : null, review: REVIEW_TAG.test(p.notes ?? ''), note: withoutReviewTag(p.notes), date: t.date, amount: p.amount, account: a.name, category: p.category, payee });
       }
     }
     for (const t of await api.getTransactions(a.id, start, end)) {
@@ -173,7 +174,7 @@ async function load(budget: MoneyBudget, bankSync: boolean): Promise<Snapshot> {
       for (const p of parts) {
         if (p.transfer_id) continue;
         const review = REVIEW_TAG.test(p.notes ?? '') || REVIEW_TAG.test(t.notes ?? '');
-        tx.push({ id: p.id, accountId: a.id, fixable: !split, review, note: withoutReviewTag(p.notes), date: t.date, amount: p.amount, account: a.name, category: p.category ?? null, payee });
+        tx.push({ id: p.id, accountId: a.id, fixable: !split, parentId: split ? t.id : null, review, note: withoutReviewTag(p.notes), date: t.date, amount: p.amount, account: a.name, category: p.category ?? null, payee });
       }
     }
   }
@@ -221,10 +222,10 @@ export const withoutReviewTag = (notes: string | null | undefined) =>
 export function editTransaction(budget: MoneyBudget, id: string, change: { category?: string; review?: boolean; note?: string }) {
   return serial(async () => {
     const snap = snapshots.get(budget);
-    const item = snap?.tx.find((t) => t.id === id) ?? snap?.review.find((t) => t.id === id);
+    const item = snap?.tx.find((t) => t.id === id) ?? snap?.review.find((t) => t.id === id) ?? snap?.owed?.find((t) => t.id === id);
     if (!snap || !item) throw new ReviewError('That transaction is no longer here; pull to refresh');
     if (change.category !== undefined) {
-      if (!item.fixable) throw new ReviewError('Change the category of splits and transfers in Actual');
+      if (!item.fixable && !item.parentId) throw new ReviewError('Change the category of transfers in Actual');
       if (!snap.groups.some((g) => g.categories.some((c) => c.id === change.category))) throw new ReviewError('Unknown category');
     }
     const api = await actual();
@@ -236,10 +237,31 @@ export function editTransaction(budget: MoneyBudget, id: string, change: { categ
     const tagged = change.review ?? REVIEW_TAG.test(current.notes ?? '');
     const text = change.note !== undefined ? change.note.trim().slice(0, 500) : withoutReviewTag(current.notes) ?? '';
     const notes = tagged ? `${text} #review`.trim() : text;
-    await api.updateTransaction(id, { notes, ...(change.category !== undefined ? { category: change.category } : {}) });
+    const category = change.category !== undefined ? { category: change.category } : {};
+    if (current.is_child) {
+      // A part of a split is changed through its split: Actual's API would wipe a part's amount if edited alone.
+      await rewriteSplit(api, all, id, (part) => [{ ...part, notes, ...category }]);
+    } else {
+      await api.updateTransaction(id, { notes, ...category });
+    }
     await api.sync();
     snapshots.set(budget, await load(budget, false));
   });
+}
+
+type Part = { id?: string; amount: number; category: string | null; notes: string | null };
+
+/** Replaces one part of a split with what `replace` gives (the same part changed, or several new parts). */
+async function rewriteSplit(api: Api, all: Awaited<ReturnType<Api['getTransactions']>>, partId: string, replace: (part: Part) => Part[]) {
+  const parent = all.find((t) => t.subtransactions?.some((s) => s.id === partId));
+  if (!parent) throw new ReviewError('That split is no longer in Actual');
+  if (parent.transfer_id || parent.subtransactions!.some((s) => s.id === partId && s.transfer_id)) throw new ReviewError('Change transfers in Actual');
+  const parts: Part[] = parent.subtransactions!.flatMap((s) => {
+    const part = { id: s.id, amount: s.amount, category: s.category ?? null, notes: s.notes ?? null };
+    return s.id === partId ? replace(part) : [part];
+  });
+  if (parts.reduce((sum, p) => sum + p.amount, 0) !== parent.amount) throw new ReviewError("The parts don't add up to the payment any more");
+  await api.updateTransaction(parent.id, { subtransactions: parts } as unknown as Parameters<Api['updateTransaction']>[1]);
 }
 
 /**
@@ -309,7 +331,7 @@ export interface SplitPart {
  * out) and gives them back with Actual's sign. Throws a ReviewError with the reason when they don't fit.
  */
 export function splitParts(amount: number, parts: SplitPart[], categories: Set<string>): SplitPart[] {
-  if (parts.length !== 2) throw new ReviewError('Split it in two parts');
+  if (parts.length < 2 || parts.length > 10) throw new ReviewError('Split it in 2 to 10 parts');
   if (parts.some((p) => !Number.isInteger(p.amount) || p.amount <= 0)) throw new ReviewError('Each part needs an amount');
   if (parts.reduce((sum, p) => sum + p.amount, 0) !== Math.abs(amount)) throw new ReviewError('The parts must add up to the whole amount');
   if (parts.some((p) => !categories.has(p.category))) throw new ReviewError('Pick a category for each part');
@@ -324,21 +346,29 @@ export function splitParts(amount: number, parts: SplitPart[], categories: Set<s
 export function splitTransaction(budget: MoneyBudget, id: string, parts: SplitPart[]) {
   return serial(async () => {
     const snap = snapshots.get(budget);
-    const item = snap?.tx.find((t) => t.id === id) ?? snap?.review.find((t) => t.id === id);
+    const item = snap?.tx.find((t) => t.id === id) ?? snap?.review.find((t) => t.id === id) ?? snap?.owed?.find((t) => t.id === id);
     if (!snap || !item) throw new ReviewError('That transaction is no longer here; pull to refresh');
-    if (!item.fixable) throw new ReviewError('That one is already a split or a transfer: change it in Actual');
+    if (!item.fixable && !item.parentId) throw new ReviewError('That one is a transfer: change it in Actual');
     const known = new Set(snap.groups.flatMap((g) => g.categories.map((c) => c.id)));
     const api = await actual();
     await api.downloadBudget(SYNC_IDS[budget]!);
-    const current = (await api.getTransactions(item.accountId, item.date, item.date)).find((t) => t.id === id);
+    const all = await api.getTransactions(item.accountId, item.date, item.date);
+    const current = all.flatMap((t) => [t, ...(t.subtransactions ?? [])]).find((t) => t.id === id);
     if (!current) throw new ReviewError('That transaction is no longer in Actual');
-    if (current.subtransactions?.length || current.is_child || current.transfer_id) throw new ReviewError('That one is already a split or a transfer: change it in Actual');
+    if (current.transfer_id) throw new ReviewError('That one is a transfer: change it in Actual');
     const checked = splitParts(current.amount, parts, known);
-    await api.updateTransaction(id, {
-      category: null,
-      notes: withoutReviewTag(current.notes) ?? '',
-      subtransactions: checked.map((p) => ({ amount: p.amount, category: p.category, notes: p.note })),
-    } as unknown as Parameters<Api['updateTransaction']>[1]); // a split's own line has no category
+    if (current.is_child) {
+      // Splitting a part: it's replaced by the new parts, in the same split (Actual has one level of splits).
+      await rewriteSplit(api, all, id, () => checked.map((p) => ({ amount: p.amount, category: p.category, notes: p.note })));
+    } else if (current.subtransactions?.length) {
+      throw new ReviewError('That one is already split: split one of its parts instead');
+    } else {
+      await api.updateTransaction(id, {
+        category: null,
+        notes: withoutReviewTag(current.notes) ?? '',
+        subtransactions: checked.map((p) => ({ amount: p.amount, category: p.category, notes: p.note })),
+      } as unknown as Parameters<Api['updateTransaction']>[1]); // a split's own line has no category
+    }
     await api.sync();
     snapshots.set(budget, await load(budget, false));
   });
@@ -499,7 +529,7 @@ export function summarise(snap: Snapshot, budget: MoneyBudget, budgets: MoneyBud
     g.amount -= t.amount;
     cat.amount -= t.amount;
     groups.set(groupId, g);
-    transactions.push({ id: t.id, categoryId: t.category, fixable: t.fixable, review: t.review, note: t.note, date: t.date, payee: t.payee, account: t.account, groupId, category: cat.name, amount: -t.amount });
+    transactions.push({ id: t.id, categoryId: t.category, fixable: t.fixable, splitOf: t.parentId ?? null, review: t.review, note: t.note, date: t.date, payee: t.payee, account: t.account, groupId, category: cat.name, amount: -t.amount });
   }
   const sorted = [...groups.values()]
     .map((g) => ({ ...g, categories: g.categories.filter((c) => c.amount > 0).sort((a, b) => b.amount - a.amount) }))
@@ -530,7 +560,7 @@ export function summarise(snap: Snapshot, budget: MoneyBudget, budgets: MoneyBud
         total: incomeTx.reduce((sum, t) => sum + t.amount, 0),
         sources: [...bySource].map(([name, amount]) => ({ name, amount })).sort((a, b) => (a.name === UNCATEGORISED ? 1 : b.name === UNCATEGORISED ? -1 : b.amount - a.amount)),
         transactions: incomeTx
-          .map((t) => ({ id: t.id, categoryId: t.category, fixable: t.fixable, review: t.review, note: t.note, date: t.date, payee: t.payee, account: t.account, groupId: 'income', category: sourceName(t, catName), amount: -t.amount }))
+          .map((t) => ({ id: t.id, categoryId: t.category, fixable: t.fixable, splitOf: t.parentId ?? null, review: t.review, note: t.note, date: t.date, payee: t.payee, account: t.account, groupId: 'income', category: sourceName(t, catName), amount: -t.amount }))
           .sort((a, b) => b.date.localeCompare(a.date)),
       };
     })(),
@@ -550,7 +580,7 @@ export function summarise(snap: Snapshot, budget: MoneyBudget, budgets: MoneyBud
     review: snap.review
       .map((t) => {
         const c = t.category ? groupOf.get(t.category) : undefined;
-        return { id: t.id, categoryId: t.category, fixable: t.fixable, review: true, note: t.note ?? null, date: t.date, payee: t.payee, account: t.account, groupId: c?.groupId ?? 'uncategorised', category: c?.name ?? UNCATEGORISED, amount: -t.amount };
+        return { id: t.id, categoryId: t.category, fixable: t.fixable, splitOf: t.parentId ?? null, review: true, note: t.note ?? null, date: t.date, payee: t.payee, account: t.account, groupId: c?.groupId ?? 'uncategorised', category: c?.name ?? UNCATEGORISED, amount: -t.amount };
       })
       .sort((a, b) => b.date.localeCompare(a.date)),
     // Spending groups first, then income, as in Actual.
@@ -562,7 +592,7 @@ export function summarise(snap: Snapshot, budget: MoneyBudget, budgets: MoneyBud
     owed: (() => {
       const items = snap.owed ?? [];
       if (!owedCats.size || !items.length) return null;
-      const tx = (t: Snapshot['tx'][number], amount: number) => ({ id: t.id, categoryId: t.category, fixable: t.fixable, review: t.review, note: t.note, date: t.date, payee: t.payee, account: t.account, groupId: 'owed', category: (t.category && catName.get(t.category)) || '', amount });
+      const tx = (t: Snapshot['tx'][number], amount: number) => ({ id: t.id, categoryId: t.category, fixable: t.fixable, splitOf: t.parentId ?? null, review: t.review, note: t.note, date: t.date, payee: t.payee, account: t.account, groupId: 'owed', category: (t.category && catName.get(t.category)) || '', amount });
       return {
         total: -items.reduce((s, t) => s + t.amount, 0),
         open: stillOwed(items).map((t) => tx(t, t.left)).reverse(),

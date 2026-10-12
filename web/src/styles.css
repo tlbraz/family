@@ -511,6 +511,11 @@ div.review-row { cursor: default; }
 .split-amount { display: flex; align-items: center; gap: 6px; font-weight: 800; }
 .split-amount input { width: 8em; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--soft); font: inherit; font-weight: 800; color: var(--ink); font-variant-numeric: tabular-nums; }
 .split-btn { margin-right: auto; }
+.split-part legend { display: flex; align-items: center; gap: 6px; }
+.split-remove { border: 0; background: none; color: var(--muted); font: inherit; font-size: 1.1rem; line-height: 1; padding: 0 4px; cursor: pointer; }
+.split-amount output { min-width: 8em; padding: 10px 12px; border-radius: 12px; border: 1px dashed var(--line); font-weight: 800; color: var(--muted); font-variant-numeric: tabular-nums; }
+.split-amount output.error { color: var(--danger, #c0392b); }
+.split-add { align-self: flex-start; }
 .tx-note { width: 100%; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--card); font: inherit; color: var(--ink); }
 .money-list .tx-desc { font-size: 0.85rem; color: var(--ink); opacity: 0.8; font-style: italic; }
 .holding { display: flex; flex-direction: column; gap: 8px; padding: 12px; margin: 12px 0; border-radius: 14px; background: var(--soft); }

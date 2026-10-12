@@ -511,7 +511,7 @@ function TxEditor({ t, edit, onDone }: { t: MoneyTransaction; edit: Editing; onD
   const fixed = t.amount > 0 && !['income', 'owed', 'transfer'].includes(t.groupId) ? fixedFor(t, edit.data) : null;
   const [fixing, setFixing] = useState(false);
   const change = {
-    ...(t.fixable && pick && pick !== t.categoryId ? { category: pick } : {}),
+    ...(editable(t) && pick && pick !== t.categoryId ? { category: pick } : {}),
     ...(review !== !!t.review ? { review } : {}),
     ...(note.trim() !== (t.note ?? '') ? { note: note.trim() } : {}),
   };
@@ -532,11 +532,12 @@ function TxEditor({ t, edit, onDone }: { t: MoneyTransaction; edit: Editing; onD
   if (fixing && fixed) return <FixedForm initial={fixed.initial} onCancel={() => setFixing(false)} onSaved={() => { onDone(); edit.onChanged(); }} />;
   return (
     <div className="review-fix">
-      {t.fixable ? (
+      {editable(t) ? (
         <CategoryPicker data={edit.data} value={pick} onChange={setPick} />
       ) : (
-        <p className="muted small">Part of a split: change its category in Actual.</p>
+        <p className="muted small">A transfer: change it in Actual.</p>
       )}
+      {t.splitOf && <p className="muted small">Part of a split.</p>}
       <input className="tx-note" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Description (optional)" maxLength={500} aria-label="Description" />
       <label className="check">
         <input type="checkbox" checked={review} onChange={(e) => setReview(e.target.checked)} /> Needs review (#review)
@@ -548,7 +549,7 @@ function TxEditor({ t, edit, onDone }: { t: MoneyTransaction; edit: Editing; onD
       )}
       {error && <p className="error small">{error}</p>}
       <div className="review-actions">
-        {canSplit(t) && <button className="chip split-btn" onClick={() => setSplitting(true)} disabled={busy}>Split in two</button>}
+        {canSplit(t) && <button className="chip split-btn" onClick={() => setSplitting(true)} disabled={busy}>{t.splitOf ? 'Split this part' : 'Split'}</button>}
         <button className="chip" onClick={onDone} disabled={busy}>Cancel</button>
         <button className="primary" onClick={save} disabled={busy || !Object.keys(change).length}>{busy ? 'Saving…' : 'Save'}</button>
       </div>
@@ -556,61 +557,78 @@ function TxEditor({ t, edit, onDone }: { t: MoneyTransaction; edit: Editing; onD
   );
 }
 
-const canSplit = (t: MoneyTransaction) => !!(t.id && t.fixable && t.amount);
+// A plain transaction or a part of a split (not a transfer) can be recategorised and split.
+const editable = (t: MoneyTransaction) => !!(t.fixable || t.splitOf);
+const canSplit = (t: MoneyTransaction) => !!(t.id && editable(t) && t.amount);
 const toCents = (s: string) => Math.round(Number(s.replace(',', '.').trim() || 'NaN') * 100);
 const fromCents = (c: number) => (c / 100).toFixed(2);
 
 /**
- * One payment, two things (groceries and a gift in one card payment): two parts, each with its own amount, category
- * and description. Type one amount and the other becomes the rest. Saved as a split in Actual.
+ * One payment, several things (groceries and a gift in one card payment): parts, each with its own amount, category
+ * and description. The last part is always the rest. A part of a split can be split again: its new parts join the
+ * same split (Actual has one level of splits). Saved as a split in Actual.
  */
 function SplitEditor({ t, data, budget, onCancel, onDone }: { t: MoneyTransaction; data: MoneySummary; budget: MoneyBudget; onCancel: () => void; onDone: () => void }) {
   const total = Math.abs(t.amount);
-  const [amounts, setAmounts] = useState(['', '']);
-  const [cats, setCats] = useState([t.categoryId ?? '', '']);
-  const [notes, setNotes] = useState([t.note ?? '', '']);
+  type Draft = { amount: string; cat: string; note: string };
+  const [parts, setParts] = useState<Draft[]>([
+    { amount: '', cat: t.categoryId ?? '', note: t.note ?? '' },
+    { amount: '', cat: '', note: '' },
+  ]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const cents = amounts.map(toCents);
-  const ready = cents.every((c) => c > 0) && cents[0]! + cents[1]! === total && cats.every(Boolean);
-  function setAmount(i: number, value: string) {
-    const c = toCents(value);
-    const next = [...amounts];
-    next[i] = value;
-    next[1 - i] = c > 0 && c < total ? fromCents(total - c) : '';
-    setAmounts(next);
-  }
-  const at = <T,>(list: T[], i: number, v: T) => list.map((x, j) => (j === i ? v : x));
+  const typed = parts.slice(0, -1).map((p) => toCents(p.amount));
+  const rest = total - typed.reduce((sum, c) => sum + (c > 0 ? c : 0), 0);
+  const cents = [...typed, rest];
+  const ready = cents.every((c) => c > 0) && parts.every((p) => p.cat);
+  const set = (i: number, change: Partial<Draft>) => setParts(parts.map((p, j) => (j === i ? { ...p, ...change } : p)));
   async function save() {
     setBusy(true);
     setError(null);
     try {
-      await api.splitMoney(budget, t.id!, [0, 1].map((i) => ({ amount: cents[i]!, category: cats[i]!, note: notes[i]!.trim() })));
+      await api.splitMoney(budget, t.id!, parts.map((p, i) => ({ amount: cents[i]!, category: p.cat, note: p.note.trim() })));
       onDone();
     } catch (e) {
       setError((e as Error).message);
       setBusy(false);
     }
   }
+  const last = parts.length - 1;
   return (
     <div className="review-fix split">
-      <p className="small"><b>Split {eur(total, true)}</b> <span className="muted">in two, each with its own category</span></p>
-      {[0, 1].map((i) => (
+      <p className="small">
+        <b>{t.splitOf ? 'Split this part' : 'Split'} {eur(total, true)}</b> <span className="muted">· each part with its own category; the last one is the rest</span>
+      </p>
+      {parts.map((p, i) => (
         <fieldset key={i} className="split-part">
-          <legend>Part {i + 1}</legend>
+          <legend>
+            Part {i + 1}
+            {parts.length > 2 && i < last && (
+              <button type="button" className="split-remove" onClick={() => setParts(parts.filter((_, j) => j !== i))} aria-label={`Remove part ${i + 1}`}>×</button>
+            )}
+          </legend>
           <label className="split-amount">
             <span>€</span>
-            <input inputMode="decimal" value={amounts[i]} onChange={(e) => setAmount(i, e.target.value)} placeholder="0.00" aria-label={`Amount of part ${i + 1}`} />
+            {i < last ? (
+              <input inputMode="decimal" value={p.amount} onChange={(e) => set(i, { amount: e.target.value })} placeholder="0.00" aria-label={`Amount of part ${i + 1}`} />
+            ) : (
+              <output className={rest > 0 ? '' : 'error'} aria-label="The rest">{rest > 0 ? fromCents(rest) : rest === 0 ? '0.00' : `−${fromCents(-rest)}`}</output>
+            )}
           </label>
-          <CategoryPicker data={data} value={cats[i]!} onChange={(id) => setCats(at(cats, i, id))} />
-          <input className="tx-note" value={notes[i]} onChange={(e) => setNotes(at(notes, i, e.target.value))} placeholder="Description (optional)" maxLength={500} aria-label={`Description of part ${i + 1}`} />
+          <CategoryPicker data={data} value={p.cat} onChange={(id) => set(i, { cat: id })} />
+          <input className="tx-note" value={p.note} onChange={(e) => set(i, { note: e.target.value })} placeholder="Description (optional)" maxLength={500} aria-label={`Description of part ${i + 1}`} />
         </fieldset>
       ))}
-      {cents.every((c) => c > 0) && cents[0]! + cents[1]! !== total && <p className="error small">The two parts must add up to {eur(total, true)}.</p>}
+      {parts.length < 10 && (
+        <button type="button" className="chip split-add" onClick={() => setParts([...parts.slice(0, -1), { amount: '', cat: '', note: '' }, parts[last]!])}>
+          <Icon name="plus" size={16} /> Add part
+        </button>
+      )}
+      {rest <= 0 && typed.every((c) => c > 0) && <p className="error small">The parts add up to more than {eur(total, true)}: the last one needs something left.</p>}
       {error && <p className="error small">{error}</p>}
       <div className="review-actions">
         <button className="chip" onClick={onCancel} disabled={busy}>Back</button>
-        <button className="primary" onClick={save} disabled={busy || !ready}>{busy ? 'Saving…' : 'Split'}</button>
+        <button className="primary" onClick={save} disabled={busy || !ready}>{busy ? 'Saving…' : `Split in ${parts.length}`}</button>
       </div>
     </div>
   );
@@ -634,7 +652,7 @@ function ReviewSheet({ data, budget, onChanged, onClose }: { data: MoneySummary;
     setNote(t.note ?? '');
   }
   const changes = (t: MoneyTransaction) => ({
-    ...(t.fixable && pick && pick !== t.categoryId ? { category: pick } : {}),
+    ...(editable(t) && pick && pick !== t.categoryId ? { category: pick } : {}),
     ...(note.trim() !== (t.note ?? '') ? { note: note.trim() } : {}),
   });
   async function finish(t: MoneyTransaction) {
@@ -671,7 +689,7 @@ function ReviewSheet({ data, budget, onChanged, onClose }: { data: MoneySummary;
             )}
             {openId === t.id && splitting !== t.id && (
               <div className="review-fix">
-                {t.fixable ? (
+                {editable(t) ? (
                   <CategoryPicker data={data} value={pick} onChange={setPick} />
                 ) : (
                   <p className="muted small">A split or a transfer: change its category in Actual.</p>
@@ -679,7 +697,7 @@ function ReviewSheet({ data, budget, onChanged, onClose }: { data: MoneySummary;
                 <input className="tx-note" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Description (optional)" maxLength={500} aria-label="Description" />
                 {error && <p className="error small">{error}</p>}
                 <div className="review-actions">
-                  {canSplit(t) && <button className="chip split-btn" disabled={busy} onClick={() => setSplitting(t.id!)}>Split in two</button>}
+                  {canSplit(t) && <button className="chip split-btn" disabled={busy} onClick={() => setSplitting(t.id!)}>{t.splitOf ? 'Split this part' : 'Split'}</button>}
                   <button className="chip" disabled={busy} onClick={() => setOpenId(null)}>Cancel</button>
                   <button className="primary" disabled={busy} onClick={() => finish(t)}>
                     {busy ? 'Saving…' : Object.keys(changes(t)).length ? 'Save ✓' : 'Looks fine ✓'}
