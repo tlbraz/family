@@ -1,13 +1,22 @@
 import type { MoneySummary } from '../../../shared/types';
 
-// Category colours (styles.css --m1…--m8), validated so every pair stays apart, for colour-blind vision too.
-// The order comes from the server: biggest spenders over all history first, so the eight that matter get colours
-// and keep them from month to month; anything past the 8th is gray. Names sit next to every colour.
-const SLOTS = 8;
-export const colourOf = (id: string, order: string[]) => {
-  const i = order.indexOf(id);
-  return i >= 0 && i < SLOTS ? `var(--m${i + 1})` : 'var(--m-other)';
-};
+// Category colours (styles.css --m1…--m10), validated so every pair stays apart on the cards in both themes
+// (OKLab ΔE ≥15.6 for normal vision; colour-blind pairs ≥6.6, fine because a name and icon sit next to every colour).
+// The family's own top levels keep a fixed colour by name; any other group takes the next free one, biggest
+// spenders first (the server's order), and past the tenth it goes gray.
+const SLOTS = 10;
+const BY_NAME: [RegExp, number][] = [
+  [/^casa\b/i, 1], // orange
+  [/^sa[uú]de/i, 2], // green
+  [/^(miúdos|miudos|filhos|kids)/i, 3], // blue
+  [/^transport/i, 4], // purple
+  [/^compras/i, 5], // pink
+  [/^finan/i, 6], // magenta
+  [/^(bem.estar|pessoal)/i, 7], // lavender / indigo
+  [/^lazer|leisure/i, 8], // cyan
+  [/^subscri/i, 9], // wine
+  [/^alimenta/i, 10], // olive
+];
 
 // A third level, by name: a group called "Casa / Energia" sits under "Casa" (Actual itself has only groups and
 // categories). Groups without a "/" stay on their own. Colours go by the top level, so all of Casa shares one.
@@ -18,13 +27,22 @@ export const splitGroup = (name: string) => {
   return top && sub ? { top, sub } : null;
 };
 
-/** The colour key of a group (its top level when it has one), the colour order, and a group's colour. */
+/** The colour key of a group (its top level when it has one), the colour of a key, and a group's colour. */
 export function groupColours(data: Pick<MoneySummary, 'pickable' | 'groups' | 'groupOrder'>) {
   const nameOf = new Map([...data.pickable, ...data.groups].map((g) => [g.id, g.name] as const));
   const keyOf = (groupId: string) => {
     const parts = splitGroup(nameOf.get(groupId) ?? '');
     return parts ? `top:${parts.top}` : groupId;
   };
+  const keyName = (key: string) => (key.startsWith('top:') ? key.slice(4) : nameOf.get(key) ?? '');
   const order = [...new Set(data.groupOrder.map(keyOf))];
-  return { keyOf, order, colour: (groupId: string) => colourOf(keyOf(groupId), order) };
+  const slot = new Map<string, number>();
+  for (const key of order) {
+    const s = BY_NAME.find(([re]) => re.test(keyName(key)))?.[1];
+    if (s && ![...slot.values()].includes(s)) slot.set(key, s);
+  }
+  const free = Array.from({ length: SLOTS }, (_, i) => i + 1).filter((s) => ![...slot.values()].includes(s));
+  for (const key of order) if (!slot.has(key) && free.length) slot.set(key, free.shift()!);
+  const keyColour = (key: string) => (slot.has(key) ? `var(--m${slot.get(key)})` : 'var(--m-other)');
+  return { keyOf, keyColour, colour: (groupId: string) => keyColour(keyOf(groupId)) };
 }

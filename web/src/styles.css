@@ -386,12 +386,13 @@ button.link { border: 0; padding: 0; background: none; color: var(--accent, inhe
 .me-row { display: flex; align-items: center; gap: 4px; }
 .bp-quick { width: 38px; height: 38px; color: #c2413b; }
 
-/* Money tab (parents only). Eight category colours, validated so EVERY pair (not just neighbours) stays apart on the
-   cards, for normal and colour-blind vision (OKLab ΔE ≥15 normal, ≥8 protan/deutan): the donut sorts by amount, so
-   any two can end up side by side. Same hue per slot in both themes, stepped for each card. */
-:root { --m1: #2176a8; --m2: #b94b08; --m3: #48c5d4; --m4: #d4149a; --m5: #a2ac3a; --m6: #524df4; --m7: #ea7c93; --m8: #b77df9; --m-other: #a9a4b8; }
+/* Money tab (parents only). Ten category colours, validated so EVERY pair (not just neighbours) stays apart on the
+   cards: OKLab ΔE ≥15.6 for normal vision, ≥6.6 colour-blind (allowed because each colour sits next to its name and
+   icon). Same hue per slot in both themes, stepped for each card. Slots by name in moneyColours.ts:
+   1 orange Casa · 2 green Saúde · 3 blue Miúdos · 4 purple · 5 pink · 6 magenta · 7 lavender · 8 cyan · 9 wine · 10 olive */
+:root { --m1: #d56909; --m2: #45d063; --m3: #0077b7; --m4: #633d98; --m5: #ff4b85; --m6: #c92aba; --m7: #a0a4fd; --m8: #0fb7c4; --m9: #953b4e; --m10: #6c6705; --m-other: #a9a4b8; }
 @media (prefers-color-scheme: dark) {
-  :root { --m1: #1870a1; --m2: #b54700; --m3: #14a5b4; --m4: #cd0093; --m5: #909a22; --m6: #5451f7; --m7: #d76b83; --m8: #ad74ee; --m-other: #6d6780; }
+  :root { --m1: #de6e0b; --m2: #00a13b; --m3: #0b6faa; --m4: #a07cdd; --m5: #fb3b7d; --m6: #c21fb3; --m7: #614ef1; --m8: #15a5b1; --m9: #a84c5e; --m10: #726c02; --m-other: #6d6780; }
 }
 .money-cards { display: flex; flex-direction: column; gap: 12px; }
 .money-switch { margin-bottom: 12px; }

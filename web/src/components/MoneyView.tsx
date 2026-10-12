@@ -4,13 +4,14 @@ import { api } from '../api';
 import { BillsCard, BillsSheet, FixedForm, fixedFor } from './Bills';
 import { Icon } from './Icon';
 import { categoryIcon } from './categoryIcons';
-import { colourOf, groupColours, splitGroup } from './moneyColours';
+import { groupColours, splitGroup } from './moneyColours';
 import { Sheet } from './Sheet';
+import { useBack } from '../back';
 
 
 type TopItem = MoneyGroup & { children?: MoneyGroup[] };
 function levels(data: MoneySummary) {
-  const { order, colour } = groupColours(data);
+  const { keyColour, colour } = groupColours(data);
   const tops = new Map<string, TopItem>();
   for (const g of data.groups) {
     const parts = splitGroup(g.name);
@@ -27,7 +28,7 @@ function levels(data: MoneySummary) {
   const items = [...tops.values()]
     .map((t) => (t.children?.length ? { ...t, children: t.children.sort((a, b) => b.amount - a.amount) } : t))
     .sort((a, b) => (a.id === 'uncategorised' ? 1 : b.id === 'uncategorised' ? -1 : b.amount - a.amount));
-  return { items, order, colour };
+  return { items, keyColour, colour };
 }
 
 const eur = (cents: number, decimals = false) => {
@@ -276,8 +277,7 @@ function GroupsCard({ data, onOpen }: { data: MoneySummary; onOpen: (g: TopItem)
       </section>
     );
   }
-  const { items, order } = levels(data);
-  const colour = (id: string) => colourOf(id, order);
+  const { items, keyColour: colour } = levels(data);
   const max = Math.max(...items.map((g) => g.amount));
   return (
     <section className="card money-card">
