@@ -308,18 +308,43 @@ function TopSheet({ top, data, edit, onClose }: { top: TopItem; data: MoneySumma
     <Sheet title={`${top.name} · ${eur(top.amount)}`} onClose={onClose}>
       {!children.length && <p className="muted small">Nothing here any more.</p>}
       {children.map((g) => (
-        <section key={g.id} className="money-sub">
-          <div className="money-sub-head" style={{ borderColor: colour }}>
-            <span className="cat-icon" style={{ color: colour }}><Icon name={categoryIcon(`${top.name} / ${g.name}`)} size={18} /></span>
-            <h3>{g.name}</h3>
-            {children.length > 1 && <span className="pct">{Math.round((g.amount / top.amount) * 100)}%</span>}
-            <span className="amt">{eur(g.amount)}</span>
-          </div>
-          <CategoryTx group={g} data={data} edit={edit} colour={colour} />
-        </section>
+        <SubSection key={g.id} top={top} group={g} data={data} edit={edit} colour={colour} pct={children.length > 1 ? Math.round((g.amount / top.amount) * 100) : null} />
       ))}
     </Sheet>
   );
+}
+
+/** One group in a top level's sheet. When its only category is named like it ("Escola" > "Escola"), the heading opens the transactions itself. */
+function SubSection({ top, group, data, edit, colour, pct }: { top: TopItem; group: MoneyGroup; data: MoneySummary; edit: Editing; colour: string; pct: number | null }) {
+  const [open, setOpen] = useState(false);
+  const names = categoryNames(group, data);
+  const lone = names.length === 1 && names[0] === group.name;
+  const inner = (
+    <>
+      <span className="cat-icon" style={{ color: colour }}><Icon name={categoryIcon(`${top.name} / ${group.name}`)} size={18} /></span>
+      <h3>{group.name}{lone && <span className="muted"> · {data.transactions.filter((t) => t.groupId === group.id).length}</span>}</h3>
+      {pct !== null && <span className="pct">{pct}%</span>}
+      <span className="amt">{eur(group.amount)}</span>
+      {lone && <span className="chev"><Icon name="right" size={14} /></span>}
+    </>
+  );
+  return (
+    <section className={`money-sub${open ? ' open' : ''}`}>
+      {lone ? (
+        <button className="money-sub-head" style={{ borderColor: colour }} aria-expanded={open} onClick={() => setOpen(!open)}>{inner}</button>
+      ) : (
+        <div className="money-sub-head" style={{ borderColor: colour }}>{inner}</div>
+      )}
+      {lone ? open && <div className="money-cat" style={{ '--c': colour } as CSSProperties}><TxList tx={data.transactions.filter((t) => t.groupId === group.id)} showCategory={false} edit={edit} /></div>
+        : <CategoryTx group={group} data={data} edit={edit} colour={colour} />}
+    </section>
+  );
+}
+
+/** A group's category names that have transactions: Actual's order first, then any others the transactions name. */
+function categoryNames(group: MoneyGroup, data: MoneySummary) {
+  const tx = data.transactions.filter((t) => t.groupId === group.id);
+  return [...new Set([...group.categories.map((c) => c.name), ...tx.map((t) => t.category)])].filter((n) => tx.some((t) => t.category === n));
 }
 
 function GroupSheet({ group, data, edit, onClose }: { group: MoneyGroup; data: MoneySummary; edit: Editing; onClose: () => void }) {
@@ -338,7 +363,7 @@ function CategoryTx({ group, data, edit, colour }: { group: MoneyGroup; data: Mo
   const [shown, setShown] = useState<Set<string>>(new Set());
   const tx = data.transactions.filter((t) => t.groupId === group.id);
   if (!tx.length) return <p className="muted small">Nothing here any more.</p>;
-  const names = [...new Set([...group.categories.map((c) => c.name), ...tx.map((t) => t.category)])].filter((n) => tx.some((t) => t.category === n));
+  const names = categoryNames(group, data);
   const amountOf = (n: string) => group.categories.find((c) => c.name === n)?.amount ?? tx.filter((t) => t.category === n).reduce((s, t) => s + t.amount, 0);
   const toggle = (n: string) => setShown((old) => { const s = new Set(old); if (!s.delete(n)) s.add(n); return s; });
   return (
