@@ -33,6 +33,7 @@ const RULES: [RegExp, string][] = [
   [/subscri/i, 'repeat'],
   [/sa[ií]das|passeio|cinema|espet/i, 'ticket'],
   [/jogo|games?\b/i, 'gamepad'],
+  [/hobb|artesan|craft/i, 'palette'],
   [/brinqued|toy/i, 'teddy'],
   [/outras compras/i, 'box'],
   [/streaming|\bapps?\b/i, 'streaming'],
