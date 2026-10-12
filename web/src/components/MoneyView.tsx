@@ -14,6 +14,41 @@ const colourOf = (id: string, order: string[]) => {
   return i >= 0 && i < SLOTS ? `var(--m${i + 1})` : 'var(--m-other)';
 };
 
+// A third level, by name: a group called "Casa / Energia" sits under "Casa" (Actual itself has only groups and
+// categories). Groups without a "/" stay on their own. Colours go by the top level, so Casa keeps one colour.
+const splitGroup = (name: string) => {
+  const i = name.indexOf('/');
+  const top = i > 0 ? name.slice(0, i).trim() : '';
+  const sub = i > 0 ? name.slice(i + 1).trim() : '';
+  return top && sub ? { top, sub } : null;
+};
+type TopItem = MoneyGroup & { children?: MoneyGroup[] };
+function levels(data: MoneySummary) {
+  const nameOf = new Map([...data.pickable, ...data.groups].map((g) => [g.id, g.name] as const));
+  const keyOf = (groupId: string) => {
+    const parts = splitGroup(nameOf.get(groupId) ?? '');
+    return parts ? `top:${parts.top}` : groupId;
+  };
+  const order = [...new Set(data.groupOrder.map(keyOf))];
+  const tops = new Map<string, TopItem>();
+  for (const g of data.groups) {
+    const parts = splitGroup(g.name);
+    if (!parts) {
+      tops.set(g.id, g);
+      continue;
+    }
+    const key = `top:${parts.top}`;
+    const t = tops.get(key) ?? { id: key, name: parts.top, amount: 0, categories: [], children: [] };
+    t.amount += g.amount;
+    t.children!.push({ ...g, name: parts.sub });
+    tops.set(key, t);
+  }
+  const items = [...tops.values()]
+    .map((t) => (t.children?.length ? { ...t, children: t.children.sort((a, b) => b.amount - a.amount) } : t))
+    .sort((a, b) => (a.id === 'uncategorised' ? 1 : b.id === 'uncategorised' ? -1 : b.amount - a.amount));
+  return { items, order, colour: (groupId: string) => colourOf(keyOf(groupId), order) };
+}
+
 const eur = (cents: number, decimals = false) => {
   const v = Math.abs(cents) / 100;
   const [int, dec] = (decimals ? v.toFixed(2) : Math.round(v).toString()).split('.');
@@ -46,6 +81,7 @@ export function MoneyView({ meName }: { meName: string }) {
   const [data, setData] = useState<MoneySummary | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [open, setOpen] = useState<MoneyGroup | null>(null);
+  const [openTop, setOpenTop] = useState<TopItem | null>(null); // a top level ("Casa") with its groups
   const [reviewing, setReviewing] = useState(false);
   const [source, setSource] = useState<string | null>(null); // an income source, to list its transactions
   const [holdingsOpen, setHoldingsOpen] = useState(false);
@@ -136,7 +172,7 @@ export function MoneyView({ meName }: { meName: string }) {
             <BillsCard data={data} onOpen={() => setBillsOpen(true)} />
             <ReviewCard review={data.review} onOpen={() => setReviewing(true)} />
             <TransfersCard data={data} budget={budget} onChanged={load} />
-            <GroupsCard data={data} onOpen={setOpen} />
+            <GroupsCard data={data} onOpen={(g) => (g.children?.length ? setOpenTop(g) : setOpen(g))} />
             <IncomeCard data={data} onOpen={setSource} />
           </div>
           {data.worth && <WorthCard worth={data.worth} />}
@@ -145,6 +181,14 @@ export function MoneyView({ meName }: { meName: string }) {
             {data.bankSyncedAt ? `Banks synced ${when(data.bankSyncedAt)}` : 'Banks not synced yet'} · read from Actual {ago(data.fetchedAt)}
           </p>
         </>
+      )}
+      {openTop && data && !open && (
+        <TopSheet
+          top={levels(data).items.find((t) => t.id === openTop.id) ?? { ...openTop, amount: 0, children: [] }}
+          data={data}
+          onPick={setOpen}
+          onClose={() => setOpenTop(null)}
+        />
       )}
       {open && data && (
         <GroupSheet
@@ -219,7 +263,7 @@ function SpentCard({ data }: { data: MoneySummary }) {
   );
 }
 
-function Donut({ groups, order, total }: { groups: MoneyGroup[]; order: string[]; total: number }) {
+function Donut({ groups, colour, total }: { groups: MoneyGroup[]; colour: (id: string) => string; total: number }) {
   const size = 210, r = size / 2 - 16, c = size / 2, gap = groups.length > 1 ? 0.02 : 0;
   let a = -Math.PI / 2;
   const at = (t: number) => `${c + r * Math.cos(t)} ${c + r * Math.sin(t)}`;
@@ -230,7 +274,7 @@ function Donut({ groups, order, total }: { groups: MoneyGroup[]; order: string[]
         const a0 = a + gap / 2, a1 = a + Math.min(span, Math.PI * 2 - 0.0001) - gap / 2;
         a += span;
         return (
-          <path key={g.id} d={`M ${at(a0)} A ${r} ${r} 0 ${a1 - a0 > Math.PI ? 1 : 0} 1 ${at(a1)}`} stroke={colourOf(g.id, order)} strokeWidth={26} fill="none">
+          <path key={g.id} d={`M ${at(a0)} A ${r} ${r} 0 ${a1 - a0 > Math.PI ? 1 : 0} 1 ${at(a1)}`} stroke={colour(g.id)} strokeWidth={26} fill="none">
             <title>{`${g.name} ${eur(g.amount)}`}</title>
           </path>
         );
@@ -241,7 +285,7 @@ function Donut({ groups, order, total }: { groups: MoneyGroup[]; order: string[]
   );
 }
 
-function GroupsCard({ data, onOpen }: { data: MoneySummary; onOpen: (g: MoneyGroup) => void }) {
+function GroupsCard({ data, onOpen }: { data: MoneySummary; onOpen: (g: TopItem) => void }) {
   const total = data.groups.reduce((s, g) => s + g.amount, 0);
   if (!total) {
     return (
@@ -251,19 +295,21 @@ function GroupsCard({ data, onOpen }: { data: MoneySummary; onOpen: (g: MoneyGro
       </section>
     );
   }
-  const max = Math.max(...data.groups.map((g) => g.amount));
+  const { items, order } = levels(data);
+  const colour = (id: string) => colourOf(id, order);
+  const max = Math.max(...items.map((g) => g.amount));
   return (
     <section className="card money-card">
       <h2>Where it went</h2>
-      <div className="donut-wrap"><Donut groups={data.groups} order={data.groupOrder} total={total} /></div>
+      <div className="donut-wrap"><Donut groups={items} colour={colour} total={total} /></div>
       <ul className="legend">
-        {data.groups.map((g) => (
+        {items.map((g) => (
           <li key={g.id}>
             <button onClick={() => onOpen(g)}>
-              <span className="dot" style={{ background: colourOf(g.id, data.groupOrder) }} />
+              <span className="dot" style={{ background: colour(g.id) }} />
               <span className="name">{g.name}<span className="pct">{Math.round((g.amount / total) * 100)}%</span></span>
               <span className="amt">{eur(g.amount)}</span>
-              <span className="track"><span style={{ width: `${(g.amount / max) * 100}%`, background: colourOf(g.id, data.groupOrder) }} /></span>
+              <span className="track"><span style={{ width: `${(g.amount / max) * 100}%`, background: colour(g.id) }} /></span>
             </button>
           </li>
         ))}
@@ -273,9 +319,34 @@ function GroupsCard({ data, onOpen }: { data: MoneySummary; onOpen: (g: MoneyGro
   );
 }
 
+/** A top level ("Casa") with its groups ("Energia", "Manutenção"); tap one for its categories and transactions. */
+function TopSheet({ top, data, onPick, onClose }: { top: TopItem; data: MoneySummary; onPick: (g: MoneyGroup) => void; onClose: () => void }) {
+  const children = top.children ?? [];
+  const lv = levels(data);
+  const colour = children[0] ? lv.colour(children[0].id) : 'var(--m-other)';
+  const max = Math.max(1, ...children.map((g) => g.amount));
+  return (
+    <Sheet title={`${top.name} · ${eur(top.amount)}`} onClose={onClose}>
+      {!children.length && <p className="muted small">Nothing here any more.</p>}
+      <ul className="legend sub">
+        {children.map((g) => (
+          <li key={g.id}>
+            <button onClick={() => onPick(g)}>
+              <span className="name">{g.name}<span className="pct">{Math.round((g.amount / top.amount) * 100)}%</span></span>
+              <span className="amt">{eur(g.amount)} <Icon name="right" size={14} /></span>
+              <span className="track"><span style={{ width: `${(g.amount / max) * 100}%`, background: colour }} /></span>
+            </button>
+          </li>
+        ))}
+      </ul>
+      <p className="muted small">Tap a group to see its categories and transactions.</p>
+    </Sheet>
+  );
+}
+
 function GroupSheet({ group, data, edit, onClose }: { group: MoneyGroup; data: MoneySummary; edit: Editing; onClose: () => void }) {
   const [only, setOnly] = useState<string | null>(null); // a category name, to see just its transactions
-  const colour = colourOf(group.id, data.groupOrder);
+  const colour = levels(data).colour(group.id);
   const max = Math.max(...group.categories.map((c) => c.amount));
   const tx = data.transactions.filter((t) => t.groupId === group.id && (!only || t.category === only));
   const several = group.categories.length > 1;

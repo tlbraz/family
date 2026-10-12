@@ -33,6 +33,8 @@ Install it on a phone with *Share → Add to Home Screen*.
   Available balance first, then spending this month vs. usual, by category group (tap for categories and transactions),
   what came in, and transactions tagged `#review`: pick a category (or "Looks fine") and the tag comes out, in Actual. Reads Actual every 20 min and asks it to sync the banks at 07:00, 13:00 and 19:00
   (`ACTUAL_BANK_SYNC=off` to stop). Swipe to change month.
+- **Three levels of categories** on the Money tab, by name: a group called `Casa / Energia` sits under **Casa** in
+  the donut (tap Casa → Energia → its categories). Groups without a `/` stay on their own; colours go by the top level.
 - **Bills & subscriptions** (Money tab, family budget): payments to the same payee in 3 of the last 4 months around
   the same day for a similar amount (or twice a year apart) are bills. The card shows what's still to come this month,
   a price change ("Vodafone €39.90 → €44.90") and a bill that didn't show up; tap for the list, "Not a bill", or to
