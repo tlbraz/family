@@ -524,6 +524,7 @@ function TxEditor({ t, edit, onDone }: { t: MoneyTransaction; edit: Editing; onD
   const [pick, setPick] = useState(t.categoryId ?? '');
   const [review, setReview] = useState(!!t.review);
   const [note, setNote] = useState(t.note ?? '');
+  const [asRule, setAsRule] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Money going out (not money in, paid back or a transfer) can become a fixed expense: a bill, family budget only.
@@ -532,7 +533,8 @@ function TxEditor({ t, edit, onDone }: { t: MoneyTransaction; edit: Editing; onD
   const change = {
     ...(editable(t) && pick && pick !== t.categoryId ? { category: pick } : {}),
     ...(review !== !!t.review ? { review } : {}),
-    ...(note.trim() !== (t.note ?? '') ? { note: note.trim() } : {}),
+    ...(note.trim() !== (t.note ?? '') || (asRule && note.trim()) ? { note: note.trim() } : {}),
+    ...(asRule && note.trim() ? { noteRule: true } : {}),
   };
   async function save() {
     setBusy(true);
@@ -558,6 +560,7 @@ function TxEditor({ t, edit, onDone }: { t: MoneyTransaction; edit: Editing; onD
       )}
       {t.splitOf && <p className="muted small">Part of a split.</p>}
       <input className="tx-note" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Description (optional)" maxLength={500} aria-label="Description" />
+      <NoteRuleCheck t={t} note={note} checked={asRule} onChange={setAsRule} />
       <label className="check">
         <input type="checkbox" checked={review} onChange={(e) => setReview(e.target.checked)} /> Needs review (#review)
       </label>
@@ -573,6 +576,16 @@ function TxEditor({ t, edit, onDone }: { t: MoneyTransaction; edit: Editing; onD
         <button className="primary" onClick={save} disabled={busy || !Object.keys(change).length}>{busy ? 'Saving…' : 'Save'}</button>
       </div>
     </div>
+  );
+}
+
+/** "Use it from now on": the description becomes part of the rule for this payee in Actual (not for transfers). */
+function NoteRuleCheck({ t, note, checked, onChange }: { t: MoneyTransaction; note: string; checked: boolean; onChange: (v: boolean) => void }) {
+  if (!note.trim() || !t.payee || t.groupId === 'transfer' || (!t.fixable && !t.splitOf)) return null;
+  return (
+    <label className="check">
+      <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} /> Use this description for every {t.payee}
+    </label>
   );
 }
 
@@ -659,6 +672,7 @@ function ReviewSheet({ data, budget, onChanged, onClose }: { data: MoneySummary;
   const [openId, setOpenId] = useState<string | null>(null);
   const [pick, setPick] = useState('');
   const [note, setNote] = useState('');
+  const [asRule, setAsRule] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<string[]>([]); // reviewed here, hidden before the page reloads
@@ -669,10 +683,12 @@ function ReviewSheet({ data, budget, onChanged, onClose }: { data: MoneySummary;
     setOpenId(openId === t.id ? null : t.id!);
     setPick(t.categoryId ?? '');
     setNote(t.note ?? '');
+    setAsRule(false);
   }
   const changes = (t: MoneyTransaction) => ({
     ...(editable(t) && pick && pick !== t.categoryId ? { category: pick } : {}),
-    ...(note.trim() !== (t.note ?? '') ? { note: note.trim() } : {}),
+    ...(note.trim() !== (t.note ?? '') || (asRule && note.trim()) ? { note: note.trim() } : {}),
+    ...(asRule && note.trim() ? { noteRule: true } : {}),
   });
   async function finish(t: MoneyTransaction) {
     setBusy(true);
@@ -713,6 +729,7 @@ function ReviewSheet({ data, budget, onChanged, onClose }: { data: MoneySummary;
                   <p className="muted small">A split or a transfer: change its category in Actual.</p>
                 )}
                 <input className="tx-note" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Description (optional)" maxLength={500} aria-label="Description" />
+                <NoteRuleCheck t={t} note={note} checked={asRule} onChange={setAsRule} />
                 {error && <p className="error small">{error}</p>}
                 <div className="review-actions">
                   {canSplit(t) && <button className="chip split-btn" disabled={busy} onClick={() => setSplitting(t.id!)}>{t.splitOf ? 'Split this part' : 'Split'}</button>}

@@ -231,7 +231,7 @@ export function descriptionOf(notes: string | null | undefined, imported: string
  * Changes a transaction in Actual from the app: its category, and/or whether it's tagged #review (the rest of the
  * note is kept). Then reads the budget again so the page shows the change.
  */
-export function editTransaction(budget: MoneyBudget, id: string, change: { category?: string; review?: boolean; note?: string }) {
+export function editTransaction(budget: MoneyBudget, id: string, change: { category?: string; review?: boolean; note?: string; noteRule?: boolean }) {
   return serial(async () => {
     const snap = snapshots.get(budget);
     const item = snap?.tx.find((t) => t.id === id) ?? snap?.review.find((t) => t.id === id) ?? snap?.owed?.find((t) => t.id === id);
@@ -250,15 +250,46 @@ export function editTransaction(budget: MoneyBudget, id: string, change: { categ
     const text = change.note !== undefined ? change.note.trim().slice(0, 500) : withoutReviewTag(current.notes) ?? '';
     const notes = tagged ? `${text} #review`.trim() : text;
     const category = change.category !== undefined ? { category: change.category } : {};
+    const ruled = change.noteRule ? await noteRulePlan(api, all, current, text) : null; // checked before anything is saved
     if (current.is_child) {
       // A part of a split is changed through its split: Actual's API would wipe a part's amount if edited alone.
       await rewriteSplit(api, all, id, (part) => [{ ...part, notes, ...category }]);
     } else {
       await api.updateTransaction(id, { notes, ...category });
     }
+    await ruled?.();
     await api.sync();
     snapshots.set(budget, await load(budget, false));
   });
+}
+
+type Rule = Awaited<ReturnType<Api['getRules']>>[number];
+
+/**
+ * "Use this description from now on": the rules that set this transaction's payee get the description too (before
+ * their #review tag). A payee no rule names gets a new rule on the bank's text, like the ones made in Actual.
+ */
+async function noteRulePlan(api: Api, all: Awaited<ReturnType<Api['getTransactions']>>, t: { id: string; is_child?: boolean }, text: string) {
+  const tx = t.is_child ? all.find((p) => p.subtransactions?.some((s) => s.id === t.id)) : all.find((p) => p.id === t.id);
+  if (!text) throw new ReviewError('Write a description first');
+  if (!tx || tx.transfer_id) throw new ReviewError('Transfers have no rules');
+  const setNote = { op: 'set', field: 'notes', value: text, type: 'string' } as Rule['actions'][number];
+  const rules = (await api.getRules()).filter((r) => tx.payee && r.actions.some((a) => a.op === 'set' && a.field === 'payee' && a.value === tx.payee));
+  if (rules.length) {
+    return async () => {
+      for (const r of rules) {
+        const actions = r.actions.filter((a) => !(a.op === 'set' && a.field === 'notes'));
+        const at = actions.findIndex((a) => a.op === 'append-notes');
+        actions.splice(at < 0 ? actions.length : at, 0, setNote);
+        await api.updateRule({ ...r, actions });
+      }
+    };
+  }
+  const bank = tx.imported_payee?.trim();
+  if (!bank || BANK_TEXT.test(bank) || /\d{8}/.test(bank)) throw new ReviewError("The bank's text changes every time, so a rule wouldn't match: make one in Actual");
+  return async () => {
+    await api.createRule({ stage: null, conditionsOp: 'and', conditions: [{ op: 'contains', field: 'imported_payee', value: bank, type: 'string' }], actions: [setNote] } as unknown as Rule);
+  };
 }
 
 type Part = { id?: string; amount: number; category: string | null; notes: string | null };
