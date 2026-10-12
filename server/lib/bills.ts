@@ -165,15 +165,13 @@ type CategoryOf = (id: string) => { name: string; group: { id: string; name: str
 
 /**
  * Where a bill belongs in the Money tab: the category of its most recent charge that has one, and that
- * category's group (so it gets the group's colour). Null when none of its charges has a category.
+ * category's group (so it gets the group's colour). Null when none of its charges has a category, or when
+ * that category isn't in Actual's groups any more (it then shows with the ones without a category).
  */
 export function placeOf(s: Series, categoryOf: CategoryOf): Pick<Bill, 'category' | 'group'> {
-  for (let i = s.charges.length - 1; i >= 0; i--) {
-    const id = s.charges[i]!.category;
-    const c = id ? categoryOf(id) : undefined;
-    if (c) return { category: c.name, group: c.group };
-  }
-  return { category: null, group: null };
+  const id = [...s.charges].reverse().find((c) => c.category)?.category;
+  const c = id ? categoryOf(id) : undefined;
+  return c ? { category: c.name, group: c.group } : { category: null, group: null };
 }
 
 /** How a bill stands in `month`, or null when it isn't expected that month. */

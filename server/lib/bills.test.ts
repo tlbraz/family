@@ -160,6 +160,7 @@ describe('bills', () => {
       ...cat('Vodafone', 5, 39.9, 'tv', 'phone'), // recategorised lately: the latest category counts
       ...cat('Gym', 3, 35, 'groceries', null), // the latest charge has no category: the one before still counts
       ...cat('Mystery', 10, 20, null),
+      ...cat('Old Club', 12, 15, 'tv', 'deleted'), // its latest category no longer exists in Actual
       // Rent split on the same day: the biggest part's category.
       ...months.flatMap((m) => [out(`${m}-01`, 800, 'Senhorio', 'mortgage'), out(`${m}-01`, 20, 'Senhorio', 'power')]),
     ];
@@ -171,6 +172,7 @@ describe('bills', () => {
       expect(find(b, 'gym')).toMatchObject({ category: 'Groceries', group: { id: 'food', name: 'Food' } });
       expect(find(b, 'senhorio')).toMatchObject({ category: 'Mortgage', group: { id: 'home' } });
       expect(find(b, 'mystery')).toMatchObject({ category: null, group: null });
+      expect(find(b, 'old club')).toMatchObject({ category: null, group: null });
       expect(find(b, 'banco hipoteca')!.history[0]).toEqual({ date: '2026-09-02', amount: 65000 });
       // Without Actual's groups (as in the Telegram alerts), there's no category.
       expect(find(billsFor({ tx: tx2, dataFrom: '2025-09-01' }, '2026-09', today), 'banco hipoteca')).toMatchObject({ category: null, group: null });
@@ -182,7 +184,7 @@ describe('bills', () => {
         ['home', 'Home', ['banco hipoteca', 'edp comercial', 'senhorio']],
         ['subs', 'Subscriptions', ['netflix', 'vodafone']],
         ['food', 'Food', ['gym']],
-        ['uncategorised', 'Sem categoria', ['mystery']],
+        ['uncategorised', 'Sem categoria', ['mystery', 'old club']],
       ]);
       const home = g[0]!;
       expect(home.total).toBe(65000 + 6000 + 82000);
