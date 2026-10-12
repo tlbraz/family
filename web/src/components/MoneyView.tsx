@@ -304,19 +304,22 @@ function GroupsCard({ data, onOpen }: { data: MoneySummary; onOpen: (g: TopItem)
 function TopSheet({ top, data, edit, onClose }: { top: TopItem; data: MoneySummary; edit: Editing; onClose: () => void }) {
   const children = top.children ?? [];
   const colour = children[0] ? levels(data).colour(children[0].id) : 'var(--m-other)';
+  const [all, toggleAll] = useOpenAll();
   return (
     <Sheet title={`${top.name} · ${eur(top.amount)}`} onClose={onClose}>
       {!children.length && <p className="muted small">Nothing here any more.</p>}
+      {children.length > 0 && <OpenAllButton all={all} onClick={toggleAll} />}
       {children.map((g) => (
-        <SubSection key={g.id} top={top} group={g} data={data} edit={edit} colour={colour} pct={children.length > 1 ? Math.round((g.amount / top.amount) * 100) : null} />
+        <SubSection key={g.id} top={top} group={g} data={data} edit={edit} colour={colour} all={all} pct={children.length > 1 ? Math.round((g.amount / top.amount) * 100) : null} />
       ))}
     </Sheet>
   );
 }
 
 /** One group in a top level's sheet. When its only category is named like it ("Escola" > "Escola"), the heading opens the transactions itself. */
-function SubSection({ top, group, data, edit, colour, pct }: { top: TopItem; group: MoneyGroup; data: MoneySummary; edit: Editing; colour: string; pct: number | null }) {
+function SubSection({ top, group, data, edit, colour, pct, all }: { top: TopItem; group: MoneyGroup; data: MoneySummary; edit: Editing; colour: string; pct: number | null; all: OpenAll }) {
   const [open, setOpen] = useState(false);
+  useEffect(() => { if (all) setOpen(all.open); }, [all]);
   const names = categoryNames(group, data);
   const lone = names.length === 1 && names[0] === group.name;
   const inner = (
@@ -336,7 +339,7 @@ function SubSection({ top, group, data, edit, colour, pct }: { top: TopItem; gro
         <div className="money-sub-head" style={{ borderColor: colour }}>{inner}</div>
       )}
       {lone ? open && <div className="money-cat" style={{ '--c': colour } as CSSProperties}><TxList tx={data.transactions.filter((t) => t.groupId === group.id)} showCategory={false} edit={edit} /></div>
-        : <CategoryTx group={group} data={data} edit={edit} colour={colour} />}
+        : <CategoryTx group={group} data={data} edit={edit} colour={colour} all={all} />}
     </section>
   );
 }
@@ -348,9 +351,11 @@ function categoryNames(group: MoneyGroup, data: MoneySummary) {
 }
 
 function GroupSheet({ group, data, edit, onClose }: { group: MoneyGroup; data: MoneySummary; edit: Editing; onClose: () => void }) {
+  const [all, toggleAll] = useOpenAll();
   return (
     <Sheet title={`${group.name} · ${eur(group.amount)}`} onClose={onClose}>
-      <CategoryTx group={group} data={data} edit={edit} colour={levels(data).colour(group.id)} />
+      {data.transactions.some((t) => t.groupId === group.id) && <OpenAllButton all={all} onClick={toggleAll} />}
+      <CategoryTx group={group} data={data} edit={edit} colour={levels(data).colour(group.id)} all={all} />
       {group.id === 'uncategorised' && data.link && (
         <p className="muted small money-note">Give these a category in <a href={data.link} target="_blank" rel="noreferrer">Actual</a> and they'll move to the right place.</p>
       )}
@@ -358,9 +363,24 @@ function GroupSheet({ group, data, edit, onClose }: { group: MoneyGroup; data: M
   );
 }
 
+/** "Expand all" / "Collapse all" in a category sheet: each press is a new signal every section follows (they still open and close one by one too). */
+type OpenAll = { open: boolean; n: number } | null;
+function useOpenAll() {
+  const [all, setAll] = useState<OpenAll>(null);
+  return [all, () => setAll((a) => ({ open: !a?.open, n: (a?.n ?? 0) + 1 }))] as const;
+}
+function OpenAllButton({ all, onClick }: { all: OpenAll; onClick: () => void }) {
+  return (
+    <button className="chip money-open-all" onClick={onClick} aria-pressed={!!all?.open}>
+      <Icon name={all?.open ? 'up' : 'down'} size={14} /> {all?.open ? 'Collapse all' : 'Expand all'}
+    </button>
+  );
+}
+
 /** A group's categories, always listed (biggest first); tap one to show or hide its transactions. */
-function CategoryTx({ group, data, edit, colour }: { group: MoneyGroup; data: MoneySummary; edit: Editing; colour: string }) {
+function CategoryTx({ group, data, edit, colour, all }: { group: MoneyGroup; data: MoneySummary; edit: Editing; colour: string; all?: OpenAll }) {
   const [shown, setShown] = useState<Set<string>>(new Set());
+  useEffect(() => { if (all) setShown(all.open ? new Set(categoryNames(group, data)) : new Set()); }, [all]);
   const tx = data.transactions.filter((t) => t.groupId === group.id);
   if (!tx.length) return <p className="muted small">Nothing here any more.</p>;
   const names = categoryNames(group, data);
