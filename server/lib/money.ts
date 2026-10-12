@@ -444,6 +444,21 @@ const addMonths = (month: string, n: number) => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 };
 
+// Groups named "Casa / Energia" share their top level's colour, so they rank together (see web moneyColours.ts).
+function colourOrder(groups: Snapshot['groups'], spending: Snapshot['tx']): string[] {
+  const keyOf = (name: string) => (/^[^/]+\/./.test(name) ? `top:${name.slice(0, name.indexOf('/')).trim()}` : name);
+  const catKey = new Map(groups.flatMap((g) => g.categories.map((c) => [c.id, keyOf(g.name)] as const)));
+  const spent = new Map<string, number>();
+  for (const t of spending) {
+    const k = t.category ? catKey.get(t.category) : undefined;
+    if (k) spent.set(k, (spent.get(k) ?? 0) - t.amount);
+  }
+  const at = new Map(groups.map((g, i) => [g.id, i]));
+  return [...groups]
+    .sort((a, b) => (spent.get(keyOf(b.name)) ?? 0) - (spent.get(keyOf(a.name)) ?? 0) || at.get(a.id)! - at.get(b.id)!)
+    .map((g) => g.id);
+}
+
 export function summarise(snap: Snapshot, budget: MoneyBudget, budgets: MoneyBudget[], month: string, today: Date, billOverrides?: BillOverrides, notTransfers: string[] = []): MoneySummary {
   const incomeCats = new Set(snap.groups.filter((g) => g.income).flatMap((g) => g.categories.map((c) => c.id)));
   const groupOf = new Map<string, { groupId: string; groupName: string; name: string }>();
@@ -521,8 +536,10 @@ export function summarise(snap: Snapshot, budget: MoneyBudget, budgets: MoneyBud
     })(),
     usual,
     groups: sorted,
-    // Colours go to the groups actually used (Actual's unused default and hidden groups would take slots otherwise).
-    groupOrder: snap.groups.filter((g) => !g.income && !g.hidden && g.categories.some((c) => usedCats.has(c.id))).map((g) => g.id),
+    // Colours go to the groups actually used (Actual's unused default and hidden groups would take slots otherwise),
+    // biggest spenders over all history first: only eight colours stay distinct, so they go to what matters, and
+    // all-time totals barely move, so a group keeps its colour from month to month.
+    groupOrder: colourOrder(snap.groups.filter((g) => !g.income && !g.hidden && g.categories.some((c) => usedCats.has(c.id))), spending),
     transactions: transactions.sort((a, b) => b.date.localeCompare(a.date) || b.amount - a.amount),
     accounts: snap.accounts
       .map(({ name, balance, offBudget }) => ({ name, balance, offBudget }))

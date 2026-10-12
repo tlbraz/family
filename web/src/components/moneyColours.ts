@@ -1,9 +1,9 @@
 import type { MoneySummary } from '../../../shared/types';
 
-// Category colours, validated for colour-blind separation on the light and dark cards (see styles.css --m1…--m12).
-// A group keeps its colour by its place in Actual (among the groups in use), not by how much was spent; past the
-// 12th it goes gray. Every colour has its name next to it, so colour is never the only way to tell them apart.
-const SLOTS = 12;
+// Category colours (styles.css --m1…--m8), validated so every pair stays apart, for colour-blind vision too.
+// The order comes from the server: biggest spenders over all history first, so the eight that matter get colours
+// and keep them from month to month; anything past the 8th is gray. Names sit next to every colour.
+const SLOTS = 8;
 export const colourOf = (id: string, order: string[]) => {
   const i = order.indexOf(id);
   return i >= 0 && i < SLOTS ? `var(--m${i + 1})` : 'var(--m-other)';

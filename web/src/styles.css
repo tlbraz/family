@@ -386,10 +386,12 @@ button.link { border: 0; padding: 0; background: none; color: var(--accent, inhe
 .me-row { display: flex; align-items: center; gap: 4px; }
 .bp-quick { width: 38px; height: 38px; color: #c2413b; }
 
-/* Money tab (parents only). Category colours validated for colour-blind separation on the cards. */
-:root { --m1: #2a78d6; --m2: #eb6834; --m3: #1baf7a; --m4: #eda100; --m5: #e87ba4; --m6: #008300; --m7: #4a3aa7; --m8: #e34948; --m9: #6fb8ff; --m10: #9e2f7a; --m11: #7a8b00; --m12: #a86cf0; --m-other: #a9a4b8; }
+/* Money tab (parents only). Eight category colours, validated so EVERY pair (not just neighbours) stays apart on the
+   cards, for normal and colour-blind vision (OKLab ΔE ≥15 normal, ≥8 protan/deutan): the donut sorts by amount, so
+   any two can end up side by side. Same hue per slot in both themes, stepped for each card. */
+:root { --m1: #2176a8; --m2: #b94b08; --m3: #48c5d4; --m4: #d4149a; --m5: #a2ac3a; --m6: #524df4; --m7: #ea7c93; --m8: #b77df9; --m-other: #a9a4b8; }
 @media (prefers-color-scheme: dark) {
-  :root { --m1: #3987e5; --m2: #d95926; --m3: #199e70; --m4: #c98500; --m5: #d55181; --m6: #008300; --m7: #9085e9; --m8: #e66767; --m9: #3fa0c8; --m10: #b8468f; --m11: #8a9c10; --m12: #7a5cd6; --m-other: #6d6780; }
+  :root { --m1: #1870a1; --m2: #b54700; --m3: #14a5b4; --m4: #cd0093; --m5: #909a22; --m6: #5451f7; --m7: #d76b83; --m8: #ad74ee; --m-other: #6d6780; }
 }
 .money-cards { display: flex; flex-direction: column; gap: 12px; }
 .money-switch { margin-bottom: 12px; }

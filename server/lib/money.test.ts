@@ -114,6 +114,23 @@ describe('colours and money in', () => {
     expect(summarise(base, 'family', ['family'], '2026-09', today).groupOrder).toEqual(['gsuper']);
   });
 
+  it('gives the colours to the biggest spenders over all history, a top level counting its sub-groups together', () => {
+    const base = snap([
+      t('2026-03-05', -9000, 'super'), // an old month counts too: the order doesn't move with the month shown
+      t('2026-09-05', -4000, 'luz'),
+      t('2026-09-06', -3000, 'agua'),
+      t('2026-09-07', -500, 'cinema'),
+    ]);
+    base.groups = [
+      ...base.groups,
+      { id: 'glazer', name: 'Lazer', income: false, categories: [{ id: 'cinema', name: 'Cinema' }] },
+      { id: 'gagua', name: 'Casa / Água', income: false, categories: [{ id: 'agua', name: 'Água' }] },
+    ];
+    base.groups[1] = { id: 'gcasa', name: 'Casa / Energia', income: false, categories: [{ id: 'luz', name: 'Luz' }] };
+    // Supermercado 90€ > Casa (40€ + 30€ together) > Lazer 5€; Actual's own order breaks ties within Casa.
+    expect(summarise(base, 'family', ['family'], '2026-09', today).groupOrder).toEqual(['gsuper', 'gcasa', 'gagua', 'glazer']);
+  });
+
   it('sums what came in by who paid, with uncategorised money in apart', () => {
     const s = summarise(
       snap([
