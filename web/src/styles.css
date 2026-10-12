@@ -517,7 +517,6 @@ div.review-row { cursor: default; }
 .split-amount output.error { color: var(--danger, #c0392b); }
 .split-add { align-self: flex-start; }
 .tx-note { width: 100%; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--card); font: inherit; color: var(--ink); }
-.money-list .tx-desc { font-size: 0.85rem; color: var(--ink); opacity: 0.8; font-style: italic; }
 .holding { display: flex; flex-direction: column; gap: 8px; padding: 12px; margin: 12px 0; border-radius: 14px; background: var(--soft); }
 .holding input { min-width: 0; padding: 9px 11px; border-radius: 10px; border: 1px solid var(--line); background: var(--card); font: inherit; color: var(--ink); }
 .holding-head { display: flex; gap: 8px; align-items: center; }

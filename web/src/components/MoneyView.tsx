@@ -36,7 +36,7 @@ const eur = (cents: number, decimals = false) => {
   return `${cents < 0 ? '−' : ''}€${int!.replace(/\B(?=(\d{3})+(?!\d))/g, ' ')}${dec ? `.${dec}` : ''}`;
 };
 const monthName = (m: string) => new Date(`${m}-15T12:00`).toLocaleDateString('en-GB', { month: 'long', year: m.slice(0, 4) === String(new Date().getFullYear()) ? undefined : 'numeric' });
-// The description, unless it only repeats the payee (banks often copy their text into the note).
+// The description, unless it only repeats the payee (banks often copy their text into the note). Lists show it first, the payee below.
 const squash = (x: string) => x.toLowerCase().replace(/[^a-z0-9]/g, '');
 const descOf = (t: MoneyTransaction) => {
   const note = squash(t.note ?? '');
@@ -403,10 +403,9 @@ function TxList({ tx, showCategory, edit }: { tx: MoneyTransaction[]; showCatego
         const row = (
           <>
             <span>
-              {t.payee || '—'}
-              {descOf(t) && <span className="tx-desc">{descOf(t)}</span>}
+              {descOf(t) ?? (t.payee || '—')}
               <span className="sub">
-                {shortDate(t.date)} · {t.account}{showCategory ? ` · ${t.category}` : ''}
+                {descOf(t) && t.payee ? `${t.payee} · ` : ''}{shortDate(t.date)} · {t.account}{showCategory ? ` · ${t.category}` : ''}
                 {t.review && <span className="tag"> #review</span>}
               </span>
             </span>
@@ -678,9 +677,8 @@ function ReviewSheet({ data, budget, onChanged, onClose }: { data: MoneySummary;
           <li key={t.id} className={openId === t.id ? 'open' : ''}>
             <button className="review-row" aria-expanded={openId === t.id} onClick={() => toggle(t)}>
               <span>
-                {t.payee || '—'}
-                {descOf(t) && <span className="tx-desc">{descOf(t)}</span>}
-                <span className="sub">{shortDate(t.date)} · {t.account} · {t.category}</span>
+                {descOf(t) ?? (t.payee || '—')}
+                <span className="sub">{descOf(t) && t.payee ? `${t.payee} · ` : ''}{shortDate(t.date)} · {t.account} · {t.category}</span>
               </span>
               <span className={`amt ${t.amount < 0 ? 'in' : ''}`}>{t.amount < 0 ? `+${eur(-t.amount, true)}` : eur(t.amount, true)}</span>
             </button>
