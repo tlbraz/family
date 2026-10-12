@@ -3,26 +3,13 @@ import type { MoneyBudget, MoneyGroup, MoneyHolding, MoneyHoldings, MoneySummary
 import { api } from '../api';
 import { BillsCard, BillsSheet, FixedForm, fixedFor } from './Bills';
 import { Icon } from './Icon';
-import { colourOf } from './moneyColours';
+import { colourOf, groupColours, splitGroup } from './moneyColours';
 import { Sheet } from './Sheet';
 
 
-// A third level, by name: a group called "Casa / Energia" sits under "Casa" (Actual itself has only groups and
-// categories). Groups without a "/" stay on their own. Colours go by the top level, so Casa keeps one colour.
-const splitGroup = (name: string) => {
-  const i = name.indexOf('/');
-  const top = i > 0 ? name.slice(0, i).trim() : '';
-  const sub = i > 0 ? name.slice(i + 1).trim() : '';
-  return top && sub ? { top, sub } : null;
-};
 type TopItem = MoneyGroup & { children?: MoneyGroup[] };
 function levels(data: MoneySummary) {
-  const nameOf = new Map([...data.pickable, ...data.groups].map((g) => [g.id, g.name] as const));
-  const keyOf = (groupId: string) => {
-    const parts = splitGroup(nameOf.get(groupId) ?? '');
-    return parts ? `top:${parts.top}` : groupId;
-  };
-  const order = [...new Set(data.groupOrder.map(keyOf))];
+  const { order, colour } = groupColours(data);
   const tops = new Map<string, TopItem>();
   for (const g of data.groups) {
     const parts = splitGroup(g.name);
@@ -39,7 +26,7 @@ function levels(data: MoneySummary) {
   const items = [...tops.values()]
     .map((t) => (t.children?.length ? { ...t, children: t.children.sort((a, b) => b.amount - a.amount) } : t))
     .sort((a, b) => (a.id === 'uncategorised' ? 1 : b.id === 'uncategorised' ? -1 : b.amount - a.amount));
-  return { items, order, colour: (groupId: string) => colourOf(keyOf(groupId), order) };
+  return { items, order, colour };
 }
 
 const eur = (cents: number, decimals = false) => {

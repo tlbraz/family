@@ -3,7 +3,7 @@ import { groupBills, payeeKey } from '../../../shared/bills';
 import type { Bill, MoneySummary, MoneyTransaction } from '../../../shared/types';
 import { api } from '../api';
 import { Icon } from './Icon';
-import { colourOf } from './moneyColours';
+import { groupColours } from './moneyColours';
 import { Sheet } from './Sheet';
 import './Bills.css';
 
@@ -163,7 +163,7 @@ export function BillsSheet({ data, onChanged, onClose }: { data: MoneySummary; o
         return (
           <section key={g.id} className="bills-section bills-group">
             <button className="bills-group-head" onClick={() => toggle(g.id)} aria-expanded={expanded}>
-              <span className="dot" style={{ background: colourOf(g.id, data.groupOrder) }} aria-hidden />
+              <span className="dot" style={{ background: groupColours(data).colour(g.id) }} aria-hidden />
               <span className="bills-group-name">{g.name}<span className="muted"> · {g.bills.length}</span></span>
               <span className="bills-group-sum">{whole(g.total)}<span className="muted"> · {whole(g.paid)} paid</span></span>
               <span className={`bills-group-chev${expanded ? ' open' : ''}`} aria-hidden><Icon name="right" size={16} /></span>
