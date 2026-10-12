@@ -2,7 +2,7 @@ import { eq } from 'drizzle-orm';
 import { DOCUMENT_KINDS, type DocumentKind } from '../../shared/types';
 import type { Db } from '../db';
 import { memberDocuments, members, settings } from '../schema';
-import { type BillOverrides, billAlerts, billsFor } from './bills';
+import { type BillOverrides, billAlerts, billsFor, parseOverrides } from './bills';
 import { moneyEnabled, moneySnapshot, stillOwed, type Snapshot } from './money';
 import { tiagoChat } from './payroll';
 import { esc, sendTelegram, telegramEnabled } from './telegram';
@@ -122,10 +122,10 @@ export async function runOwedAlerts(db: Db, now = new Date()) {
 
 const OVERRIDES_KEY = 'bills:family';
 
-/** "Not a bill" and "Track as a bill" choices made on the Money tab. */
+/** "Not a bill" and "Track as a bill" / fixed-expense choices made on the Money tab. */
 export async function billOverrides(db: Db): Promise<BillOverrides> {
   const [row] = await db.select().from(settings).where(eq(settings.key, OVERRIDES_KEY));
-  return row ? (JSON.parse(row.value) as BillOverrides) : { ignored: [], tracked: [] };
+  return parseOverrides(row ? JSON.parse(row.value) : null);
 }
 
 export async function saveBillOverrides(db: Db, o: BillOverrides) {
