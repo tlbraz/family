@@ -1,4 +1,4 @@
-import type { GroceryList, AppConfig, CalendarEvent, EventDraft, EventInput, Health, Member, MemberDocument, MemberInput, MoneyBudget, MoneyHolding, MoneyHoldings, MoneySummary, DocsMeta, DocsPage, PaperlessDetail, Occurrence, SearchResults, Task, TaskInput, WatchDetail, WatchGenre, WatchHealth, WatchKind, WatchList, WatchPage, WatchSection, WatchSession } from '../../shared/types';
+import type { GroceryList, AppConfig, CalendarEvent, EventDraft, EventInput, Health, Member, MemberDocument, MemberInput, MoneyBudget, MoneyHolding, MoneyHoldings, MoneySummary, TrackedBill, DocsMeta, DocsPage, PaperlessDetail, Occurrence, SearchResults, Task, TaskInput, WatchDetail, WatchGenre, WatchHealth, WatchKind, WatchList, WatchPage, WatchSection, WatchSession } from '../../shared/types';
 
 export interface GoogleStatus {
   connected: boolean;
@@ -96,6 +96,9 @@ export const api = {
   holdings: () => request<MoneyHoldings>('/money/holdings'),
   saveHoldings: (holdings: MoneyHolding[]) => request<MoneyHoldings>('/money/holdings', json('PUT', { holdings })),
   billAction: (action: 'ignore' | 'unignore' | 'track' | 'untrack', key: string, name: string) => request<{ ok: true }>('/money/bills', json('POST', { action, key, name })),
+  // A fixed expense: by its key (a bill or candidate) or by the payee of a transaction (the server finds the key).
+  saveFixedBill: (bill: { key?: string; payee?: string; name?: string } & Required<Pick<TrackedBill, 'label' | 'expected' | 'cadence' | 'day'>>) =>
+    request<{ ok: true }>('/money/bills', json('POST', { action: 'track', ...bill })),
   refreshMoney: () => request<{ ok: true }>('/money/refresh', json('POST')),
   transferMoney: (budget: MoneyBudget, out: string, into: string, action: 'link' | 'ignore') => request<{ ok: true }>('/money/transfer', json('POST', { budget, out, in: into, action })),
   docsMeta: () => request<DocsMeta>('/docs/meta'),
