@@ -31,6 +31,8 @@ const PATHS: Record<string, string> = {
   trash: 'M4 7h16M9 7V4h6v3M6 7l1 14h10l1-14',
   money: 'M3 7h18v12H3zM3 11h18M7 15h3',
   up: 'M6 15l6-6 6 6',
+  expand: 'M7 7l5 5 5-5M7 13l5 5 5-5',
+  collapse: 'M7 17l5-5 5 5M7 11l5-5 5 5',
   down: 'M6 9l6 6 6-6',
   edit: 'M4 20h4L19 9l-4-4L4 16zM13.5 6.5l4 4',
   open: 'M14 4h6v6M20 4l-9 9M18 14v6H4V6h6',

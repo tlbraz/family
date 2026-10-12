@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
 import type { MoneyBudget, MoneyGroup, MoneyHolding, MoneyHoldings, MoneySummary, MoneyTransaction, MoneyWorth } from '../../../shared/types';
 import { api } from '../api';
+import { useBack } from '../back';
 import { BillsCard, BillsSheet, FixedForm, fixedFor } from './Bills';
 import { Icon } from './Icon';
 import { categoryIcon } from './categoryIcons';
@@ -309,9 +310,9 @@ function TopSheet({ top, data, edit, onClose }: { top: TopItem; data: MoneySumma
   const colour = children[0] ? levels(data).colour(children[0].id) : 'var(--m-other)';
   const [all, toggleAll] = useOpenAll();
   return (
-    <Sheet title={`${top.name} · ${eur(top.amount)}`} icon={<SheetIcon name={categoryIcon(top.name)} colour={colour} />} onClose={onClose}>
+    <Sheet title={`${top.name} · ${eur(top.amount)}`} icon={<SheetIcon name={categoryIcon(top.name)} colour={colour} />} onClose={onClose}
+      actions={children.length > 0 && <OpenAllButton all={all} onClick={toggleAll} />}>
       {!children.length && <p className="muted small">Nothing here any more.</p>}
-      {children.length > 0 && <OpenAllButton all={all} onClick={toggleAll} />}
       {children.map((g) => (
         <SubSection key={g.id} top={top} group={g} data={data} edit={edit} colour={colour} all={all} pct={children.length > 1 ? Math.round((g.amount / top.amount) * 100) : null} />
       ))}
@@ -356,8 +357,8 @@ function categoryNames(group: MoneyGroup, data: MoneySummary) {
 function GroupSheet({ group, data, edit, onClose }: { group: MoneyGroup; data: MoneySummary; edit: Editing; onClose: () => void }) {
   const [all, toggleAll] = useOpenAll();
   return (
-    <Sheet title={`${group.name} · ${eur(group.amount)}`} icon={<SheetIcon name={categoryIcon(group.name)} colour={levels(data).colour(group.id)} />} onClose={onClose}>
-      {data.transactions.some((t) => t.groupId === group.id) && <OpenAllButton all={all} onClick={toggleAll} />}
+    <Sheet title={`${group.name} · ${eur(group.amount)}`} icon={<SheetIcon name={categoryIcon(group.name)} colour={levels(data).colour(group.id)} />} onClose={onClose}
+      actions={data.transactions.some((t) => t.groupId === group.id) && <OpenAllButton all={all} onClick={toggleAll} />}>
       <CategoryTx group={group} data={data} edit={edit} colour={levels(data).colour(group.id)} all={all} />
       {group.id === 'uncategorised' && data.link && (
         <p className="muted small money-note">Give these a category in <a href={data.link} target="_blank" rel="noreferrer">Actual</a> and they'll move to the right place.</p>
@@ -373,9 +374,10 @@ function useOpenAll() {
   return [all, () => setAll((a) => ({ open: !a?.open, n: (a?.n ?? 0) + 1 }))] as const;
 }
 function OpenAllButton({ all, onClick }: { all: OpenAll; onClick: () => void }) {
+  const label = all?.open ? 'Collapse all' : 'Expand all';
   return (
-    <button className="chip money-open-all" onClick={onClick} aria-pressed={!!all?.open}>
-      <Icon name={all?.open ? 'up' : 'down'} size={14} /> {all?.open ? 'Collapse all' : 'Expand all'}
+    <button className="round ghost" onClick={onClick} aria-pressed={!!all?.open} aria-label={label} title={label}>
+      <Icon name={all?.open ? 'collapse' : 'expand'} />
     </button>
   );
 }
