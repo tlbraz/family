@@ -376,14 +376,19 @@ export function netWorth(snap: Snapshot, today: Date): MoneyWorth | null {
   return { points, debtsLeftOut: snap.accounts.filter((a) => a.offBudget && a.balance < 0).map((a) => a.name) };
 }
 
+// What we call money without a category (the categories themselves are named in Actual, in Portuguese).
+const UNCATEGORISED = 'Sem categoria';
+// Actual's generic income category, as it comes or renamed: it says nothing about who paid.
+const GENERIC_INCOME = /^(income|rendimentos?|receitas?|entradas?)$/i;
+
 /**
  * Who money came from: the income category when it's a named one (e.g. "Tiago", "Catarina"), otherwise who paid
- * (Actual's generic "Income" says nothing). Money in without a category is kept apart.
+ * (a generic "Rendimentos" says nothing). Money in without a category is kept apart.
  */
 function sourceName(t: { category: string | null; payee: string }, catName: Map<string, string>) {
-  if (!t.category) return 'Not categorised';
+  if (!t.category) return UNCATEGORISED;
   const cat = catName.get(t.category);
-  return cat && !/^income$/i.test(cat) ? cat : t.payee || cat || 'Income';
+  return cat && !GENERIC_INCOME.test(cat.trim()) ? cat : t.payee || cat || 'Rendimentos';
 }
 
 const monthKey = (d: string) => d.slice(0, 7);
@@ -427,9 +432,9 @@ export function summarise(snap: Snapshot, budget: MoneyBudget, budgets: MoneyBud
     const c = t.category ? groupOf.get(t.category) : undefined;
     const groupId = c?.groupId ?? 'uncategorised';
     const catId = t.category ?? 'uncategorised';
-    const g = groups.get(groupId) ?? { id: groupId, name: c?.groupName ?? 'Not categorised', amount: 0, categories: [] };
+    const g = groups.get(groupId) ?? { id: groupId, name: c?.groupName ?? UNCATEGORISED, amount: 0, categories: [] };
     let cat = g.categories.find((x) => x.id === catId);
-    if (!cat) g.categories.push((cat = { id: catId, name: c?.name ?? 'Not categorised', amount: 0 }));
+    if (!cat) g.categories.push((cat = { id: catId, name: c?.name ?? UNCATEGORISED, amount: 0 }));
     g.amount -= t.amount;
     cat.amount -= t.amount;
     groups.set(groupId, g);
@@ -460,7 +465,7 @@ export function summarise(snap: Snapshot, budget: MoneyBudget, budgets: MoneyBud
       }
       return {
         total: incomeTx.reduce((sum, t) => sum + t.amount, 0),
-        sources: [...bySource].map(([name, amount]) => ({ name, amount })).sort((a, b) => (a.name === 'Not categorised' ? 1 : b.name === 'Not categorised' ? -1 : b.amount - a.amount)),
+        sources: [...bySource].map(([name, amount]) => ({ name, amount })).sort((a, b) => (a.name === UNCATEGORISED ? 1 : b.name === UNCATEGORISED ? -1 : b.amount - a.amount)),
         transactions: incomeTx
           .map((t) => ({ id: t.id, categoryId: t.category, fixable: t.fixable, review: t.review, note: t.note, date: t.date, payee: t.payee, account: t.account, groupId: 'income', category: sourceName(t, catName), amount: -t.amount }))
           .sort((a, b) => b.date.localeCompare(a.date)),
@@ -480,7 +485,7 @@ export function summarise(snap: Snapshot, budget: MoneyBudget, budgets: MoneyBud
     review: snap.review
       .map((t) => {
         const c = t.category ? groupOf.get(t.category) : undefined;
-        return { id: t.id, categoryId: t.category, fixable: t.fixable, review: true, note: t.note ?? null, date: t.date, payee: t.payee, account: t.account, groupId: c?.groupId ?? 'uncategorised', category: c?.name ?? 'Not categorised', amount: -t.amount };
+        return { id: t.id, categoryId: t.category, fixable: t.fixable, review: true, note: t.note ?? null, date: t.date, payee: t.payee, account: t.account, groupId: c?.groupId ?? 'uncategorised', category: c?.name ?? UNCATEGORISED, amount: -t.amount };
       })
       .sort((a, b) => b.date.localeCompare(a.date)),
     // Spending groups first, then income, as in Actual.

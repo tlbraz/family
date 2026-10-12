@@ -38,7 +38,7 @@ describe('money summary', () => {
       'family', ['family'], '2026-09', today,
     );
     expect(s.spent).toBe(78000 + 6420 + 4000 + 2350);
-    expect(s.groups.map((g) => [g.name, g.amount])).toEqual([['Casa', 84420], ['Supermercado', 4000], ['Not categorised', 2350]]);
+    expect(s.groups.map((g) => [g.name, g.amount])).toEqual([['Casa', 84420], ['Supermercado', 4000], ['Sem categoria', 2350]]);
     expect(s.groups[0]!.categories.map((c) => c.name)).toEqual(['Hipoteca', 'Luz']);
     expect(s.transactions.find((x) => x.payee === 'MB WAY')).toMatchObject({ groupId: 'uncategorised', amount: 2350 });
     expect(s.groupOrder).toEqual(['gcasa', 'gsuper']);
@@ -74,7 +74,7 @@ describe('money summary', () => {
   it('lists the #review transactions and the accounts, spending ones first', () => {
     const r = (tx: ReturnType<typeof t>, id: string, fixable = true) => ({ ...tx, id, accountId: 'a1', fixable });
     const s = summarise(snap([], { review: [r(t('2026-08-02', -6490, null, 'LEROY'), 'x1'), r(t('2026-09-03', -1200, 'luz', 'EDP'), 'x2', false)] }), 'family', ['family'], '2026-09', today);
-    expect(s.review.map((r) => [r.payee, r.category, r.amount])).toEqual([['EDP', 'Luz', 1200], ['LEROY', 'Not categorised', 6490]]);
+    expect(s.review.map((r) => [r.payee, r.category, r.amount])).toEqual([['EDP', 'Luz', 1200], ['LEROY', 'Sem categoria', 6490]]);
     expect(s.review.map((x) => [x.id, x.categoryId, x.fixable])).toEqual([['x2', 'luz', false], ['x1', null, true]]);
     expect(s.accounts.map((a) => a.name)).toEqual(['CGD', 'Cartão', 'PPR']);
     expect(s.pickable.map((g) => g.name)).toEqual(['Casa', 'Supermercado', 'Income']);
@@ -114,7 +114,7 @@ describe('colours and money in', () => {
     expect(s.income.sources).toEqual([
       { name: 'SALARIO TIAGO', amount: 310000 },
       { name: 'VENCIMENTO CATARINA', amount: 210000 },
-      { name: 'Not categorised', amount: 2500 },
+      { name: 'Sem categoria', amount: 2500 },
     ]);
     expect(s.income.transactions).toHaveLength(3);
   });
@@ -128,6 +128,8 @@ describe('colours and money in', () => {
     base.groups[0]!.categories.push({ id: 'inc-tiago', name: 'Tiago' }, { id: 'inc-cat', name: 'Catarina' });
     const s = summarise(base, 'family', ['family'], '2026-09', today);
     expect(s.income.sources.map((x) => x.name)).toEqual(['Tiago', 'Catarina', 'IRS']);
+    base.groups[0]!.categories[0]!.name = 'Rendimentos'; // the generic one renamed in Portuguese still says who paid
+    expect(summarise(base, 'family', ['family'], '2026-09', today).income.sources.map((x) => x.name)).toEqual(['Tiago', 'Catarina', 'IRS']);
     expect(s.income.transactions.find((x) => x.payee === 'ACME LDA')!.category).toBe('Tiago');
   });
 });
