@@ -448,7 +448,6 @@ button.link { border: 0; padding: 0; background: none; color: var(--accent, inhe
 .money-tx-head h3 { font-size: 1rem; font-weight: 800; margin: 0; }
 /* Category sheet: group (coloured bar) › category (bold row) › its transactions (indented, lighter amounts). */
 .money-sub + .money-sub { margin-top: 22px; }
-.money-open-all { display: flex; width: fit-content; margin: 0 0 10px auto; }
 .money-sub-head { display: flex; align-items: baseline; gap: 8px; padding: 2px 0 6px 10px; border-left: 4px solid; }
 .money-sub-head h3 { flex: 1; margin: 0; font-size: 1.1rem; font-weight: 800; }
 .money-sub-head .pct { color: var(--muted); font-size: 0.85rem; }
