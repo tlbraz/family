@@ -125,7 +125,7 @@ export type TaskInput = Pick<Task, 'title' | 'due' | 'memberId'>;
 export interface AppConfig {
   me: Member | null;
   meTracksBp: boolean; // show the quick "log blood pressure" button
-  features: { ai: boolean; google: boolean; telegram: boolean; money?: boolean; docs?: boolean };
+  features: { ai: boolean; google: boolean; telegram: boolean; money?: boolean; docs?: boolean; watch?: boolean };
 }
 
 /** What Claude reads out of a photo or a sentence; the user confirms it in the event form. */
@@ -190,6 +190,8 @@ export interface Bill {
   cadence: 'monthly' | 'yearly';
   varying: boolean; // the amount changes every time (electricity, water): no price-change flags
   tracked: boolean; // marked as a bill by hand
+  day: number; // the day of the month it usually comes
+  expected: number | null; // the amount set by hand (a fixed expense whose amount can vary), or null
   status: 'paid' | 'due' | 'missing';
   date: string; // when it was paid, or when it's expected (YYYY-MM-DD)
   amount: number; // what was paid, or what's expected
@@ -203,6 +205,17 @@ export interface MoneyBills {
   remaining: number; // cents still to come this month
   candidates: { key: string; name: string; count: number; last: { date: string; amount: number } }[]; // payees to track by hand
   ignored: { key: string; name: string }[];
+  tracked: TrackedBill[]; // marked by hand, with what was set for them (to edit them)
+}
+
+/** A payee marked as a bill by hand ("fixed expense"). Older entries have only key and name. Cents. */
+export interface TrackedBill {
+  key: string; // the payee, normalised
+  name: string; // the payee as written
+  label?: string; // the name to show instead
+  expected?: number; // about how much it is: any amount near the usual day counts as paid
+  cadence?: 'monthly' | 'yearly';
+  day?: number; // 1–31: around which day of the month it comes
 }
 
 export interface MoneySummary {
@@ -232,6 +245,12 @@ export interface MoneySummary {
     recent: MoneyTransaction[]; // the latest payments and money back, newest first (money back < 0)
   } | null;
   bills: MoneyBills | null; // family budget only
+  // Fixed expenses (the month's bills) against the rest of the spending. Family budget only. Cents.
+  fixed: {
+    paid: number; // bills paid for this month
+    toCome: number; // bills still due or missing, at their expected amount
+    variable: number; // the month's spending without the bills paid in it
+  } | null;
   // Looks like money moved between our own accounts (−X in one, +X in another) without Actual linking it.
   transfers: { key: string; out: MoneyTransaction; in: MoneyTransaction }[];
 }
@@ -302,4 +321,110 @@ export interface DocsPage {
   count: number;
   next: boolean; // more pages after this one
   documents: PaperlessDoc[];
+}
+
+// ---- Entertainment tab (TMDB + Radarr/Sonarr + Jellyfin) ---------------------------------------
+
+export type WatchKind = 'movie' | 'tv';
+export type WatchSection = 'out' | 'soon' | 'popular';
+
+/** Where a title stands with us: on Jellyfin, downloading, waiting to come out, or not wanted. */
+export interface WatchStatus {
+  state: 'library' | 'downloading' | 'wanted' | 'none';
+  arrId: number | null; // the movie in Radarr / the series in Sonarr (null = not added)
+  text: string; // "In library", "Downloading 43 % · ETA 21:30", "Wanted — out on 14 Nov", "Not in the library"
+  progress?: number; // 0..1 while downloading
+  file?: WatchFile;
+}
+
+/** The file behind a status: size and specs once it's in the library; size, speed and release while downloading. */
+export interface WatchFile {
+  size: number; // bytes (a series: all its episodes on disk)
+  left?: number; // bytes still to download
+  speed?: number; // bytes per second, from the download's ETA
+  release?: string | null; // what's downloading / the file's name
+  specs: string[]; // ["WEB-DL", "4K", "HEVC 10-bit", "Dolby Vision + HDR10", "DD+ 5.1 Atmos"]
+  mbps?: number | null; // average bitrate: size over running time
+  episodes?: number; // a series: episodes on disk
+}
+
+/** A poster in the releases grid. */
+export interface WatchCard {
+  kind: WatchKind;
+  id: number; // TMDB id
+  title: string;
+  year: number | null;
+  poster: string | null; // image.tmdb.org w342
+  rating: number | null; // TMDB vote average, 0..10
+  date: string | null; // the digital release (movies) or the season's / latest episode's air date (TV), YYYY-MM-DD
+  dateLabel: string | null; // e.g. "S2" for a season premiere
+  genres: number[];
+  status: WatchStatus | null; // null when Radarr/Sonarr aren't set up
+}
+
+export interface WatchPage {
+  items: WatchCard[];
+  next: boolean;
+}
+
+export interface WatchGenre {
+  id: number;
+  name: string;
+}
+
+/** Everything the detail sheet shows. */
+export interface WatchDetail {
+  kind: WatchKind;
+  id: number;
+  title: string;
+  year: number | null;
+  poster: string | null;
+  backdrop: string | null; // w780
+  runtime: number | null; // minutes (movies)
+  seasons: number | null; // TV
+  genres: string[];
+  overview: string;
+  cast: { name: string; character: string; photo: string | null }[];
+  rating: number | null;
+  votes: number;
+  ratings: { source: 'IMDb' | 'Rotten Tomatoes' | 'Metacritic'; value: string }[]; // from OMDb, when set up
+  imdbId: string | null;
+  imdbUrl: string | null;
+  digital: string | null; // movies: digital release date
+  digitalRegion: string | null; // "US", or another country when the US has none
+  airs: { date: string; label: string } | null; // TV: next episode/season, or the latest one
+  released: boolean; // out digitally (movies) / has aired (TV)
+  trailer: string | null; // YouTube key
+  status: WatchStatus | null;
+  jellyfin: { id: string; url: string } | null; // when it's on Jellyfin
+  can: { arr: boolean; jellyfin: boolean };
+}
+
+/** A row in "My list". */
+export interface WatchListItem {
+  kind: WatchKind;
+  id: number | null; // TMDB id (null when Sonarr/Radarr doesn't know it: the row can't open details)
+  title: string;
+  year: number | null;
+  poster: string | null;
+  sub: string; // "Downloading 43 % · ETA 21:30", "Out on 14 Nov", "S02E05 · added 3 Oct"
+  progress?: number;
+  at: string | null; // ISO, for sorting
+}
+
+export interface WatchList {
+  downloading: WatchListItem[];
+  wanted: WatchListItem[];
+  recent: WatchListItem[];
+}
+
+/** Problems first; `ok` names what answered, for the "all good" detail. */
+export interface WatchHealth {
+  problems: string[];
+  ok: string[];
+}
+
+export interface WatchSession {
+  id: string;
+  name: string; // "LG webOS TV (Jellyfin for webOS)"
 }

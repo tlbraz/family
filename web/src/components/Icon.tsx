@@ -39,6 +39,11 @@ const PATHS: Record<string, string> = {
   eye: 'M2 12s3.5-6.5 10-6.5S22 12 22 12s-3.5 6.5-10 6.5S2 12 2 12zM12 9a3 3 0 1 0 0 6a3 3 0 1 0 0-6',
   docs: 'M7 3h8l4 4v14H7zM14 3v5h5M4 7v14h11',
   copy: 'M9 9h11v11H9zM5 15H4V4h11v1',
+  film: 'M4 4h16v16H4zM8 4v16M16 4v16M4 8h4M4 12h4M4 16h4M16 8h4M16 12h4M16 16h4',
+  play: 'M7 4.5v15l12-7.5z',
+  tv: 'M3 6h18v12H3zM8 21h8M12 18v3',
+  star: 'M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z',
+  warning: 'M12 3.5L2.5 20h19zM12 10v4.5M12 17.5h.01',
 };
 
 export function Icon({ name, size = 18, stroke = 2 }: { name: string; size?: number; stroke?: number }) {

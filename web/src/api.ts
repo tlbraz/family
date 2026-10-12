@@ -1,4 +1,4 @@
-import type { GroceryList, AppConfig, CalendarEvent, EventDraft, EventInput, Health, Member, MemberDocument, MemberInput, MoneyBudget, MoneyHolding, MoneyHoldings, MoneySummary, DocsMeta, DocsPage, PaperlessDetail, Occurrence, SearchResults, Task, TaskInput } from '../../shared/types';
+import type { GroceryList, AppConfig, CalendarEvent, EventDraft, EventInput, Health, Member, MemberDocument, MemberInput, MoneyBudget, MoneyHolding, MoneyHoldings, MoneySummary, TrackedBill, DocsMeta, DocsPage, PaperlessDetail, Occurrence, SearchResults, Task, TaskInput, WatchDetail, WatchGenre, WatchHealth, WatchKind, WatchList, WatchPage, WatchSection, WatchSession } from '../../shared/types';
 
 export interface GoogleStatus {
   connected: boolean;
@@ -96,6 +96,9 @@ export const api = {
   holdings: () => request<MoneyHoldings>('/money/holdings'),
   saveHoldings: (holdings: MoneyHolding[]) => request<MoneyHoldings>('/money/holdings', json('PUT', { holdings })),
   billAction: (action: 'ignore' | 'unignore' | 'track' | 'untrack', key: string, name: string) => request<{ ok: true }>('/money/bills', json('POST', { action, key, name })),
+  // A fixed expense: by its key (a bill or candidate) or by the payee of a transaction (the server finds the key).
+  saveFixedBill: (bill: { key?: string; payee?: string; name?: string } & Required<Pick<TrackedBill, 'label' | 'expected' | 'cadence' | 'day'>>) =>
+    request<{ ok: true }>('/money/bills', json('POST', { action: 'track', ...bill })),
   refreshMoney: () => request<{ ok: true }>('/money/refresh', json('POST')),
   transferMoney: (budget: MoneyBudget, out: string, into: string, action: 'link' | 'ignore') => request<{ ok: true }>('/money/transfer', json('POST', { budget, out, in: into, action })),
   docsMeta: () => request<DocsMeta>('/docs/meta'),
@@ -107,6 +110,19 @@ export const api = {
   doc: (id: number) => request<PaperlessDetail>(`/docs/${id}`),
   saveDoc: (id: number, change: { tags?: number[]; approve?: boolean }) =>
     request<PaperlessDetail>(`/docs/${id}`, json('PATCH', change)),
+  watchHealth: () => request<WatchHealth>('/watch/health'),
+  watchGenres: (kind: WatchKind) => request<WatchGenre[]>(`/watch/genres?kind=${kind}`),
+  watchSearch: (q: string, page: number) => request<WatchPage>(`/watch/search?q=${encodeURIComponent(q)}&page=${page}`),
+  releases: (kind: WatchKind, section: WatchSection, page: number, genre?: number) =>
+    request<WatchPage>(`/watch/releases?kind=${kind}&section=${section}&page=${page}${genre ? `&genre=${genre}` : ''}`),
+  watchTitle: (kind: WatchKind, id: number) => request<WatchDetail>(`/watch/title/${kind}/${id}`),
+  getTitle: (kind: WatchKind, id: number, search: boolean, monitor?: 'all' | 'latestSeason' | 'future') =>
+    request<WatchDetail>(`/watch/title/${kind}/${id}`, json('POST', { search, monitor })),
+  deleteTitle: (kind: WatchKind, id: number) => request<WatchDetail>(`/watch/title/${kind}/${id}`, json('DELETE')),
+  players: () => request<WatchSession[]>('/watch/players'),
+  playTitle: (kind: WatchKind, id: number, session: string) => request<{ ok: true }>(`/watch/title/${kind}/${id}/play`, json('POST', { session })),
+  watchList: () => request<WatchList>('/watch/list'),
+  splitMoney: (budget: MoneyBudget, id: string, parts: { amount: number; category: string; note: string }[]) => request<{ ok: true }>('/money/split', json('POST', { budget, id, parts })),
   editMoney: (budget: MoneyBudget, id: string, change: { category?: string; review?: boolean; note?: string }) => request<{ ok: true }>('/money/edit', json('POST', { budget, id, ...change })),
 
 };

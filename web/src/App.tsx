@@ -13,10 +13,11 @@ import { DocsView } from './components/DocsView';
 import { Groceries } from './components/Groceries';
 import { Icon } from './components/Icon';
 import { MoneyView } from './components/MoneyView';
+import { WatchView } from './components/WatchView';
 import { SignIn } from './components/SignIn';
 import { TaskSheet } from './components/TaskSheet';
 
-type Tab = 'calendar' | 'groceries' | 'docs' | 'family' | 'money';
+type Tab = 'calendar' | 'groceries' | 'docs' | 'family' | 'money' | 'watch';
 type Open = { kind: 'event'; occurrence: Occurrence | null; day: string; shared?: Shared; fromDay?: boolean } | { kind: 'task'; task: Task | null; day: string; fromDay?: boolean } | null;
 
 export function App() {
@@ -105,6 +106,7 @@ export function App() {
         {tab === 'groceries' && <Groceries />}
         {tab === 'docs' && config?.features.docs && <DocsView />}
         {tab === 'money' && me && config?.features.money && <MoneyView meName={me.name} />}
+        {tab === 'watch' && config?.features.watch && <WatchView />}
         {tab === 'family' && <FamilyView members={members} canEdit={canEdit} googleOn={!!config?.features.google} telegramOn={!!config?.features.telegram} onChanged={loadAll} />}
 
         <footer className="footer">
@@ -138,6 +140,7 @@ export function App() {
             ['groceries', 'cart', 'Groceries'],
             ...(config?.features.docs ? ([['docs', 'docs', 'Docs']] as const) : []),
             ...(config?.features.money ? ([['money', 'money', 'Money']] as const) : []),
+            ...(config?.features.watch ? ([['watch', 'film', 'Watch']] as const) : []),
             ['family', 'people', 'Family'],
           ] as const
         ).map(([id, icon, label]) => (

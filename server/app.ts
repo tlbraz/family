@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { asc, eq, sql } from 'drizzle-orm';
-import type { AppConfig, Health, MoneyBudget } from '../shared/types';
+import { payeeKey } from '../shared/bills';
+import type { AppConfig, Health, MoneyBudget, TrackedBill } from '../shared/types';
 import type { Db } from './db';
 import { AiError, draftEvent, aiEnabled, type ImageInput } from './lib/ai';
 import { type AuthEnv, loadMember, requireParent } from './lib/auth';
@@ -8,7 +9,7 @@ import { todayDigest, tomorrowDigest, weekDigest } from './lib/digest';
 import { googleEnabled, googleStatus, saveGoogleKey, syncRound } from './lib/google';
 import { paperlessEnabled } from './lib/paperless';
 import { cleanHoldings, lastValuations, loadHoldings, revalueNow, saveHoldings } from './lib/valuations';
-import { budgetsFor, editTransaction, linkTransfer, moneyEnabled, moneySnapshot, refreshMoney, ReviewError, reviewTransaction, summarise } from './lib/money';
+import { budgetsFor, editTransaction, splitTransaction, type SplitPart, linkTransfer, moneyEnabled, moneySnapshot, refreshMoney, ReviewError, reviewTransaction, summarise } from './lib/money';
 import { addTelegramChat, removeTelegramChat, sendTelegram, telegramStatus } from './lib/telegram';
 import { authRoutes } from './routes/auth';
 import { type EventHooks, eventRoutes } from './routes/events';
@@ -16,6 +17,7 @@ import { memberRoutes, toMember } from './routes/members';
 import { groceryRoutes } from './routes/groceries';
 import { noteRoutes } from './routes/notes';
 import { docRoutes } from './routes/docs';
+import { hookRoutes, watchRoutes } from './routes/watch';
 import { shareRoutes } from './routes/share';
 import { taskRoutes } from './routes/tasks';
 import { bpRoutes } from './routes/bp';
@@ -58,7 +60,7 @@ export function createApp(db: Db, hooks: AppHooks = noop) {
     const body: AppConfig = {
       me: me ? toMember(me) : null,
       meTracksBp: me?.role === 'parent' && !!(await bpSettingsOf(db, me.id)),
-      features: { ai: aiEnabled(), google: googleEnabled(), telegram: !!process.env.TELEGRAM_BOT_TOKEN, money: moneyEnabled() && me?.role === 'parent', docs: paperlessEnabled() && me?.role === 'parent' },
+      features: { ai: aiEnabled(), google: googleEnabled(), telegram: !!process.env.TELEGRAM_BOT_TOKEN, money: moneyEnabled() && me?.role === 'parent', docs: paperlessEnabled() && me?.role === 'parent', watch: me?.role === 'parent' },
     };
     return c.json(body);
   });
@@ -67,6 +69,8 @@ export function createApp(db: Db, hooks: AppHooks = noop) {
   api.route('/members', memberRoutes(db, hooks.membersChanged));
   api.route('/notes', noteRoutes(db));
   api.route('/docs', docRoutes());
+  api.route('/watch', watchRoutes());
+  api.route('/hooks', hookRoutes(db));
   api.route('/groceries', groceryRoutes(db));
   api.route('/share', shareRoutes());
   api.route('/tasks', taskRoutes(db));
@@ -158,6 +162,22 @@ export function createApp(db: Db, hooks: AppHooks = noop) {
       return c.json({ error: (e as Error).message }, e instanceof ReviewError ? 400 : 503);
     }
   });
+  // Split one transaction in two parts, each with its own category and description.
+  api.post('/money/split', requireParent, async (c) => {
+    if (!moneyEnabled()) return c.json({ error: 'Actual Budget is not set up on the server' }, 404);
+    const body = (await c.req.json().catch(() => ({}))) as { budget?: string; id?: unknown; parts?: unknown };
+    const budget = (body.budget ?? 'family') as MoneyBudget;
+    if (!budgetsFor(c.get('me')!.name).includes(budget)) return c.json({ error: 'Not available' }, 403);
+    const parts = Array.isArray(body.parts) ? (body.parts as Record<string, unknown>[]) : [];
+    const ok = typeof body.id === 'string' && parts.length === 2 && parts.every((p) => p && typeof p.amount === 'number' && typeof p.category === 'string' && (p.note === undefined || typeof p.note === 'string'));
+    if (!ok) return c.json({ error: 'Give each of the two parts an amount and a category' }, 400);
+    try {
+      await splitTransaction(budget, body.id as string, parts.map((p) => ({ amount: p.amount as number, category: p.category as string, note: (p.note as string | undefined) ?? '' })) as SplitPart[]);
+      return c.json({ ok: true });
+    } catch (e) {
+      return c.json({ error: (e as Error).message }, e instanceof ReviewError ? 400 : 503);
+    }
+  });
   // Money that moved between our own accounts: link the two sides as a transfer in Actual, or say it isn't one.
   const notTransfersKey = (budget: MoneyBudget) => `transfers:not:${budget}`;
   async function notTransfers(budget: MoneyBudget): Promise<string[]> {
@@ -201,20 +221,42 @@ export function createApp(db: Db, hooks: AppHooks = noop) {
     await revalueNow(db).catch((e: Error) => console.error('valuation:', e.message));
     return c.json({ holdings, last: await lastValuations(db), accounts: [] });
   });
-  // "Not a bill" / "Track as a bill" (family budget). Changes what the Bills card and the alerts consider.
+  // "Not a bill" / "Track as a bill" (family budget), and a fixed expense set by hand: its name, about how much,
+  // how often and around which day. Changes what the Bills card and the alerts consider.
   api.post('/money/bills', requireParent, async (c) => {
-    const body = (await c.req.json().catch(() => ({}))) as { action?: unknown; key?: unknown; name?: unknown };
+    const body = (await c.req.json().catch(() => ({}))) as { action?: unknown; key?: unknown; payee?: unknown; name?: unknown; label?: unknown; expected?: unknown; cadence?: unknown; day?: unknown };
     const actions = ['ignore', 'unignore', 'track', 'untrack'];
-    if (typeof body.action !== 'string' || !actions.includes(body.action) || typeof body.key !== 'string' || !body.key || body.key.length > 80) {
-      return c.json({ error: 'Pick a bill' }, 400);
+    // A bill is picked by its key, or (from a transaction) by its payee.
+    const payee = typeof body.payee === 'string' ? body.payee.trim().slice(0, 120) : '';
+    const key = typeof body.key === 'string' ? body.key : payee ? payeeKey(payee) : '';
+    if (typeof body.action !== 'string' || !actions.includes(body.action) || !key || key.length > 80) {
+      return c.json({ error: payee ? "That payee has no name to follow; rename it in Actual" : 'Pick a bill' }, 400);
     }
-    const key = body.key;
-    const name = typeof body.name === 'string' ? body.name.slice(0, 80) : key;
+    // What was set for a fixed expense: each part optional (the old "Track" sends none), checked when sent.
+    const set: Omit<TrackedBill, 'key' | 'name'> = {};
+    if (body.label !== undefined && body.label !== null) {
+      if (typeof body.label !== 'string' || body.label.trim().length > 80) return c.json({ error: 'The name can be up to 80 characters' }, 400);
+      if (body.label.trim()) set.label = body.label.trim();
+    }
+    if (body.expected !== undefined && body.expected !== null) {
+      if (typeof body.expected !== 'number' || !Number.isInteger(body.expected) || body.expected <= 0 || body.expected > 10_000_000) return c.json({ error: 'Give the expected amount, more than €0' }, 400);
+      set.expected = body.expected;
+    }
+    if (body.cadence !== undefined && body.cadence !== null) {
+      if (body.cadence !== 'monthly' && body.cadence !== 'yearly') return c.json({ error: 'Every month or every year?' }, 400);
+      set.cadence = body.cadence;
+    }
+    if (body.day !== undefined && body.day !== null) {
+      if (typeof body.day !== 'number' || !Number.isInteger(body.day) || body.day < 1 || body.day > 31) return c.json({ error: 'The day is between 1 and 31' }, 400);
+      set.day = body.day;
+    }
     const o = await billOverrides(db);
-    const without = (list: { key: string; name: string }[]) => list.filter((x) => x.key !== key);
+    const before = o.tracked.find((x) => x.key === key);
+    const name = typeof body.name === 'string' && body.name.trim() ? body.name.trim().slice(0, 80) : payee.slice(0, 80) || before?.name || key;
+    const without = <T extends { key: string }>(list: T[]) => list.filter((x) => x.key !== key);
     if (body.action === 'ignore') await saveBillOverrides(db, { ignored: [...without(o.ignored), { key, name }], tracked: without(o.tracked) });
     if (body.action === 'unignore') await saveBillOverrides(db, { ...o, ignored: without(o.ignored) });
-    if (body.action === 'track') await saveBillOverrides(db, { ignored: without(o.ignored), tracked: [...without(o.tracked), { key, name }] });
+    if (body.action === 'track') await saveBillOverrides(db, { ignored: without(o.ignored), tracked: [...without(o.tracked), { key, name, ...set }] });
     if (body.action === 'untrack') await saveBillOverrides(db, { ...o, tracked: without(o.tracked) });
     return c.json({ ok: true });
   });

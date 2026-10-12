@@ -53,6 +53,24 @@ Install it on a phone with *Share → Add to Home Screen*.
   opened in Paperless. The **Inbox** lists what's still tagged inbox: fix the tags if needed (Paperless's suggestions
   are one tap away) and **Approve** takes the inbox tag off. Tags are the only thing changed from the app; nothing is
   added. The token stays on the server; files go through the app. (This replaced the fridge notes tab.)
+- **Entertainment** tab ("Watch", parents only): films and series that are out **digitally** (TMDB release type 4,
+  US dates: when they show up online) in the last 45 days, coming in the next 90, or popular this week; TV by season
+  premiere. Genre chips, a poster grid that loads as you scroll, and a badge for what's in the library, downloading or
+  wanted. Tap a poster for the trailer (loaded only when tapped), cast, ratings and what to do: **Get it** (Radarr /
+  Sonarr look for it now; series: whole, latest season or only new episodes), **Want it** (not out yet: it downloads
+  by itself when it is), **Play on TV** (Jellyfin must be open on the TV) or open it in Jellyfin, and **Delete** (with
+  the files). **My list**: downloading, wanted and recently added. Wanted films that are out but still missing get a
+  Radarr search once a day. When Radarr/Sonarr import something, Jellyfin rescans and the family gets a Telegram
+  with the poster ("4 new episodes" when a season comes in together). A line at the top says what's wrong (no key,
+  Radarr down, an indexer failing, a disk filling up…). Settings, all optional:
+  - `TMDB_TOKEN` (v4 API Read Access Token) or `TMDB_API_KEY` (v3); `OMDB_API_KEY` adds IMDb / Rotten Tomatoes /
+    Metacritic scores.
+  - `RADARR_URL`, `RADARR_API_KEY`, `SONARR_URL`, `SONARR_API_KEY`; `RADARR_PROFILE_ID` / `SONARR_PROFILE_ID` (quality
+    profile, default 4 = HD-1080p). Root folders are read from Radarr/Sonarr.
+  - `JELLYFIN_URL`, `JELLYFIN_API_KEY` (sent as `Authorization: MediaBrowser Token="…"`), `JELLYFIN_PUBLIC_URL` (for
+    links in the browser; default `JELLYFIN_URL`).
+  - `ARR_WEBHOOK_TOKEN`: in Radarr and Sonarr, Settings → Connect → Webhook, "On File Import", POST to
+    `https://family.home.tbraz.pt/api/hooks/arr?token=<ARR_WEBHOOK_TOKEN>` (or `http://family.lan/api/hooks/arr?token=…`).
 - **Tap someone** for their profile. Parents also see their documents (Cartão de Cidadão, NIF, NISS, utente, passport,
   driving licence…) with copy buttons, expiry warnings and a link to the scan in Paperless. Served only to signed-in parents.
 - **Telegram** (`TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`): 07:30 "today" message, 20:00 "tomorrow" message with

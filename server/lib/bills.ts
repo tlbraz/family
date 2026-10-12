@@ -1,6 +1,9 @@
-import type { Bill, MoneyBills } from '../../shared/types';
+import { payeeKey } from '../../shared/bills';
+import type { Bill, MoneyBills, TrackedBill } from '../../shared/types';
 import type { Snapshot } from './money';
 import { addDays, dateKey, parseDateKey } from './time';
+
+export { payeeKey };
 
 /**
  * Bills and subscriptions, spotted in Actual: payments to the same payee that come back every month
@@ -9,7 +12,24 @@ import { addDays, dateKey, parseDateKey } from './time';
 
 export interface BillOverrides {
   ignored: { key: string; name: string }[]; // "Not a bill"
-  tracked: { key: string; name: string }[]; // "Track as a bill"
+  tracked: TrackedBill[]; // "Track as a bill" / "Make it a fixed expense"
+}
+
+/** The saved choices, as stored (older ones have only key and name for tracked bills). Anything odd is dropped. */
+export function parseOverrides(raw: unknown): BillOverrides {
+  const o = (raw && typeof raw === 'object' ? raw : {}) as { ignored?: unknown; tracked?: unknown };
+  const list = (x: unknown) => (Array.isArray(x) ? x.filter((e): e is Record<string, unknown> => !!e && typeof e === 'object' && typeof e.key === 'string' && !!e.key) : []);
+  return {
+    ignored: list(o.ignored).map((e) => ({ key: e.key as string, name: typeof e.name === 'string' ? e.name : (e.key as string) })),
+    tracked: list(o.tracked).map((e) => ({
+      key: e.key as string,
+      name: typeof e.name === 'string' ? e.name : (e.key as string),
+      ...(typeof e.label === 'string' && e.label.trim() ? { label: e.label.trim() } : {}),
+      ...(Number.isInteger(e.expected) && (e.expected as number) > 0 ? { expected: e.expected as number } : {}),
+      ...(e.cadence === 'monthly' || e.cadence === 'yearly' ? { cadence: e.cadence } : {}),
+      ...(Number.isInteger(e.day) && (e.day as number) >= 1 && (e.day as number) <= 31 ? { day: e.day as number } : {}),
+    })),
+  };
 }
 
 interface Charge {
@@ -33,24 +53,7 @@ const DAY = 86_400_000;
 const WINDOW = 12; // a charge this many days either side of the usual day counts for that month
 const GRACE = 5; // days after the usual day before a missing charge is flagged
 const CHANGE = 50; // cents: smaller differences are not a price change
-
-// Words banks and card terminals add around the name ("DD VODAFONE PORTUGAL SA", "COMPRA 1234 NETFLIX.COM").
-const FILLER = new Set(['dd', 'pag', 'pagamento', 'pagamentos', 'compra', 'compras', 'debito', 'direto', 'trf', 'transf', 'transferencia', 'mb', 'way', 'mbway',
-  'sepa', 'cartao', 'serv', 'servicos', 'de', 'da', 'do', 'das', 'dos', 'e', 'lda', 'sa', 'pt', 'portugal', 'com', 'www', 'the', 'eu', 'europe', 'ltd', 'inc']);
-
-/** "DD VODAFONE PORTUGAL SA 2034" and "Vodafone" → "vodafone": the first two words that are the name. */
-export function payeeKey(payee: string): string {
-  return payee
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase()
-    .replace(/[^a-z]+/g, ' ')
-    .trim()
-    .split(' ')
-    .filter((w) => w.length > 1 && !FILLER.has(w))
-    .slice(0, 2)
-    .join(' ');
-}
+const OFF = 0.25; // a fixed expense paid this much above or below what's expected is flagged
 
 const days = (a: string, b: string) => Math.round((parseDateKey(a).getTime() - parseDateKey(b).getTime()) / DAY);
 const monthKey = (d: string) => d.slice(0, 7);
@@ -130,6 +133,18 @@ export function patternOf(s: Series, today: Date, dataFrom: string | null, force
   return { cadence: lately >= 2 || inMonth(current).length > 0 && lately >= 1 ? 'monthly' : 'yearly', day: Number(last.date.slice(8, 10)), varying: lately >= 2 ? sh.varying : false };
 }
 
+/**
+ * A bill marked by hand: what was set for it (how often, around which day, about how much) wins over what's
+ * guessed, so a single charge is enough. With an expected amount it varies: no flags for small changes.
+ */
+export function trackedPattern(s: Series, t: TrackedBill, today: Date, dataFrom: string | null): Pattern | null {
+  const guess = patternOf(s, today, dataFrom, true);
+  const cadence = t.cadence ?? guess?.cadence;
+  const day = t.day ?? guess?.day;
+  if (!cadence || !day) return null;
+  return { cadence, day, varying: t.expected !== undefined || (guess?.varying ?? false) };
+}
+
 /** The charge that belongs to the cycle due on `due`: the closest one within the window. */
 function chargeFor(s: Series, due: string, window: number): Charge | null {
   let best: Charge | null = null;
@@ -143,11 +158,15 @@ function chargeFor(s: Series, due: string, window: number): Charge | null {
 const dueIn = (month: string, day: number) => `${month}-${String(Math.min(day, daysIn(month))).padStart(2, '0')}`;
 
 /** How a bill stands in `month`, or null when it isn't expected that month. */
-export function billIn(s: Series, p: Pattern, month: string, today: Date, tracked = false): Bill | null {
+export function billIn(s: Series, p: Pattern, month: string, today: Date, tracked: TrackedBill | null = null): Bill | null {
   const todayKey = dateKey(today);
   const history = [...s.charges].reverse().slice(0, 6);
-  const base = { key: s.key, name: s.name, cadence: p.cadence, varying: p.varying, tracked, history };
-  const change = (now: Charge, prev: Charge | null) => (!p.varying && prev && Math.abs(now.amount - prev.amount) >= CHANGE ? { from: prev.amount, to: now.amount } : null);
+  const set = tracked?.expected; // a fixed expense: any amount counts, flagged only when far from this
+  const base = { key: s.key, name: tracked?.label || s.name, cadence: p.cadence, varying: p.varying, tracked: !!tracked, day: p.day, expected: set ?? null, history };
+  const change = (now: Charge, prev: Charge | null) =>
+    set !== undefined
+      ? (Math.abs(now.amount - set) > set * OFF ? { from: set, to: now.amount } : null)
+      : (!p.varying && prev && Math.abs(now.amount - prev.amount) >= CHANGE ? { from: prev.amount, to: now.amount } : null);
 
   if (p.cadence === 'monthly') {
     const due = dueIn(month, p.day);
@@ -155,11 +174,12 @@ export function billIn(s: Series, p: Pattern, month: string, today: Date, tracke
     const prevDue = dueIn(addMonths(month, -1), p.day);
     const prev = chargeFor(s, prevDue, WINDOW);
     if (paid) return { ...base, status: 'paid', date: paid.date, amount: paid.amount, change: change(paid, prev) };
-    // Not paid: only expected if it had started, and came in one of the two months before (else it probably stopped).
+    // Not paid: only expected if it had started, and came in one of the two months before (else it probably stopped),
+    // or it was set by hand as monthly (then it's expected until it's no longer tracked).
     const started = s.charges[0] && s.charges[0].date <= due;
-    const alive = prev || chargeFor(s, dueIn(addMonths(month, -2), p.day), WINDOW);
+    const alive = tracked?.cadence || prev || chargeFor(s, dueIn(addMonths(month, -2), p.day), WINDOW);
     if (!started || !alive) return null;
-    const expected = p.varying ? median(s.charges.filter((c) => c.date < due).slice(-4).map((c) => c.amount)) : (prev ?? s.charges.filter((c) => c.date < due).at(-1)!).amount;
+    const expected = set ?? (p.varying ? median(s.charges.filter((c) => c.date < due).slice(-4).map((c) => c.amount)) : (prev ?? s.charges.filter((c) => c.date < due).at(-1)!).amount);
     const late = days(todayKey, due) > GRACE;
     return { ...base, status: late ? 'missing' : 'due', date: due, amount: expected, change: null };
   }
@@ -171,9 +191,10 @@ export function billIn(s: Series, p: Pattern, month: string, today: Date, tracke
     return { ...base, status: 'paid', date: paidHere.date, amount: paidHere.amount, change: change(paidHere, prev) };
   }
   const last = s.charges.at(-1)!;
-  const next = dateKey(new Date(parseDateKey(last.date).setFullYear(parseDateKey(last.date).getFullYear() + 1)));
+  const yearOn = dateKey(new Date(parseDateKey(last.date).setFullYear(parseDateKey(last.date).getFullYear() + 1)));
+  const next = tracked?.day ? dueIn(monthKey(yearOn), tracked.day) : yearOn;
   if (monthKey(next) !== month) return null;
-  return { ...base, status: days(todayKey, next) > GRACE + 5 ? 'missing' : 'due', date: next, amount: last.amount, change: null };
+  return { ...base, status: days(todayKey, next) > GRACE + 5 ? 'missing' : 'due', date: next, amount: set ?? last.amount, change: null };
 }
 
 const ORDER = { due: 0, missing: 1, paid: 2 } as const;
@@ -181,15 +202,16 @@ const ORDER = { due: 0, missing: 1, paid: 2 } as const;
 /** Everything the Bills card needs for one month. */
 export function billsFor(snap: Pick<Snapshot, 'tx' | 'dataFrom'>, month: string, today: Date, overrides: BillOverrides = { ignored: [], tracked: [] }): MoneyBills {
   const ignored = new Set(overrides.ignored.map((x) => x.key));
-  const tracked = new Set(overrides.tracked.map((x) => x.key));
+  const tracked = new Map(overrides.tracked.map((x) => [x.key, x]));
   const bills: Bill[] = [];
   const candidates: MoneyBills['candidates'] = [];
   const since = dateKey(addDays(today, -400));
   for (const s of seriesOf(snap.tx)) {
     if (ignored.has(s.key)) continue;
-    const p = patternOf(s, today, snap.dataFrom, tracked.has(s.key));
+    const t = tracked.get(s.key) ?? null;
+    const p = t ? trackedPattern(s, t, today, snap.dataFrom) : patternOf(s, today, snap.dataFrom);
     if (p) {
-      const b = billIn(s, p, month, today, tracked.has(s.key));
+      const b = billIn(s, p, month, today, t);
       if (b) bills.push(b);
     } else {
       const recent = s.charges.filter((c) => c.date >= since);
@@ -203,6 +225,24 @@ export function billsFor(snap: Pick<Snapshot, 'tx' | 'dataFrom'>, month: string,
     remaining: bills.filter((b) => b.status === 'due').reduce((sum, b) => sum + b.amount, 0),
     candidates: candidates.sort((a, b) => b.count - a.count || b.last.date.localeCompare(a.last.date)).slice(0, 40),
     ignored: overrides.ignored,
+    tracked: overrides.tracked,
+  };
+}
+
+/**
+ * Fixed against variable for the month: fixed = its bills (paid, and still to come at their expected amount);
+ * variable = the month's spending (`spending`, as the Money tab counts it; out < 0) without the bill charges in it.
+ * A bill paid just before the month (rent on the 31st) is fixed for this month but isn't in its spending.
+ */
+export function fixedVsVariable(bills: MoneyBills, spending: { date: string; amount: number; payee: string }[]) {
+  const paid = bills.bills.filter((b) => b.status === 'paid');
+  const charges = new Set(paid.map((b) => `${b.key}|${b.date}`));
+  const spent = spending.reduce((sum, t) => sum - t.amount, 0);
+  const inBills = spending.filter((t) => t.amount < 0 && charges.has(`${payeeKey(t.payee)}|${t.date}`)).reduce((sum, t) => sum - t.amount, 0);
+  return {
+    paid: paid.reduce((sum, b) => sum + b.amount, 0),
+    toCome: bills.bills.filter((b) => b.status !== 'paid').reduce((sum, b) => sum + b.amount, 0),
+    variable: Math.max(0, spent - inBills),
   };
 }
 
