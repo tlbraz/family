@@ -452,72 +452,110 @@ function TxList({ tx, showCategory, edit }: { tx: MoneyTransaction[]; showCatego
   );
 }
 
-/** Pick a category: one field showing the current one; tap or type to open a short list of matches. */
+/**
+ * Pick a category: a field showing the current one (icon, name, where it sits). Tapping it brings up a panel from the
+ * bottom with the whole tree: the top levels in their colours, their groups as small headings, the categories under
+ * them. The keyboard only comes up if you tap the search. Picking one marks it and the panel slides away.
+ */
 function CategoryPicker({ data, value, onChange }: { data: MoneySummary; value: string; onChange: (id: string) => void }) {
   const [open, setOpen] = useState(false);
-  const [query, setQuery] = useState('');
-  const [room, setRoom] = useState(220);
-  const box = useRef<HTMLDivElement>(null);
-  // The phone keyboard covers the bottom of the screen: bring the field to the top and fit the list in what's left.
-  useEffect(() => {
-    if (!open) return;
-    const place = () => {
-      const el = box.current;
-      if (!el) return;
-      el.scrollIntoView({ block: 'start' });
-      const vv = window.visualViewport;
-      const bottom = vv ? vv.offsetTop + vv.height : window.innerHeight;
-      const input = el.querySelector('input')!.getBoundingClientRect();
-      setRoom(Math.max(120, Math.min(260, bottom - input.bottom - 12)));
-    };
-    const timer = setTimeout(place, 300); // once the keyboard is up
-    window.visualViewport?.addEventListener('resize', place);
-    return () => {
-      clearTimeout(timer);
-      window.visualViewport?.removeEventListener('resize', place);
-    };
-  }, [open]);
-  const fold = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
-  const q = fold(query.trim());
-  const all = data.pickable.flatMap((g) => g.categories.map((c) => ({ ...c, group: g.name })));
-  const matches = q ? all.filter((c) => fold(c.name).includes(q) || fold(c.group).includes(q)) : all;
-  const current = all.find((c) => c.id === value);
-  function choose(id: string) {
-    onChange(id);
-    setOpen(false);
-    setQuery('');
-  }
+  const current = data.pickable.flatMap((g) => g.categories.map((c) => ({ ...c, groupId: g.id, group: g.name }))).find((c) => c.id === value);
+  const parts = current ? splitGroup(current.group) : null;
+  const where = current ? (parts ? `${parts.top} › ${parts.sub}` : current.group) : '';
+  const colour = current ? groupColours(data).colour(current.groupId) : undefined;
   return (
-    <div className="cat-picker" ref={box}>
-      <input
-        type="text"
-        role="combobox"
-        aria-expanded={open}
-        aria-label="Category"
-        value={open ? query : current ? `${current.name} · ${current.group}` : ''}
-        onFocus={() => { setOpen(true); setQuery(''); }}
-        onBlur={() => setTimeout(() => setOpen(false), 150)}
-        onChange={(e) => setQuery(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' && matches[0]) { e.preventDefault(); choose(matches[0].id); (e.target as HTMLInputElement).blur(); }
-          if (e.key === 'Escape') (e.target as HTMLInputElement).blur();
-        }}
-        placeholder={current ? `${current.name} · ${current.group}` : 'Category…'}
-        autoComplete="off"
-      />
-      {open && (
-        <ul role="listbox" aria-label="Categories" style={{ maxHeight: room }}>
-          {matches.map((c) => (
-            <li key={c.id} role="option" aria-selected={c.id === value} className={c.id === value ? 'on' : ''}
-              onMouseDown={(e) => e.preventDefault()} onClick={() => choose(c.id)}>
-              <b>{c.name}</b> <span>{c.group}</span>
-            </li>
+    <>
+      <button type="button" className="cat-field" onClick={() => setOpen(true)} aria-haspopup="dialog" aria-label={current ? `Category: ${current.name}, ${where}. Change` : 'Pick a category'}>
+        <span className="cat-field-icon" style={{ color: colour }}><Icon name={current ? categoryIcon(current.name) : 'tag'} size={18} /></span>
+        <span className="cat-field-text">
+          {current ? <b>{current.name}</b> : <span className="muted">Pick a category…</span>}
+          {current && where !== current.name && <span className="muted small">{where}</span>}
+        </span>
+        <Icon name="down" size={16} />
+      </button>
+      {open && <CategorySheet data={data} value={value} onPick={onChange} onClose={() => setOpen(false)} />}
+    </>
+  );
+}
+
+/** The tree of categories in a panel that slides up (and away again once one is picked). */
+function CategorySheet({ data, value, onPick, onClose }: { data: MoneySummary; value: string; onPick: (id: string) => void; onClose: () => void }) {
+  const [leaving, setLeaving] = useState(false);
+  const [query, setQuery] = useState('');
+  const [picked, setPicked] = useState<string | null>(null);
+  const list = useRef<HTMLDivElement>(null);
+  const close = useCallback(() => {
+    setLeaving(true);
+    setTimeout(onClose, 200);
+  }, [onClose]);
+  useBack(close);
+  useEffect(() => {
+    // Open on the current category.
+    list.current?.querySelector('.cat-row.on')?.scrollIntoView({ block: 'center' });
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && close();
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [close]);
+  function pick(id: string) {
+    setPicked(id);
+    onPick(id);
+    setTimeout(close, 160); // let the mark show for a moment
+  }
+
+  const fold = (x: string) => x.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  const q = fold(query.trim());
+  const { colour } = groupColours(data);
+  // Top level → groups → categories, in Actual's order. "Casa / Energia" sits under Casa; a group without "/" is its own top.
+  type Branch = { key: string; name: string; colourOf: string; groups: { id: string; name: string | null; categories: { id: string; name: string }[] }[] };
+  const tree: Branch[] = [];
+  for (const g of data.pickable) {
+    const parts = splitGroup(g.name);
+    const topName = parts ? parts.top : g.name;
+    const cats = g.categories.filter((c) => !q || fold(c.name).includes(q) || fold(g.name).includes(q));
+    if (!cats.length) continue;
+    let top = tree.find((t) => t.name === topName);
+    if (!top) tree.push((top = { key: g.id, name: topName, colourOf: g.id, groups: [] }));
+    top.groups.push({ id: g.id, name: parts ? parts.sub : null, categories: cats });
+  }
+  const chosen = picked ?? value;
+
+  return (
+    <div className={`cat-scrim ${leaving ? 'out' : ''}`} onMouseDown={(e) => e.target === e.currentTarget && close()}>
+      <div className="cat-sheet" role="dialog" aria-modal="true" aria-label="Pick a category">
+        <div className="cat-grip" aria-hidden="true" />
+        <div className="cat-sheet-head">
+          <div className="cat-search">
+            <Icon name="search" size={16} />
+            <input type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search categories" aria-label="Search categories" autoComplete="off" />
+          </div>
+          <button type="button" className="round ghost" aria-label="Close" onClick={close}><Icon name="close" /></button>
+        </div>
+        <div className="cat-tree" ref={list}>
+          {!tree.length && <p className="muted small cat-none">No category matches "{query}".</p>}
+          {tree.map((top) => (
+            <section key={top.key} className="cat-top">
+              <h3 className="cat-top-head">
+                <span className="cat-top-icon" style={{ color: colour(top.colourOf), background: `color-mix(in srgb, ${colour(top.colourOf)} 14%, transparent)` }}>
+                  <Icon name={categoryIcon(top.name)} size={16} />
+                </span>
+                {top.name}
+              </h3>
+              {top.groups.map((g) => (
+                <div key={g.id} className={`cat-group ${g.name ? 'with-head' : ''}`} style={{ borderColor: `color-mix(in srgb, ${colour(top.colourOf)} 45%, transparent)` }}>
+                  {g.name && <h4 className="cat-sub-head">{g.name}</h4>}
+                  {g.categories.map((c) => (
+                    <button key={c.id} type="button" className={`cat-row ${c.id === chosen ? 'on' : ''}`} aria-pressed={c.id === chosen} onClick={() => pick(c.id)}>
+                      <span className="cat-row-icon"><Icon name={categoryIcon(c.name)} size={16} /></span>
+                      <span className="cat-row-name">{c.name}</span>
+                      {c.id === chosen && <Icon name="check" size={16} />}
+                    </button>
+                  ))}
+                </div>
+              ))}
+            </section>
           ))}
-          {!matches.length && <li className="none">No category matches "{query}"</li>}
-        </ul>
-      )}
-      {/* Room to scroll the field up to the top while the list is open, even at the end of a sheet. */}
-      {open && <div className="cat-spacer" aria-hidden="true" />}
+        </div>
+      </div>
     </div>
   );
 }
