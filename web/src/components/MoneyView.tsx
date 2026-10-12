@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { MoneyBudget, MoneyGroup, MoneyHolding, MoneyHoldings, MoneySummary, MoneyTransaction, MoneyWorth } from '../../../shared/types';
 import { api } from '../api';
-import { BillsCard, BillsSheet } from './Bills';
+import { BillsCard, BillsSheet, FixedForm, fixedFor } from './Bills';
 import { Icon } from './Icon';
 import { Sheet } from './Sheet';
 
@@ -429,6 +429,9 @@ function TxEditor({ t, edit, onDone }: { t: MoneyTransaction; edit: Editing; onD
   const [note, setNote] = useState(t.note ?? '');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Money going out (not money in, paid back or a transfer) can become a fixed expense: a bill, family budget only.
+  const fixed = t.amount > 0 && !['income', 'owed', 'transfer'].includes(t.groupId) ? fixedFor(t, edit.data) : null;
+  const [fixing, setFixing] = useState(false);
   const change = {
     ...(t.fixable && pick && pick !== t.categoryId ? { category: pick } : {}),
     ...(review !== !!t.review ? { review } : {}),
@@ -448,6 +451,7 @@ function TxEditor({ t, edit, onDone }: { t: MoneyTransaction; edit: Editing; onD
     }
   }
   if (splitting) return <SplitEditor t={t} data={edit.data} budget={edit.budget} onCancel={() => setSplitting(false)} onDone={() => { onDone(); edit.onChanged(); }} />;
+  if (fixing && fixed) return <FixedForm initial={fixed.initial} onCancel={() => setFixing(false)} onSaved={() => { onDone(); edit.onChanged(); }} />;
   return (
     <div className="review-fix">
       {t.fixable ? (
@@ -459,6 +463,11 @@ function TxEditor({ t, edit, onDone }: { t: MoneyTransaction; edit: Editing; onD
       <label className="check">
         <input type="checkbox" checked={review} onChange={(e) => setReview(e.target.checked)} /> Needs review (#review)
       </label>
+      {fixed && (
+        <button className="chip fix-bill" onClick={() => setFixing(true)}>
+          <Icon name={fixed.existing ? 'edit' : 'repeat'} size={16} /> {fixed.existing ? 'Edit fixed expense' : 'Make it a fixed expense'}
+        </button>
+      )}
       {error && <p className="error small">{error}</p>}
       <div className="review-actions">
         {canSplit(t) && <button className="chip split-btn" onClick={() => setSplitting(true)} disabled={busy}>Split in two</button>}

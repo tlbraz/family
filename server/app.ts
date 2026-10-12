@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { asc, eq, sql } from 'drizzle-orm';
-import type { AppConfig, Health, MoneyBudget } from '../shared/types';
+import { payeeKey } from '../shared/bills';
+import type { AppConfig, Health, MoneyBudget, TrackedBill } from '../shared/types';
 import type { Db } from './db';
 import { AiError, draftEvent, aiEnabled, type ImageInput } from './lib/ai';
 import { type AuthEnv, loadMember, requireParent } from './lib/auth';
@@ -220,20 +221,42 @@ export function createApp(db: Db, hooks: AppHooks = noop) {
     await revalueNow(db).catch((e: Error) => console.error('valuation:', e.message));
     return c.json({ holdings, last: await lastValuations(db), accounts: [] });
   });
-  // "Not a bill" / "Track as a bill" (family budget). Changes what the Bills card and the alerts consider.
+  // "Not a bill" / "Track as a bill" (family budget), and a fixed expense set by hand: its name, about how much,
+  // how often and around which day. Changes what the Bills card and the alerts consider.
   api.post('/money/bills', requireParent, async (c) => {
-    const body = (await c.req.json().catch(() => ({}))) as { action?: unknown; key?: unknown; name?: unknown };
+    const body = (await c.req.json().catch(() => ({}))) as { action?: unknown; key?: unknown; payee?: unknown; name?: unknown; label?: unknown; expected?: unknown; cadence?: unknown; day?: unknown };
     const actions = ['ignore', 'unignore', 'track', 'untrack'];
-    if (typeof body.action !== 'string' || !actions.includes(body.action) || typeof body.key !== 'string' || !body.key || body.key.length > 80) {
-      return c.json({ error: 'Pick a bill' }, 400);
+    // A bill is picked by its key, or (from a transaction) by its payee.
+    const payee = typeof body.payee === 'string' ? body.payee.trim().slice(0, 120) : '';
+    const key = typeof body.key === 'string' ? body.key : payee ? payeeKey(payee) : '';
+    if (typeof body.action !== 'string' || !actions.includes(body.action) || !key || key.length > 80) {
+      return c.json({ error: payee ? "That payee has no name to follow; rename it in Actual" : 'Pick a bill' }, 400);
     }
-    const key = body.key;
-    const name = typeof body.name === 'string' ? body.name.slice(0, 80) : key;
+    // What was set for a fixed expense: each part optional (the old "Track" sends none), checked when sent.
+    const set: Omit<TrackedBill, 'key' | 'name'> = {};
+    if (body.label !== undefined && body.label !== null) {
+      if (typeof body.label !== 'string' || body.label.trim().length > 80) return c.json({ error: 'The name can be up to 80 characters' }, 400);
+      if (body.label.trim()) set.label = body.label.trim();
+    }
+    if (body.expected !== undefined && body.expected !== null) {
+      if (typeof body.expected !== 'number' || !Number.isInteger(body.expected) || body.expected <= 0 || body.expected > 10_000_000) return c.json({ error: 'Give the expected amount, more than €0' }, 400);
+      set.expected = body.expected;
+    }
+    if (body.cadence !== undefined && body.cadence !== null) {
+      if (body.cadence !== 'monthly' && body.cadence !== 'yearly') return c.json({ error: 'Every month or every year?' }, 400);
+      set.cadence = body.cadence;
+    }
+    if (body.day !== undefined && body.day !== null) {
+      if (typeof body.day !== 'number' || !Number.isInteger(body.day) || body.day < 1 || body.day > 31) return c.json({ error: 'The day is between 1 and 31' }, 400);
+      set.day = body.day;
+    }
     const o = await billOverrides(db);
-    const without = (list: { key: string; name: string }[]) => list.filter((x) => x.key !== key);
+    const before = o.tracked.find((x) => x.key === key);
+    const name = typeof body.name === 'string' && body.name.trim() ? body.name.trim().slice(0, 80) : payee.slice(0, 80) || before?.name || key;
+    const without = <T extends { key: string }>(list: T[]) => list.filter((x) => x.key !== key);
     if (body.action === 'ignore') await saveBillOverrides(db, { ignored: [...without(o.ignored), { key, name }], tracked: without(o.tracked) });
     if (body.action === 'unignore') await saveBillOverrides(db, { ...o, ignored: without(o.ignored) });
-    if (body.action === 'track') await saveBillOverrides(db, { ignored: without(o.ignored), tracked: [...without(o.tracked), { key, name }] });
+    if (body.action === 'track') await saveBillOverrides(db, { ignored: without(o.ignored), tracked: [...without(o.tracked), { key, name, ...set }] });
     if (body.action === 'untrack') await saveBillOverrides(db, { ...o, tracked: without(o.tracked) });
     return c.json({ ok: true });
   });

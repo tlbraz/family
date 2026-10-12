@@ -190,6 +190,8 @@ export interface Bill {
   cadence: 'monthly' | 'yearly';
   varying: boolean; // the amount changes every time (electricity, water): no price-change flags
   tracked: boolean; // marked as a bill by hand
+  day: number; // the day of the month it usually comes
+  expected: number | null; // the amount set by hand (a fixed expense whose amount can vary), or null
   status: 'paid' | 'due' | 'missing';
   date: string; // when it was paid, or when it's expected (YYYY-MM-DD)
   amount: number; // what was paid, or what's expected
@@ -203,6 +205,17 @@ export interface MoneyBills {
   remaining: number; // cents still to come this month
   candidates: { key: string; name: string; count: number; last: { date: string; amount: number } }[]; // payees to track by hand
   ignored: { key: string; name: string }[];
+  tracked: TrackedBill[]; // marked by hand, with what was set for them (to edit them)
+}
+
+/** A payee marked as a bill by hand ("fixed expense"). Older entries have only key and name. Cents. */
+export interface TrackedBill {
+  key: string; // the payee, normalised
+  name: string; // the payee as written
+  label?: string; // the name to show instead
+  expected?: number; // about how much it is: any amount near the usual day counts as paid
+  cadence?: 'monthly' | 'yearly';
+  day?: number; // 1–31: around which day of the month it comes
 }
 
 export interface MoneySummary {
@@ -232,6 +245,12 @@ export interface MoneySummary {
     recent: MoneyTransaction[]; // the latest payments and money back, newest first (money back < 0)
   } | null;
   bills: MoneyBills | null; // family budget only
+  // Fixed expenses (the month's bills) against the rest of the spending. Family budget only. Cents.
+  fixed: {
+    paid: number; // bills paid for this month
+    toCome: number; // bills still due or missing, at their expected amount
+    variable: number; // the month's spending without the bills paid in it
+  } | null;
   // Looks like money moved between our own accounts (−X in one, +X in another) without Actual linking it.
   transfers: { key: string; out: MoneyTransaction; in: MoneyTransaction }[];
 }

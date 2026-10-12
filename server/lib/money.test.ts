@@ -44,6 +44,21 @@ describe('money summary', () => {
     expect(s.groupOrder).toEqual(['gcasa', 'gsuper']);
   });
 
+  it('splits the month into fixed (its bills) and variable, with the same spending as the month total', () => {
+    const tx = [
+      t('2026-07-12', -4000, 'luz', 'EDP'),
+      t('2026-08-12', -4200, 'luz', 'EDP'),
+      t('2026-09-12', -4500, 'luz', 'EDP'),
+      t('2026-09-05', -12000, 'super'),
+      t('2026-09-01', 310000, 'salary', 'EDP'), // income: neither
+    ];
+    const tracked = { ignored: [], tracked: [{ key: 'edp', name: 'EDP', expected: 4000, cadence: 'monthly' as const, day: 12 }, { key: 'gas', name: 'Gas', expected: 2000, cadence: 'monthly' as const, day: 25 }] };
+    const s = summarise(snap([...tx, t('2026-08-25', -1900, 'casa', 'Gas')]), 'family', ['family'], '2026-09', today, tracked);
+    expect(s.spent).toBe(4500 + 12000);
+    expect(s.fixed).toEqual({ paid: 4500, toCome: 2000, variable: 12000 });
+    expect(summarise(snap(tx), 'company', ['family', 'company'], '2026-09', today).fixed).toBeNull();
+  });
+
   it('compares with the average of earlier complete months up to the same day', () => {
     const s = summarise(
       snap([

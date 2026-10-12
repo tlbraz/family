@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { billAlerts, billsFor, payeeKey } from './bills';
+import { billAlerts, billsFor, fixedVsVariable, parseOverrides, payeeKey } from './bills';
 import type { Snapshot } from './money';
 
 let n = 0;
@@ -80,4 +80,65 @@ describe('bills', () => {
     expect(texts.find((t) => t.includes('EDP'))).toContain('hasn\'t come in (usually around the 8th, about €');
     expect(texts.some((t) => t.includes('Netflix'))).toBe(false); // not late yet
   });
+
+  it('reads the old saved choices, and drops what makes no sense', () => {
+    expect(parseOverrides({ ignored: [{ key: 'vodafone', name: 'Vodafone' }], tracked: [{ key: 'gym', name: 'Gym' }] })).toEqual({ ignored: [{ key: 'vodafone', name: 'Vodafone' }], tracked: [{ key: 'gym', name: 'Gym' }] });
+    expect(parseOverrides(null)).toEqual({ ignored: [], tracked: [] });
+    expect(parseOverrides({ tracked: [{ key: 'gym', name: 'Gym', label: ' Gym ', expected: 3500, cadence: 'monthly', day: 2 }, { key: 'x', expected: -1, cadence: 'weekly', day: 40 }, { name: 'no key' }] }).tracked)
+      .toEqual([{ key: 'gym', name: 'Gym', label: 'Gym', expected: 3500, cadence: 'monthly', day: 2 }, { key: 'x', name: 'x' }]);
+  });
+
+  describe('fixed expenses (tracked with what to expect)', () => {
+    const water = (eur: number) => out('2026-09-14', eur, 'SMAS Almada');
+    const tracked = (more = {}) => ({ ignored: [], tracked: [{ key: 'smas almada', name: 'SMAS Almada', label: 'Water', expected: 3000, cadence: 'monthly' as const, day: 14, ...more }] });
+
+    it('follows what was set, from a single charge, under its own name', () => {
+      const s = { tx: [out('2026-08-13', 28, 'SMAS Almada')], dataFrom: '2025-09-01' };
+      const b = billsFor(s, '2026-09', today, tracked());
+      expect(find(b, 'smas almada')).toMatchObject({ name: 'Water', status: 'missing', date: '2026-09-14', amount: 3000, varying: true, tracked: true, expected: 3000, day: 14, cadence: 'monthly' });
+      expect(find(billsFor(s, '2026-09', new Date(2026, 8, 16), tracked()), 'smas almada')).toMatchObject({ status: 'due' });
+      // Still expected months later (set by hand: it's expected until it's no longer tracked), but not before it started.
+      expect(find(billsFor(s, '2026-11', today, tracked()), 'smas almada')).toMatchObject({ status: 'due', amount: 3000 });
+      expect(find(billsFor(s, '2026-07', today, tracked()), 'smas almada')).toBeUndefined();
+    });
+
+    it('counts any amount near the day as paid, and flags it only when 25% off', () => {
+      const b = (eur: number) => find(billsFor({ tx: [water(eur)], dataFrom: '2025-09-01' }, '2026-09', today, tracked()), 'smas almada');
+      expect(b(36)).toMatchObject({ status: 'paid', amount: 3600, change: null });
+      expect(b(37.5)).toMatchObject({ change: null }); // exactly 25%
+      expect(b(38)).toMatchObject({ status: 'paid', change: { from: 3000, to: 3800 } });
+      expect(b(20)).toMatchObject({ change: { from: 3000, to: 2000 } });
+      const on15th = new Date(2026, 8, 15);
+      expect(billAlerts(billsFor({ tx: [water(38)], dataFrom: '2025-09-01' }, '2026-09', on15th, tracked()), on15th).map((a) => a.text))
+        .toEqual(['📈 <b>Water</b> went from €30.00 to <b>€38.00</b> (charged 14 Sept).']);
+    });
+
+    it('uses the cadence and day set, instead of guessing', () => {
+      // Netflix comes monthly on the 25th; set as yearly on the 3rd, it's expected once, a year after the last one.
+      const b = billsFor(snap, '2026-09', today, { ignored: [], tracked: [{ key: 'netflix', name: 'Netflix', cadence: 'yearly', day: 3, expected: 1500 }] });
+      expect(find(b, 'netflix')).toBeUndefined();
+      expect(find(billsFor(snap, '2027-08', today, { ignored: [], tracked: [{ key: 'netflix', name: 'Netflix', cadence: 'yearly', day: 3, expected: 1500 }] }), 'netflix'))
+        .toMatchObject({ cadence: 'yearly', date: '2027-08-03', amount: 1500, status: 'due' });
+    });
+
+    it('leaves the bills it finds itself as they were', () => {
+      const b = billsFor(snap, '2026-09', today, tracked());
+      expect(find(b, 'vodafone')).toMatchObject({ expected: null, tracked: false, varying: false, change: { from: 3990, to: 4490 }, day: 5 });
+    });
+  });
+
+  it('splits the month into fixed and variable', () => {
+    const b = billsFor(snap, '2026-09', today);
+    // September's spending as the Money tab counts it (here: everything that went out that month, plus a refund).
+    const sept = [...tx.filter((t) => t.date.startsWith('2026-09')), { ...out('2026-09-15', -10, 'Continente') }];
+    const spent = sept.reduce((s, t) => s - t.amount, 0);
+    const split = fixedVsVariable(b, sept);
+    // Paid: Vodafone 44.90, rent 900 (paid on 31 Aug), insurance 252, gym? (not a bill). Still to come: Netflix; missing: EDP.
+    const paidBills = b.bills.filter((x) => x.status === 'paid');
+    expect(split.paid).toBe(paidBills.reduce((s, x) => s + x.amount, 0));
+    expect(split.toCome).toBe(1399 + find(b, 'edp comercial')!.amount);
+    // Rent was paid in August: it's fixed for September but not part of September's spending.
+    expect(split.variable).toBe(spent - 4490 - 25200);
+  });
 });
+
