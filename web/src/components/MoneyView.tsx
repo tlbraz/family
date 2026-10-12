@@ -3,16 +3,9 @@ import type { MoneyBudget, MoneyGroup, MoneyHolding, MoneyHoldings, MoneySummary
 import { api } from '../api';
 import { BillsCard, BillsSheet, FixedForm, fixedFor } from './Bills';
 import { Icon } from './Icon';
+import { colourOf } from './moneyColours';
 import { Sheet } from './Sheet';
 
-// Category colours, validated for colour-blind separation on the light and dark cards (see styles.css --m1…--m12).
-// A group keeps its colour by its place in Actual (among the groups in use), not by how much was spent; past the
-// 12th it goes gray. Every colour has its name next to it, so colour is never the only way to tell them apart.
-const SLOTS = 12;
-const colourOf = (id: string, order: string[]) => {
-  const i = order.indexOf(id);
-  return i >= 0 && i < SLOTS ? `var(--m${i + 1})` : 'var(--m-other)';
-};
 
 // A third level, by name: a group called "Casa / Energia" sits under "Casa" (Actual itself has only groups and
 // categories). Groups without a "/" stay on their own. Colours go by the top level, so Casa keeps one colour.

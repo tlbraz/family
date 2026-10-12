@@ -35,6 +35,7 @@ export function parseOverrides(raw: unknown): BillOverrides {
 interface Charge {
   date: string;
   amount: number; // cents, positive
+  category: string | null; // Actual's category id (of the biggest part, when split)
 }
 
 interface Series {
@@ -73,20 +74,23 @@ const dayGap = (a: number, b: number) => Math.min(Math.abs(a - b), 30 - Math.abs
 
 /** Money going out, grouped by payee (same-day parts of a split added up), named as most recently written. */
 export function seriesOf(tx: Snapshot['tx']): Series[] {
-  const by = new Map<string, { name: string; nameDate: string; byDate: Map<string, number> }>();
+  const by = new Map<string, { name: string; nameDate: string; byDate: Map<string, { amount: number; category: string | null; biggest: number }> }>();
   for (const t of tx) {
     if (t.amount >= 0 || !t.payee) continue;
     const key = payeeKey(t.payee);
     if (!key) continue;
     const s = by.get(key) ?? { name: t.payee, nameDate: t.date, byDate: new Map() };
     if (t.date >= s.nameDate) Object.assign(s, { name: t.payee, nameDate: t.date }); // the latest spelling (Actual's rules tidy names up over time)
-    s.byDate.set(t.date, (s.byDate.get(t.date) ?? 0) - t.amount);
+    const day = s.byDate.get(t.date) ?? { amount: 0, category: null, biggest: 0 };
+    day.amount -= t.amount;
+    if (-t.amount > day.biggest) Object.assign(day, { category: t.category, biggest: -t.amount });
+    s.byDate.set(t.date, day);
     by.set(key, s);
   }
   return [...by].map(([key, s]) => ({
     key,
     name: s.name,
-    charges: [...s.byDate].map(([date, amount]) => ({ date, amount })).sort((a, b) => a.date.localeCompare(b.date)),
+    charges: [...s.byDate].map(([date, d]) => ({ date, amount: d.amount, category: d.category })).sort((a, b) => a.date.localeCompare(b.date)),
   }));
 }
 
@@ -157,12 +161,27 @@ function chargeFor(s: Series, due: string, window: number): Charge | null {
 
 const dueIn = (month: string, day: number) => `${month}-${String(Math.min(day, daysIn(month))).padStart(2, '0')}`;
 
+type CategoryOf = (id: string) => { name: string; group: { id: string; name: string } } | undefined;
+
+/**
+ * Where a bill belongs in the Money tab: the category of its most recent charge that has one, and that
+ * category's group (so it gets the group's colour). Null when none of its charges has a category.
+ */
+export function placeOf(s: Series, categoryOf: CategoryOf): Pick<Bill, 'category' | 'group'> {
+  for (let i = s.charges.length - 1; i >= 0; i--) {
+    const id = s.charges[i]!.category;
+    const c = id ? categoryOf(id) : undefined;
+    if (c) return { category: c.name, group: c.group };
+  }
+  return { category: null, group: null };
+}
+
 /** How a bill stands in `month`, or null when it isn't expected that month. */
-export function billIn(s: Series, p: Pattern, month: string, today: Date, tracked: TrackedBill | null = null): Bill | null {
+export function billIn(s: Series, p: Pattern, month: string, today: Date, tracked: TrackedBill | null = null, categoryOf: CategoryOf = () => undefined): Bill | null {
   const todayKey = dateKey(today);
-  const history = [...s.charges].reverse().slice(0, 6);
+  const history = [...s.charges].reverse().slice(0, 6).map(({ date, amount }) => ({ date, amount }));
   const set = tracked?.expected; // a fixed expense: any amount counts, flagged only when far from this
-  const base = { key: s.key, name: tracked?.label || s.name, cadence: p.cadence, varying: p.varying, tracked: !!tracked, day: p.day, expected: set ?? null, history };
+  const base = { key: s.key, name: tracked?.label || s.name, cadence: p.cadence, varying: p.varying, tracked: !!tracked, day: p.day, expected: set ?? null, history, ...placeOf(s, categoryOf) };
   const change = (now: Charge, prev: Charge | null) =>
     set !== undefined
       ? (Math.abs(now.amount - set) > set * OFF ? { from: set, to: now.amount } : null)
@@ -200,7 +219,8 @@ export function billIn(s: Series, p: Pattern, month: string, today: Date, tracke
 const ORDER = { due: 0, missing: 1, paid: 2 } as const;
 
 /** Everything the Bills card needs for one month. */
-export function billsFor(snap: Pick<Snapshot, 'tx' | 'dataFrom'>, month: string, today: Date, overrides: BillOverrides = { ignored: [], tracked: [] }): MoneyBills {
+export function billsFor(snap: Pick<Snapshot, 'tx' | 'dataFrom'> & Partial<Pick<Snapshot, 'groups'>>, month: string, today: Date, overrides: BillOverrides = { ignored: [], tracked: [] }): MoneyBills {
+  const cats = new Map((snap.groups ?? []).flatMap((g) => g.categories.map((c) => [c.id, { name: c.name, group: { id: g.id, name: g.name } }] as const)));
   const ignored = new Set(overrides.ignored.map((x) => x.key));
   const tracked = new Map(overrides.tracked.map((x) => [x.key, x]));
   const bills: Bill[] = [];
@@ -211,7 +231,7 @@ export function billsFor(snap: Pick<Snapshot, 'tx' | 'dataFrom'>, month: string,
     const t = tracked.get(s.key) ?? null;
     const p = t ? trackedPattern(s, t, today, snap.dataFrom) : patternOf(s, today, snap.dataFrom);
     if (p) {
-      const b = billIn(s, p, month, today, t);
+      const b = billIn(s, p, month, today, t, (id) => cats.get(id));
       if (b) bills.push(b);
     } else {
       const recent = s.charges.filter((c) => c.date >= since);

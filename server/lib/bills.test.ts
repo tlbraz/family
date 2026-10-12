@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
+import { groupBills } from '../../shared/bills';
 import { billAlerts, billsFor, fixedVsVariable, parseOverrides, payeeKey } from './bills';
 import type { Snapshot } from './money';
 
 let n = 0;
-const out = (date: string, euros: number, payee: string): Snapshot['tx'][number] => ({
-  id: `t${++n}`, accountId: 'a1', fixable: true, review: false, note: null, date, amount: -Math.round(euros * 100), account: 'CGD', category: null, payee,
+const out = (date: string, euros: number, payee: string, category: string | null = null): Snapshot['tx'][number] => ({
+  id: `t${++n}`, accountId: 'a1', fixable: true, review: false, note: null, date, amount: -Math.round(euros * 100), account: 'CGD', category, payee,
 });
 const monthly = (payee: string, day: number, amounts: Record<string, number>) => Object.entries(amounts).map(([m, eur]) => out(`${m}-${String(day).padStart(2, '0')}`, eur, payee));
 
@@ -140,5 +141,56 @@ describe('bills', () => {
     // Rent was paid in August: it's fixed for September but not part of September's spending.
     expect(split.variable).toBe(spent - 4490 - 25200);
   });
-});
 
+  describe('grouped by category', () => {
+    const groups: Snapshot['groups'] = [
+      { id: 'home', name: 'Home', income: false, categories: [{ id: 'mortgage', name: 'Mortgage' }, { id: 'power', name: 'Electricity' }] },
+      { id: 'subs', name: 'Subscriptions', income: false, categories: [{ id: 'tv', name: 'Streaming' }, { id: 'phone', name: 'Phone' }] },
+      { id: 'food', name: 'Food', income: false, categories: [{ id: 'groceries', name: 'Groceries' }] },
+    ];
+    const months = ['2026-05', '2026-06', '2026-07', '2026-08'];
+    const cat = (payee: string, day: number, eur: number, category: string | null, last: string | null = category) => [
+      ...months.map((m) => out(`${m}-${String(day).padStart(2, '0')}`, eur, payee, category)),
+      ...(day < 20 ? [out(`2026-09-${String(day).padStart(2, '0')}`, eur, payee, last)] : []),
+    ];
+    const tx2: Snapshot['tx'] = [
+      ...cat('Banco Hipoteca', 2, 650, 'mortgage'),
+      ...cat('EDP Comercial', 8, 60, 'power'),
+      ...cat('Netflix', 25, 13.99, 'tv'),
+      ...cat('Vodafone', 5, 39.9, 'tv', 'phone'), // recategorised lately: the latest category counts
+      ...cat('Gym', 3, 35, 'groceries', null), // the latest charge has no category: the one before still counts
+      ...cat('Mystery', 10, 20, null),
+      // Rent split on the same day: the biggest part's category.
+      ...months.flatMap((m) => [out(`${m}-01`, 800, 'Senhorio', 'mortgage'), out(`${m}-01`, 20, 'Senhorio', 'power')]),
+    ];
+    const b = billsFor({ tx: tx2, dataFrom: '2025-09-01', groups }, '2026-09', today);
+
+    it('takes the category of the most recent charge, and its group', () => {
+      expect(find(b, 'banco hipoteca')).toMatchObject({ category: 'Mortgage', group: { id: 'home', name: 'Home' } });
+      expect(find(b, 'vodafone')).toMatchObject({ category: 'Phone', group: { id: 'subs', name: 'Subscriptions' } });
+      expect(find(b, 'gym')).toMatchObject({ category: 'Groceries', group: { id: 'food', name: 'Food' } });
+      expect(find(b, 'senhorio')).toMatchObject({ category: 'Mortgage', group: { id: 'home' } });
+      expect(find(b, 'mystery')).toMatchObject({ category: null, group: null });
+      expect(find(b, 'banco hipoteca')!.history[0]).toEqual({ date: '2026-09-02', amount: 65000 });
+      // Without Actual's groups (as in the Telegram alerts), there's no category.
+      expect(find(billsFor({ tx: tx2, dataFrom: '2025-09-01' }, '2026-09', today), 'banco hipoteca')).toMatchObject({ category: null, group: null });
+    });
+
+    it('groups the month by category group, biggest first, with what is paid, and the ones without a category last', () => {
+      const g = groupBills(b.bills);
+      expect(g.map((x) => [x.id, x.name, x.bills.map((y) => y.key).sort()])).toEqual([
+        ['home', 'Home', ['banco hipoteca', 'edp comercial', 'senhorio']],
+        ['subs', 'Subscriptions', ['netflix', 'vodafone']],
+        ['food', 'Food', ['gym']],
+        ['uncategorised', 'Sem categoria', ['mystery']],
+      ]);
+      const home = g[0]!;
+      expect(home.total).toBe(65000 + 6000 + 82000);
+      // Rent is due on the 1st and didn't come in September: not paid. The mortgage and electricity are.
+      expect(find(b, 'senhorio')!.status).not.toBe('paid');
+      expect(home.paid).toBe(65000 + 6000);
+      expect(g[1]).toMatchObject({ total: 1399 + 3990, paid: 3990 });
+      expect(groupBills([])).toEqual([]);
+    });
+  });
+});
