@@ -197,6 +197,8 @@ export interface Bill {
   amount: number; // what was paid, or what's expected
   change: { from: number; to: number } | null; // the price moved since last time
   history: { date: string; amount: number }[]; // recent charges, newest first
+  category: string | null; // the category of its most recent charge with one (Actual's name), or null
+  group: { id: string; name: string } | null; // that category's group, as in the rest of the Money tab
 }
 
 export interface MoneyBills {

@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { payeeKey } from '../../../shared/bills';
+import { groupBills, payeeKey } from '../../../shared/bills';
 import type { Bill, MoneySummary, MoneyTransaction } from '../../../shared/types';
 import { api } from '../api';
 import { Icon } from './Icon';
+import { colourOf } from './moneyColours';
 import { Sheet } from './Sheet';
 import './Bills.css';
 
@@ -104,11 +105,17 @@ const splitText = (data: MoneySummary) => {
 
 const BAR = { paid: 0, missing: 1, due: 2 } as const; // the bar fills from the left as bills get paid
 
-const SECTIONS = [
-  { status: 'due', title: 'Still to come' },
-  { status: 'missing', title: 'Didn’t show up' },
-  { status: 'paid', title: 'Paid' },
-] as const;
+// Which category groups of the sheet are open, remembered on this device: { [group id]: open }.
+const OPEN_KEY = 'family.billGroups';
+
+function readOpenGroups(): Record<string, boolean> {
+  try {
+    const saved = JSON.parse(localStorage.getItem(OPEN_KEY) ?? '{}') as unknown;
+    return saved && typeof saved === 'object' && !Array.isArray(saved) ? (saved as Record<string, boolean>) : {};
+  } catch {
+    return {};
+  }
+}
 
 export function BillsSheet({ data, onChanged, onClose }: { data: MoneySummary; onChanged: () => void; onClose: () => void }) {
   const b = data.bills!;
@@ -117,6 +124,19 @@ export function BillsSheet({ data, onChanged, onClose }: { data: MoneySummary; o
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState<string | null>(null); // the key of the bill or candidate whose form is open
+  const [openGroups, setOpenGroups] = useState(readOpenGroups);
+  const groups = groupBills(b.bills);
+  // Not chosen yet: all open when there are only a few groups, otherwise just the biggest.
+  const isOpen = (id: string) => openGroups[id] ?? (groups.length <= 3 || id === groups[0]?.id);
+  const toggle = (id: string) => {
+    const next = { ...openGroups, [id]: !isOpen(id) };
+    setOpenGroups(next);
+    try {
+      localStorage.setItem(OPEN_KEY, JSON.stringify(next));
+    } catch {
+      /* private mode: fine */
+    }
+  };
 
   async function act(action: 'ignore' | 'unignore' | 'track' | 'untrack', key: string, name: string) {
     setBusy(key);
@@ -131,60 +151,68 @@ export function BillsSheet({ data, onChanged, onClose }: { data: MoneySummary; o
     }
   }
 
+  const current = data.today !== null;
   const monthLabel = new Date(`${data.month}-15T12:00`).toLocaleDateString('en-GB', { month: 'long' });
   return (
     <Sheet title={`Bills · ${monthLabel}`} onClose={onClose}>
       {error && <p className="error">{error}</p>}
       {b.bills.length === 0 && <p className="muted">Nothing repeats every month yet (it needs 3 of the last 4 months). You can mark a payee below.</p>}
-      {SECTIONS.map(({ status, title }) => {
-        const list = b.bills.filter((x) => x.status === status);
-        if (!list.length) return null;
+      {current && b.remaining > 0 && <p className="muted small bills-tocome">{eur(b.remaining)} still to come this month</p>}
+      {groups.map((g) => {
+        const expanded = isOpen(g.id);
         return (
-          <section key={status} className="bills-section">
-            <h3>{title}{status === 'due' && b.remaining > 0 ? ` · ${eur(b.remaining)}` : ''}</h3>
-            <ul className="bills-list">
-              {list.map((x) => (
-                <li key={x.key} className={`bill ${x.status}`}>
-                  <button className="bill-row" onClick={() => setOpen(open === x.key ? null : x.key)} aria-expanded={open === x.key}>
-                    <span className={`bill-dot ${x.status}`} aria-hidden>{x.status === 'paid' ? <Icon name="check" size={13} stroke={3} /> : x.status === 'missing' ? '?' : null}</span>
-                    <span className="bill-text">
-                      <b>{x.name}</b>
-                      <span className="muted small">
-                        {x.status === 'paid' ? `paid ${shortDate(x.date)}` : x.status === 'due' ? `due ${shortDate(x.date)}` : `expected ${shortDate(x.date)}`}
-                        {' · '}{x.cadence === 'monthly' ? (x.varying ? 'monthly, varies' : 'monthly') : 'yearly'}
-                        {x.tracked ? ' · marked by you' : ''}
-                        {x.expected !== null ? ` · expected ~${eur(x.expected)}` : ''}
+          <section key={g.id} className="bills-section bills-group">
+            <button className="bills-group-head" onClick={() => toggle(g.id)} aria-expanded={expanded}>
+              <span className="dot" style={{ background: colourOf(g.id, data.groupOrder) }} aria-hidden />
+              <span className="bills-group-name">{g.name}<span className="muted"> · {g.bills.length}</span></span>
+              <span className="bills-group-sum">{whole(g.total)}<span className="muted"> · {whole(g.paid)} paid</span></span>
+              <span className={`bills-group-chev${expanded ? ' open' : ''}`} aria-hidden><Icon name="right" size={16} /></span>
+            </button>
+            {expanded && (
+              <ul className="bills-list">
+                {g.bills.map((x) => (
+                  <li key={x.key} className={`bill ${x.status}`}>
+                    <button className="bill-row" onClick={() => setOpen(open === x.key ? null : x.key)} aria-expanded={open === x.key}>
+                      <span className={`bill-dot ${x.status}`} aria-hidden>{x.status === 'paid' ? <Icon name="check" size={13} stroke={3} /> : x.status === 'missing' ? '?' : null}</span>
+                      <span className="bill-text">
+                        <b>{x.name}</b>
+                        <span className="muted small">
+                          {x.status === 'paid' ? `paid ${shortDate(x.date)}` : x.status === 'due' ? `due ${shortDate(x.date)}` : `expected ${shortDate(x.date)}`}
+                          {' · '}{x.cadence === 'monthly' ? (x.varying ? 'monthly, varies' : 'monthly') : 'yearly'}
+                          {x.tracked ? ' · marked by you' : ''}
+                          {x.expected !== null ? ` · expected ~${eur(x.expected)}` : ''}
+                        </span>
+                        {x.change && <span className={`bill-change ${x.change.to > x.change.from ? 'rise' : 'fall'}`}>{x.change.to > x.change.from ? '▲' : '▼'} was {eur(x.change.from)}</span>}
                       </span>
-                      {x.change && <span className={`bill-change ${x.change.to > x.change.from ? 'rise' : 'fall'}`}>{x.change.to > x.change.from ? '▲' : '▼'} was {eur(x.change.from)}</span>}
-                    </span>
-                    <span className="bill-amount">{x.status !== 'paid' && x.varying ? '~' : ''}{eur(x.amount)}</span>
-                  </button>
-                  {editing === x.key && (
-                    <FixedForm
-                      initial={{ key: x.key, ...(x.tracked ? {} : { name: x.name }), label: x.name, expected: x.expected ?? x.amount, cadence: x.cadence, day: x.day }}
-                      onCancel={() => setEditing(null)}
-                      onSaved={() => { setEditing(null); onChanged(); }}
-                    />
-                  )}
-                  {open === x.key && editing !== x.key && (
-                    <div className="bill-more">
-                      <span className="muted small">Last charges</span>
-                      <ul className="bill-history">
-                        {x.history.map((h) => <li key={h.date}><span>{shortDate(h.date)} {h.date.slice(0, 4) !== data.month.slice(0, 4) ? h.date.slice(0, 4) : ''}</span><span>{eur(h.amount)}</span></li>)}
-                      </ul>
-                      <span className="bill-actions">
-                        <button className="chip" onClick={() => setEditing(x.key)}>Edit</button>
-                        {x.tracked ? (
-                          <button className="chip" disabled={busy === x.key} onClick={() => act('untrack', x.key, x.name)}>Stop tracking</button>
-                        ) : (
-                          <button className="chip" disabled={busy === x.key} onClick={() => act('ignore', x.key, x.name)}>Not a bill</button>
-                        )}
-                      </span>
-                    </div>
-                  )}
-                </li>
-              ))}
-            </ul>
+                      <span className="bill-amount">{x.status !== 'paid' && x.varying ? '~' : ''}{eur(x.amount)}</span>
+                    </button>
+                    {editing === x.key && (
+                      <FixedForm
+                        initial={{ key: x.key, ...(x.tracked ? {} : { name: x.name }), label: x.name, expected: x.expected ?? x.amount, cadence: x.cadence, day: x.day }}
+                        onCancel={() => setEditing(null)}
+                        onSaved={() => { setEditing(null); onChanged(); }}
+                      />
+                    )}
+                    {open === x.key && editing !== x.key && (
+                      <div className="bill-more">
+                        <span className="muted small">Last charges</span>
+                        <ul className="bill-history">
+                          {x.history.map((h) => <li key={h.date}><span>{shortDate(h.date)} {h.date.slice(0, 4) !== data.month.slice(0, 4) ? h.date.slice(0, 4) : ''}</span><span>{eur(h.amount)}</span></li>)}
+                        </ul>
+                        <span className="bill-actions">
+                          <button className="chip" onClick={() => setEditing(x.key)}>Edit</button>
+                          {x.tracked ? (
+                            <button className="chip" disabled={busy === x.key} onClick={() => act('untrack', x.key, x.name)}>Stop tracking</button>
+                          ) : (
+                            <button className="chip" disabled={busy === x.key} onClick={() => act('ignore', x.key, x.name)}>Not a bill</button>
+                          )}
+                        </span>
+                      </div>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
           </section>
         );
       })}
