@@ -147,13 +147,13 @@ async function load(budget: MoneyBudget, bankSync: boolean): Promise<Snapshot> {
       const tagged = parts.find((p) => REVIEW_TAG.test(p.notes ?? ''));
       if (tagged) {
         const plain = !t.subtransactions?.length && !t.is_child && !t.transfer_id;
-        review.push({ id: tagged.id, accountId: a.id, fixable: plain, parentId: tagged !== t && !tagged.transfer_id && !t.transfer_id ? t.id : null, note: withoutReviewTag(tagged.notes), date: t.date, amount: tagged.amount, account: a.name, category: tagged.category ?? null, payee: (t.payee && payees.get(t.payee)) || t.imported_payee || '' });
+        review.push({ id: tagged.id, accountId: a.id, fixable: plain, parentId: tagged !== t && !tagged.transfer_id && !t.transfer_id ? t.id : null, note: descriptionOf(tagged.notes, t.imported_payee, t.payee && payees.get(t.payee)), date: t.date, amount: tagged.amount, account: a.name, category: tagged.category ?? null, payee: (t.payee && payees.get(t.payee)) || t.imported_payee || '' });
       }
     }
     for (const t of all) {
       if (t.date < looseFrom || t.transfer_id || t.starting_balance_flag || t.is_child || t.is_parent || t.subtransactions?.length) continue;
       const payee = (t.payee && payees.get(t.payee)) || t.imported_payee || '';
-      loose.push({ id: t.id, accountId: a.id, account: a.name, offBudget: !!a.offbudget, date: t.date, amount: t.amount, payee, note: withoutReviewTag(t.notes), category: t.category ?? null });
+      loose.push({ id: t.id, accountId: a.id, account: a.name, offBudget: !!a.offbudget, date: t.date, amount: t.amount, payee, note: descriptionOf(t.notes, t.imported_payee, payee), category: t.category ?? null });
     }
     if (a.offbudget) continue;
     for (const t of all) {
@@ -162,7 +162,7 @@ async function load(budget: MoneyBudget, bankSync: boolean): Promise<Snapshot> {
       for (const p of split ? t.subtransactions! : [t]) {
         if (!p.category || !owedCats.has(p.category)) continue;
         const payee = (t.payee && payees.get(t.payee)) || t.imported_payee || '';
-        owed.push({ id: p.id, accountId: a.id, fixable: !split, parentId: split ? t.id : null, review: REVIEW_TAG.test(p.notes ?? ''), note: withoutReviewTag(p.notes), date: t.date, amount: p.amount, account: a.name, category: p.category, payee });
+        owed.push({ id: p.id, accountId: a.id, fixable: !split, parentId: split ? t.id : null, review: REVIEW_TAG.test(p.notes ?? ''), note: descriptionOf(p.notes, t.imported_payee, payee), date: t.date, amount: p.amount, account: a.name, category: p.category, payee });
       }
     }
     for (const t of await api.getTransactions(a.id, start, end)) {
@@ -174,7 +174,7 @@ async function load(budget: MoneyBudget, bankSync: boolean): Promise<Snapshot> {
       for (const p of parts) {
         if (p.transfer_id) continue;
         const review = REVIEW_TAG.test(p.notes ?? '') || REVIEW_TAG.test(t.notes ?? '');
-        tx.push({ id: p.id, accountId: a.id, fixable: !split, parentId: split ? t.id : null, review, note: withoutReviewTag(p.notes), date: t.date, amount: p.amount, account: a.name, category: p.category ?? null, payee });
+        tx.push({ id: p.id, accountId: a.id, fixable: !split, parentId: split ? t.id : null, review, note: descriptionOf(p.notes, t.imported_payee, payee), date: t.date, amount: p.amount, account: a.name, category: p.category ?? null, payee });
       }
     }
   }
@@ -214,6 +214,18 @@ export function refreshMoney({ bankSync = false } = {}) {
 
 export const withoutReviewTag = (notes: string | null | undefined) =>
   (notes ?? '').replace(/(^|\s)#review\b/gi, ' ').replace(/\s+/g, ' ').trim() || null;
+
+// Bank sync fills the note with the bank's own text (the imported name, a transfer reference, "Payment from…").
+const squash = (x: string | null | undefined) => (x ?? '').toLowerCase().replace(/[^a-z0-9]/g, '');
+const BANK_TEXT = /^(TRANSF\.\d{6,}|TRF\.? P O |TRF MB WAY|Payment from |Ubr\* )/i;
+/** A transaction's description: the note without #review, or null when it's only the bank's text. */
+export function descriptionOf(notes: string | null | undefined, imported: string | null | undefined, payee: string | null | undefined) {
+  const note = withoutReviewTag(notes);
+  if (!note || BANK_TEXT.test(note)) return null;
+  const n = squash(note);
+  const copies = [imported, payee].map(squash).filter(Boolean);
+  return copies.some((c) => c.includes(n) || n.includes(c)) ? null : note;
+}
 
 /**
  * Changes a transaction in Actual from the app: its category, and/or whether it's tagged #review (the rest of the

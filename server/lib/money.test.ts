@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { budgetsFor, netWorth, ReviewError, reimbursable, splitParts, stillOwed, summarise, transferPairs, withoutReviewTag, type Snapshot } from './money';
+import { budgetsFor, netWorth, ReviewError, reimbursable, splitParts, stillOwed, summarise, transferPairs, withoutReviewTag, descriptionOf, type Snapshot } from './money';
 
 const snap = (tx: Snapshot['tx'], extra: Partial<Snapshot> = {}): Snapshot => ({
   fetchedAt: '2026-09-29T10:00:00Z',
@@ -279,5 +279,19 @@ describe('splitting a transaction in two', () => {
     expect(() => splitParts(-5000, [part(5000)], cats)).toThrow('2 to 10');
     expect(splitParts(-5000, [part(2000), part(1500), part(1500)], cats).map((p) => p.amount)).toEqual([-2000, -1500, -1500]); // more than two
     expect(() => splitParts(-1100, Array.from({ length: 11 }, () => part(100)), cats)).toThrow('2 to 10');
+  });
+});
+
+describe('descriptionOf', () => {
+  it('keeps a description someone wrote, without #review', () => {
+    expect(descriptionOf('Matilde - Ginastica #review', 'TRF P  Ginastica', 'Gymnastics')).toBe('Matilde - Ginastica');
+    expect(descriptionOf('Valheim', 'Wl *steam Purchase', 'Wl *steam Purchase')).toBe('Valheim');
+  });
+  it("drops the bank's own text", () => {
+    expect(descriptionOf('COMPRA 9189 LIVRARIA PAPELARIA E2815-849 ALMADA #review', 'COMPRA 9189 LIVRARIA PAPELARIA E2815-849 ALMADA', 'Bookshop / stationery')).toBeNull();
+    expect(descriptionOf('TRF P REAL C. CAVALA', 'TRF P  REAL C. CAVALA', 'Real C. Cavala')).toBeNull();
+    expect(descriptionOf('TRANSF.002300004559425316094 2W062830467', 'TRF. P O ANA CATARINA NUNES ROQUE', 'ABanca')).toBeNull();
+    expect(descriptionOf('Payment from Tiago Lisboa De Almeida Braz', 'TRANSF.356000019001823878349 3W062690798', 'Tiago - Revolut')).toBeNull();
+    expect(descriptionOf(' #review', 'X', 'Y')).toBeNull();
   });
 });
