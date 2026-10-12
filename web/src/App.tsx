@@ -18,10 +18,23 @@ import { SignIn } from './components/SignIn';
 import { TaskSheet } from './components/TaskSheet';
 
 type Tab = 'calendar' | 'groceries' | 'docs' | 'family' | 'money' | 'watch';
+const TABS: Tab[] = ['calendar', 'groceries', 'docs', 'family', 'money', 'watch'];
+const TAB_KEY = 'family.tab';
+
+// The tab survives a refresh (and the reload after a deploy); opening the app afresh starts on the calendar.
+function readTab(): Tab {
+  try {
+    const saved = sessionStorage.getItem(TAB_KEY) as Tab | null;
+    return saved && TABS.includes(saved) ? saved : 'calendar';
+  } catch {
+    return 'calendar';
+  }
+}
+
 type Open = { kind: 'event'; occurrence: Occurrence | null; day: string; shared?: Shared; fromDay?: boolean } | { kind: 'task'; task: Task | null; day: string; fromDay?: boolean } | null;
 
 export function App() {
-  const [tab, setTab] = useState<Tab>('calendar');
+  const [tab, setTab] = useState<Tab>(readTab);
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [members, setMembers] = useState<Member[]>([]);
   const [health, setHealth] = useState<Health | null>(null);
@@ -37,6 +50,13 @@ export function App() {
     return () => window.removeEventListener(DEPLOYING_EVENT, on);
   }, []);
   useBack(() => setTab('calendar'), tab !== 'calendar');
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(TAB_KEY, tab);
+    } catch {
+      /* private mode: fine */
+    }
+  }, [tab]);
 
   const loadAll = useCallback(() => {
     api.config().then(setConfig).catch(() => setConfig({ me: null, meTracksBp: false, features: { ai: false, google: false, telegram: false } }));
@@ -53,6 +73,14 @@ export function App() {
 
   const me = config?.me ?? null;
   const canEdit = me?.role === 'parent';
+
+  // Back on a tab that isn't there any more (signed out, or the feature is off): go to the calendar.
+  useEffect(() => {
+    if (!config) return;
+    const f = config.features;
+    const gone = (tab === 'docs' && !f.docs) || (tab === 'money' && !(f.money && config.me)) || (tab === 'watch' && !f.watch);
+    if (gone) setTab('calendar');
+  }, [config, tab]);
 
   // Something shared from another app: open "New event" with it (after signing in, if needed).
   useEffect(() => {
