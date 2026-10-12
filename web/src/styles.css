@@ -416,6 +416,8 @@ button.link { border: 0; padding: 0; background: none; color: var(--accent, inhe
 .legend.sub li { grid-template-columns: 1fr auto; }
 .legend li > button { grid-column: 1 / -1; width: 100%; background: none; border: 0; padding: 0; color: inherit; font: inherit; text-align: left; }
 .legend .dot { width: 12px; height: 12px; border-radius: 4px; }
+.legend.icons li, .legend.icons li > button { grid-template-columns: 18px 1fr auto; }
+.legend .dot.icon { width: auto; height: auto; border-radius: 0; display: flex; }
 .legend .name { font-weight: 700; }
 .legend .amt { font-weight: 800; font-variant-numeric: tabular-nums; }
 .legend .track { grid-column: 2 / -1; height: 6px; border-radius: 3px; background: var(--soft); }
@@ -447,10 +449,16 @@ button.link { border: 0; padding: 0; background: none; color: var(--accent, inhe
 .money-sub-head h3 { flex: 1; margin: 0; font-size: 1.1rem; font-weight: 800; }
 .money-sub-head .pct { color: var(--muted); font-size: 0.85rem; }
 .money-sub-head .amt { font-weight: 800; font-size: 1.1rem; font-variant-numeric: tabular-nums; }
-.money-cat { margin-top: 10px; }
-.money-cat-head { display: flex; justify-content: space-between; gap: 10px; padding: 8px 0 6px; border-bottom: 1px solid var(--line); font-weight: 800; }
+.money-sub-head .cat-icon { align-self: center; display: flex; }
+.money-cat { border-bottom: 1px solid var(--line); }
+.money-cat-head { display: flex; align-items: center; gap: 10px; width: 100%; padding: 10px 0; background: none; border: 0; color: var(--ink); font: inherit; font-weight: 800; text-align: left; cursor: pointer; }
+.money-cat-head .cat-icon { display: flex; color: var(--c); }
+.money-cat-head .name { flex: 1; min-width: 0; }
+.money-cat-head .name .muted { font-weight: 600; font-size: 0.85rem; }
 .money-cat-head .amt { font-variant-numeric: tabular-nums; }
-.money-cat:not(.plain) .money-list { margin-left: 4px; padding-left: 12px; border-left: 2px solid color-mix(in srgb, var(--c) 40%, transparent); }
+.money-cat-head .chev { display: flex; color: var(--muted); transition: transform 0.15s; }
+.money-cat.open .money-cat-head .chev { transform: rotate(90deg); }
+.money-cat .money-list { margin: 0 0 8px 7px; padding-left: 14px; border-left: 2px solid color-mix(in srgb, var(--c) 40%, transparent); }
 .money-cat .money-list li { padding: 7px 0; }
 .money-cat .money-list .amt { font-weight: 600; }
 .legend.sub li > button { grid-template-columns: 1fr auto; }

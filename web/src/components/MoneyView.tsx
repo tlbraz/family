@@ -3,6 +3,7 @@ import type { MoneyBudget, MoneyGroup, MoneyHolding, MoneyHoldings, MoneySummary
 import { api } from '../api';
 import { BillsCard, BillsSheet, FixedForm, fixedFor } from './Bills';
 import { Icon } from './Icon';
+import { categoryIcon } from './categoryIcons';
 import { colourOf, groupColours, splitGroup } from './moneyColours';
 import { Sheet } from './Sheet';
 
@@ -282,11 +283,11 @@ function GroupsCard({ data, onOpen }: { data: MoneySummary; onOpen: (g: TopItem)
     <section className="card money-card">
       <h2>Where it went</h2>
       <div className="donut-wrap"><Donut groups={items} colour={colour} total={total} /></div>
-      <ul className="legend">
+      <ul className="legend icons">
         {items.map((g) => (
           <li key={g.id}>
             <button onClick={() => onOpen(g)}>
-              <span className="dot" style={{ background: colour(g.id) }} />
+              <span className="dot icon" style={{ color: colour(g.id) }}><Icon name={categoryIcon(g.name)} size={16} /></span>
               <span className="name">{g.name}<span className="pct">{Math.round((g.amount / total) * 100)}%</span></span>
               <span className="amt">{eur(g.amount)}</span>
               <span className="track"><span style={{ width: `${(g.amount / max) * 100}%`, background: colour(g.id) }} /></span>
@@ -309,6 +310,7 @@ function TopSheet({ top, data, edit, onClose }: { top: TopItem; data: MoneySumma
       {children.map((g) => (
         <section key={g.id} className="money-sub">
           <div className="money-sub-head" style={{ borderColor: colour }}>
+            <span className="cat-icon" style={{ color: colour }}><Icon name={categoryIcon(`${top.name} / ${g.name}`)} size={18} /></span>
             <h3>{g.name}</h3>
             {children.length > 1 && <span className="pct">{Math.round((g.amount / top.amount) * 100)}%</span>}
             <span className="amt">{eur(g.amount)}</span>
@@ -331,26 +333,31 @@ function GroupSheet({ group, data, edit, onClose }: { group: MoneyGroup; data: M
   );
 }
 
-/** A group's transactions under each of its categories (biggest first). A lone category named like its group gets no heading. */
+/** A group's categories, always listed (biggest first); tap one to show or hide its transactions. */
 function CategoryTx({ group, data, edit, colour }: { group: MoneyGroup; data: MoneySummary; edit: Editing; colour: string }) {
+  const [shown, setShown] = useState<Set<string>>(new Set());
   const tx = data.transactions.filter((t) => t.groupId === group.id);
   if (!tx.length) return <p className="muted small">Nothing here any more.</p>;
   const names = [...new Set([...group.categories.map((c) => c.name), ...tx.map((t) => t.category)])].filter((n) => tx.some((t) => t.category === n));
   const amountOf = (n: string) => group.categories.find((c) => c.name === n)?.amount ?? tx.filter((t) => t.category === n).reduce((s, t) => s + t.amount, 0);
-  const plain = names.length === 1 && (names[0] === group.name || group.categories.length <= 1);
+  const toggle = (n: string) => setShown((old) => { const s = new Set(old); if (!s.delete(n)) s.add(n); return s; });
   return (
     <>
-      {names.map((n) => (
-        <div key={n} className={`money-cat${plain ? ' plain' : ''}`} style={{ '--c': colour } as CSSProperties}>
-          {!plain && (
-            <div className="money-cat-head">
-              <span>{n}</span>
+      {names.map((n) => {
+        const mine = tx.filter((t) => t.category === n);
+        const open = shown.has(n);
+        return (
+          <div key={n} className={`money-cat${open ? ' open' : ''}`} style={{ '--c': colour } as CSSProperties}>
+            <button className="money-cat-head" aria-expanded={open} onClick={() => toggle(n)}>
+              <span className="cat-icon"><Icon name={categoryIcon(n)} size={16} /></span>
+              <span className="name">{n}<span className="muted"> · {mine.length}</span></span>
               <span className="amt">{eur(amountOf(n))}</span>
-            </div>
-          )}
-          <TxList tx={tx.filter((t) => t.category === n)} showCategory={false} edit={edit} />
-        </div>
-      ))}
+              <span className="chev"><Icon name="right" size={14} /></span>
+            </button>
+            {open && <TxList tx={mine} showCategory={false} edit={edit} />}
+          </div>
+        );
+      })}
     </>
   );
 }
