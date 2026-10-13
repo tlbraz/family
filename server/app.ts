@@ -22,6 +22,7 @@ import { shareRoutes } from './routes/share';
 import { taskRoutes } from './routes/tasks';
 import { bpRoutes } from './routes/bp';
 import { billOverrides, saveBillOverrides } from './lib/alerts';
+import { accountIbans, cleanIban, saveIban } from './lib/ibans';
 import { bpSettingsOf } from './lib/bp';
 import { upcomingRoutes } from './routes/upcoming';
 import { members, settings } from './schema';
@@ -126,10 +127,23 @@ export function createApp(db: Db, hooks: AppHooks = noop) {
     const now = new Date();
     const month = /^\d{4}-\d{2}$/.test(c.req.query('month') ?? '') ? c.req.query('month')! : `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
     try {
-      return c.json(summarise(await moneySnapshot(budget), budget, budgets, month, now, budget === 'family' ? await billOverrides(db) : undefined, await notTransfers(budget)));
+      const summary = summarise(await moneySnapshot(budget), budget, budgets, month, now, budget === 'family' ? await billOverrides(db) : undefined, await notTransfers(budget));
+      const ibans = await accountIbans(db);
+      return c.json({ ...summary, accounts: summary.accounts.map((a) => ({ ...a, iban: ibans[`${budget}:${a.name}`] ?? null })) });
     } catch (e) {
       return c.json({ error: (e as Error).message }, 503);
     }
+  });
+  // An account's IBAN, to copy from the Money tab (empty removes it).
+  api.put('/money/iban', requireParent, async (c) => {
+    const body = (await c.req.json().catch(() => ({}))) as { budget?: unknown; account?: unknown; iban?: unknown };
+    const budget = typeof body.budget === 'string' ? (body.budget as MoneyBudget) : 'family';
+    if (!budgetsFor(c.get('me')!.name).includes(budget)) return c.json({ error: 'Not available' }, 403);
+    if (typeof body.account !== 'string' || !body.account || typeof body.iban !== 'string') return c.json({ error: 'Pick an account' }, 400);
+    const iban = body.iban.trim() ? cleanIban(body.iban) : null;
+    if (body.iban.trim() && !iban) return c.json({ error: "That IBAN doesn't look right: check the digits" }, 400);
+    await saveIban(db, budget, body.account, iban);
+    return c.json({ ok: true, iban });
   });
   // Done reviewing a #review transaction: optionally a new category, and the tag comes out of the notes.
   api.post('/money/review', requireParent, async (c) => {

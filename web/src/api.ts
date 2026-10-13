@@ -94,6 +94,7 @@ export const api = {
 
   money: (budget: MoneyBudget, month: string | null) => request<MoneySummary>(`/money?budget=${budget}${month ? `&month=${month}` : ''}`),
   holdings: () => request<MoneyHoldings>('/money/holdings'),
+  saveIban: (budget: MoneyBudget, account: string, iban: string) => request<{ ok: true; iban: string | null }>('/money/iban', json('PUT', { budget, account, iban })),
   saveHoldings: (holdings: MoneyHolding[]) => request<MoneyHoldings>('/money/holdings', json('PUT', { holdings })),
   billAction: (action: 'ignore' | 'unignore' | 'track' | 'untrack', key: string, name: string) => request<{ ok: true }>('/money/bills', json('POST', { action, key, name })),
   // A fixed expense: by its key (a bill or candidate) or by the payee of a transaction (the server finds the key).

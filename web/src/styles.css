@@ -435,6 +435,12 @@ button.link { border: 0; padding: 0; background: none; color: var(--accent, inhe
 .money-list .amt { font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .money-list .amt.neg { color: var(--danger); }
 .money-list .amt.in { color: var(--ok); }
+.money-list li.account-row { flex-wrap: wrap; }
+.account-row .iban { display: inline-flex; align-items: center; gap: 5px; width: fit-content; margin-top: 2px; padding: 0; background: none; border: 0; color: var(--muted); font: inherit; font-size: 0.8rem; font-variant-numeric: tabular-nums; cursor: pointer; text-align: left; }
+.account-side { display: flex; align-items: center; gap: 8px; }
+.iban-edit { display: flex; padding: 4px; background: none; border: 0; color: var(--muted); cursor: pointer; }
+.iban-form { flex-basis: 100%; display: flex; flex-direction: column; gap: 8px; padding-top: 6px; }
+.iban-form input { font-variant-numeric: tabular-nums; letter-spacing: 0.02em; }
 .money-sub { margin: 14px 0 2px; }
 .money-card a, .money-note a { color: inherit; font-weight: 800; }
 .money-card.balance { padding: 18px 16px 12px; }

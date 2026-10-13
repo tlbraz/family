@@ -236,7 +236,7 @@ export interface MoneySummary {
   groups: MoneyGroup[];
   groupOrder: string[]; // every expense group in Actual's order, so a group keeps its colour from month to month
   transactions: MoneyTransaction[];
-  accounts: { name: string; balance: number; offBudget: boolean }[];
+  accounts: { name: string; balance: number; offBudget: boolean; iban?: string | null }[]; // iban: typed in the app, to copy
   fetchedAt: string;
   bankSyncedAt: string | null; // when the banks were last synced into Actual
   link: string | null; // where to open Actual

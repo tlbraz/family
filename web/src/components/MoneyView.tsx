@@ -142,7 +142,7 @@ export function MoneyView({ meName }: { meName: string }) {
 
       {data && (
         <>
-          <BalanceCard data={data} busy={busy} onRefresh={refresh} onOwed={() => setOwedOpen(true)} />
+          <BalanceCard data={data} busy={busy} onRefresh={refresh} onOwed={() => setOwedOpen(true)} onChanged={load} />
           <div className="month-bar">
             <button className="round ghost" aria-label="Previous month" disabled={at <= 0} onClick={() => go(-1)}>
               <Icon name="left" />
@@ -903,7 +903,7 @@ function IncomeCard({ data, onOpen }: { data: MoneySummary; onOpen: (source: str
 const saving = (d: MoneySummary) => d.accounts.filter((a) => a.offBudget && a.balance >= 0);
 const debts = (d: MoneySummary) => d.accounts.filter((a) => a.offBudget && a.balance < 0);
 
-function BalanceCard({ data, busy, onRefresh, onOwed }: { data: MoneySummary; busy: boolean; onRefresh: () => void; onOwed: () => void }) {
+function BalanceCard({ data, busy, onRefresh, onOwed, onChanged }: { data: MoneySummary; busy: boolean; onRefresh: () => void; onOwed: () => void; onChanged: () => void }) {
   const [showAll, setShowAll] = useState(false);
   const onBudget = data.accounts.filter((a) => !a.offBudget);
   const total = onBudget.reduce((s, a) => s + a.balance, 0);
@@ -932,7 +932,7 @@ function BalanceCard({ data, busy, onRefresh, onOwed }: { data: MoneySummary; bu
         <>
           <ul className="money-list">
             {onBudget.map((a) => (
-              <li key={a.name}><span>{a.name}</span><span className={`amt ${a.balance < 0 ? 'neg' : ''}`}>{eur(a.balance)}</span></li>
+              <AccountRow key={a.name} account={a} budget={data.budget} onChanged={onChanged} />
             ))}
           </ul>
           {data.link && (
@@ -941,6 +941,61 @@ function BalanceCard({ data, busy, onRefresh, onOwed }: { data: MoneySummary; bu
         </>
       )}
     </section>
+  );
+}
+
+/** An account with its balance and IBAN: tap the IBAN to copy it; the pencil adds or changes it. */
+function AccountRow({ account: a, budget, onChanged }: { account: MoneySummary['accounts'][number]; budget: MoneyBudget; onChanged: () => void }) {
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(a.iban ?? '');
+  const [copied, setCopied] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  async function copy() {
+    await navigator.clipboard?.writeText(a.iban!).catch(() => {});
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  }
+  async function save() {
+    setBusy(true);
+    setError(null);
+    try {
+      await api.saveIban(budget, a.name, value);
+      setEditing(false);
+      onChanged();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <li className="account-row">
+      <span>
+        {a.name}
+        {!editing && (a.iban ? (
+          <button className="iban" onClick={copy} aria-label={`Copy the IBAN of ${a.name}`}>
+            <Icon name={copied ? 'check' : 'copy'} size={14} /> {copied ? 'Copied' : a.iban.replace(/(.{4})(?=.)/g, '$1 ')}
+          </button>
+        ) : (
+          <button className="iban muted" onClick={() => setEditing(true)}>+ Add IBAN</button>
+        ))}
+      </span>
+      <span className="account-side">
+        <span className={`amt ${a.balance < 0 ? 'neg' : ''}`}>{eur(a.balance)}</span>
+        {a.iban && !editing && <button className="iban-edit" aria-label={`Change the IBAN of ${a.name}`} onClick={() => setEditing(true)}><Icon name="edit" size={14} /></button>}
+      </span>
+      {editing && (
+        <div className="iban-form">
+          <input value={value} onChange={(e) => setValue(e.target.value)} placeholder="PT50 0000 0000 0000 0000 0000 0" aria-label={`IBAN of ${a.name}`} autoCapitalize="characters" spellCheck={false} />
+          {error && <p className="error small">{error}</p>}
+          <div className="review-actions">
+            <button className="chip" disabled={busy} onClick={() => { setEditing(false); setValue(a.iban ?? ''); setError(null); }}>Cancel</button>
+            <button className="primary" disabled={busy} onClick={save}>{busy ? 'Saving…' : 'Save'}</button>
+          </div>
+        </div>
+      )}
+    </li>
   );
 }
 
