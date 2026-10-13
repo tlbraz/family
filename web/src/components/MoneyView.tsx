@@ -8,6 +8,9 @@ import { categoryIcon } from './categoryIcons';
 import { groupColours, splitGroup } from './moneyColours';
 import { Sheet } from './Sheet';
 
+// Bills (fixed vs variable) are paused while they get a new design: no card, sheet or "fixed expense" button.
+const SHOW_BILLS = false;
+
 
 type TopItem = MoneyGroup & { children?: MoneyGroup[] };
 function levels(data: MoneySummary) {
@@ -151,7 +154,7 @@ export function MoneyView({ meName }: { meName: string }) {
           </div>
           <div key={data.month} className={`money-cards slide ${slide}`} onAnimationEnd={() => setSlide('')}>
             <SpentCard data={data} />
-            <BillsCard data={data} onOpen={() => setBillsOpen(true)} />
+            {SHOW_BILLS && <BillsCard data={data} onOpen={() => setBillsOpen(true)} />}
             <ReviewCard review={data.review} onOpen={() => setReviewing(true)} />
             <TransfersCard data={data} budget={budget} onChanged={load} />
             <GroupsCard data={data} onOpen={(g) => (g.children?.length ? setOpenTop(g) : setOpen(g))} />
@@ -211,7 +214,7 @@ export function MoneyView({ meName }: { meName: string }) {
           </p>
         </Sheet>
       )}
-      {billsOpen && data?.bills && <BillsSheet data={data} onChanged={load} onClose={() => setBillsOpen(false)} />}
+      {SHOW_BILLS && billsOpen && data?.bills && <BillsSheet data={data} onChanged={load} onClose={() => setBillsOpen(false)} />}
       {holdingsOpen && <HoldingsSheet onClose={() => setHoldingsOpen(false)} onSaved={load} />}
       {reviewing && data && <ReviewSheet data={data} budget={budget} onChanged={load} onClose={() => setReviewing(false)} />}
     </div>
@@ -571,7 +574,7 @@ function TxEditor({ t, edit, onDone }: { t: MoneyTransaction; edit: Editing; onD
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Money going out (not money in, paid back or a transfer) can become a fixed expense: a bill, family budget only.
-  const fixed = t.amount > 0 && !['income', 'owed', 'transfer'].includes(t.groupId) ? fixedFor(t, edit.data) : null;
+  const fixed = SHOW_BILLS && t.amount > 0 && !['income', 'owed', 'transfer'].includes(t.groupId) ? fixedFor(t, edit.data) : null;
   const [fixing, setFixing] = useState(false);
   const change = {
     ...(editable(t) && pick && pick !== t.categoryId ? { category: pick } : {}),
