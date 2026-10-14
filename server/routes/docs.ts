@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import type { AuthEnv } from '../lib/auth';
 import { requireParent } from '../lib/auth';
-import { docDetail, docsMeta, paperlessEnabled, PaperlessError, paperlessFetch, searchDocs, updateDoc } from '../lib/paperless';
+import { docDetail, docsMeta, NotInInbox, paperlessEnabled, PaperlessError, paperlessFetch, rejectDoc, searchDocs, updateDoc } from '../lib/paperless';
 
 /** The Docs tab: Paperless, for parents only. */
 export function docRoutes() {
@@ -50,6 +50,18 @@ export function docRoutes() {
       await updateDoc(Number(c.req.param('id')), { tags, approve: b.approve === true });
       return c.json(await docDetail(Number(c.req.param('id'))));
     } catch (e) {
+      const f = fail(e);
+      return c.json({ error: f.error }, f.status);
+    }
+  });
+
+  // Reject a document in the inbox: it's deleted in Paperless (which keeps it in its trash for a while).
+  r.delete('/:id{[0-9]+}', async (c) => {
+    try {
+      await rejectDoc(Number(c.req.param('id')));
+      return c.body(null, 204);
+    } catch (e) {
+      if (e instanceof NotInInbox) return c.json({ error: e.message }, 400);
       const f = fail(e);
       return c.json({ error: f.error }, f.status);
     }

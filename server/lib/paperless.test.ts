@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { fieldText, forgetLookups, highlightParts, searchDocs, updateDoc } from './paperless';
+import { fieldText, forgetLookups, highlightParts, rejectDoc, searchDocs, updateDoc } from './paperless';
 
 const page = (results: unknown[]) => ({ count: results.length, results });
 const api: Record<string, unknown> = {
@@ -21,6 +21,8 @@ const api: Record<string, unknown> = {
 const fake = (async (url: string, init?: RequestInit) => {
   const { pathname, searchParams } = new URL(url);
   calls.push(`${init?.method ?? 'GET'} ${pathname}?${searchParams}`);
+  if (init?.method === 'DELETE') return new Response(null, { status: 204 });
+  if (pathname === '/api/documents/42/') return new Response(JSON.stringify({ id: 42, title: 'Approved', tags: [2] }));
   if (init?.method === 'PATCH') { sentBodies.push(JSON.parse(String(init.body))); return new Response('{}'); }
   if (pathname === '/api/documents/40/') return new Response(JSON.stringify((api['/api/documents/'] as { results: unknown[] }).results[0]));
   expect((init?.headers as Record<string, string>).Authorization).toBe('Token secret');
@@ -76,6 +78,14 @@ describe('paperless inbox', () => {
     expect(sentBodies.at(-1)).toEqual({ tags: [2] });
     await updateDoc(40, { tags: [1, 2, 2, 5] }, fake); // only tags are ever sent
     expect(sentBodies.at(-1)).toEqual({ tags: [1, 2, 5] });
+  });
+
+  it('rejecting deletes a document in the inbox, and nothing already approved', async () => {
+    await rejectDoc(40, fake);
+    expect(calls.at(-1)).toMatch(/^DELETE \/api\/documents\/40\//);
+    calls = [];
+    await expect(rejectDoc(42, fake)).rejects.toThrow('still in the inbox');
+    expect(calls.some((c) => c.startsWith('DELETE'))).toBe(false);
   });
 
   it('says which address it could not reach', async () => {

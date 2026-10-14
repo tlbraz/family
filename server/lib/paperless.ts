@@ -200,3 +200,16 @@ export async function updateDoc(id: number, change: DocChange, get: Fetch = fetc
   if (tags === undefined) return;
   await paperlessFetch(`/api/documents/${id}/`, get, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ tags: [...new Set(tags)] }) });
 }
+
+export class NotInInbox extends Error {}
+
+/**
+ * Rejects a document still in the inbox: deletes it in Paperless, which keeps it in its trash for a while (30 days
+ * by default) in case it was a mistake. Anything already approved is refused.
+ */
+export async function rejectDoc(id: number, get: Fetch = fetch) {
+  const inbox = inboxTagOf(await lookups(get));
+  const doc = await json<Doc>(`/api/documents/${id}/`, get);
+  if (!inbox || !doc.tags.includes(inbox.id)) throw new NotInInbox('Only documents still in the inbox can be rejected here');
+  await paperlessFetch(`/api/documents/${id}/`, get, { method: 'DELETE' });
+}

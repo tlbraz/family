@@ -109,6 +109,7 @@ export const api = {
     return request<DocsPage>(`/docs?${p}`);
   },
   doc: (id: number) => request<PaperlessDetail>(`/docs/${id}`),
+  rejectDoc: (id: number) => request<void>(`/docs/${id}`, json('DELETE')),
   saveDoc: (id: number, change: { tags?: number[]; approve?: boolean }) =>
     request<PaperlessDetail>(`/docs/${id}`, json('PATCH', change)),
   watchHealth: () => request<WatchHealth>('/watch/health'),

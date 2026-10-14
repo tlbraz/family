@@ -644,3 +644,7 @@ div.review-row { cursor: default; }
 .cat-row-name { flex: 1; }
 .cat-row.on { background: var(--soft); font-weight: 800; }
 .cat-row.on .cat-row-icon, .cat-row.on > svg { color: var(--accent); }
+
+.doc-reject { margin-right: auto; color: var(--danger); }
+.doc-reject-ask { margin-right: auto; }
+.doc-edit .review-actions .chip { white-space: nowrap; }

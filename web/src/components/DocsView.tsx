@@ -203,7 +203,7 @@ function DocSheet({ id, meta, onClose, onChanged }: { id: number; meta: DocsMeta
             <dt>Date</dt><dd>{shortDate(doc.created)}</dd>
             {doc.fields.map((f) => <Fragment key={f.name}><dt>{f.name}</dt><dd>{f.value}</dd></Fragment>)}
           </dl>
-          <TagEditor doc={doc} meta={meta} onSaved={(d, approved) => { setDoc(d); onChanged(approved); }} />
+          <TagEditor doc={doc} meta={meta} onSaved={(d, approved) => { setDoc(d); onChanged(approved); }} onRejected={() => onChanged(true)} />
 
           <dl className="doc-meta quiet">
             <dt>Added</dt><dd>{shortDate(doc.added)}</dd>
@@ -230,11 +230,12 @@ function DocSheet({ id, meta, onClose, onChanged }: { id: number; meta: DocsMeta
 }
 
 /** The tags (Paperless's suggestions one tap away) and, for the inbox, Approve. The only changes made from here. */
-function TagEditor({ doc, meta, onSaved }: { doc: PaperlessDetail; meta: DocsMeta; onSaved: (d: PaperlessDetail, approved: boolean) => void }) {
+function TagEditor({ doc, meta, onSaved, onRejected }: { doc: PaperlessDetail; meta: DocsMeta; onSaved: (d: PaperlessDetail, approved: boolean) => void; onRejected: () => void }) {
   const initial = doc.tagIds.filter((t) => t !== meta.inboxTag);
   const [tags, setTags] = useState<number[]>(initial);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [rejecting, setRejecting] = useState(false); // asking "delete it?"
   useEffect(() => setTags(doc.tagIds.filter((t) => t !== meta.inboxTag)), [doc, meta.inboxTag]);
   const changed = tags.length !== initial.length || tags.some((t) => !initial.includes(t));
   const name = (id: number) => meta.tags.find((x) => x.id === id)?.name ?? String(id);
@@ -249,6 +250,18 @@ function TagEditor({ doc, meta, onSaved }: { doc: PaperlessDetail; meta: DocsMet
     } catch (e) {
       setError((e as Error).message);
     } finally {
+      setBusy(false);
+    }
+  }
+
+  async function reject() {
+    setBusy(true);
+    setError(null);
+    try {
+      await api.rejectDoc(doc.id);
+      onRejected();
+    } catch (e) {
+      setError((e as Error).message);
       setBusy(false);
     }
   }
@@ -274,8 +287,15 @@ function TagEditor({ doc, meta, onSaved }: { doc: PaperlessDetail; meta: DocsMet
         </select>
       </div>
       {error && <p className="error small">{error}</p>}
-      {(changed || doc.inbox) && (
+      {rejecting ? (
         <div className="review-actions">
+          <span className="muted small doc-reject-ask">Delete it from Paperless?</span>
+          <button type="button" className="chip" disabled={busy} onClick={() => setRejecting(false)}>Keep</button>
+          <button type="button" className="chip danger" disabled={busy} onClick={() => void reject()}>{busy ? 'Deleting…' : 'Delete'}</button>
+        </div>
+      ) : (changed || doc.inbox) && (
+        <div className="review-actions">
+          {doc.inbox && <button type="button" className="chip doc-reject" disabled={busy} onClick={() => setRejecting(true)}>Reject</button>}
           {changed && <button type="button" className={doc.inbox ? 'chip' : 'primary'} disabled={busy} onClick={() => void save(false)}>{busy ? 'Saving…' : 'Save tags'}</button>}
           {doc.inbox && <button type="button" className="primary" disabled={busy} onClick={() => void save(true)}>{busy ? 'Saving…' : 'Approve ✓'}</button>}
         </div>
