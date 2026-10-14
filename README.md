@@ -53,8 +53,10 @@ Install it on a phone with *Share → Add to Home Screen*.
   `PAPERLESS_PUBLIC_URL` for browser links and `PAPERLESS_INBOX_TAG`, default "inbox"). Full-text search with the
   matches highlighted, filters by type, correspondent and tag; each document can be previewed, viewed, downloaded or
   opened in Paperless. The **Inbox** lists what's still tagged inbox: fix the tags if needed (Paperless's suggestions
-  are one tap away) and **Approve** takes the inbox tag off. Tags are the only thing changed from the app; nothing is
-  added. The token stays on the server; files go through the app. (This replaced the fridge notes tab.)
+  are one tap away) and **Approve** takes the inbox tag off. A **company expense** (tag `Expense` or one under it) also
+  gets its date and amount: the fields open by themselves when the QR code wasn't read (no `Amount`, or tagged
+  `Date missing`); saving sets the date, `Period` and `Amount` and takes `Date missing` off. Nothing else is changed
+  from the app, and nothing is added. The token stays on the server; files go through the app. (This replaced the fridge notes tab.)
 - **Entertainment** tab ("Watch", parents only): films and series that are out **digitally** (TMDB release type 4,
   US dates: when they show up online) in the last 45 days, coming in the next 90, or popular this week; TV by season
   premiere. Genre chips, a poster grid that loads as you scroll, and a badge for what's in the library, downloading or

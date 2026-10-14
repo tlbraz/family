@@ -609,6 +609,9 @@ div.review-row { cursor: default; }
 .doc-suggest { display: flex; flex-wrap: wrap; gap: 4px; }
 .paper-chip.sug { border: 1px dashed var(--line); background: var(--card); color: var(--muted); font: inherit; font-size: 0.78rem; font-weight: 700; cursor: pointer; }
 .paper-chip.on { border: 0; background: var(--ink); color: var(--card); font: inherit; font-size: 0.78rem; font-weight: 700; cursor: pointer; }
+.doc-expense { display: flex; flex-direction: column; gap: 6px; }
+.doc-expense p { margin: 0; }
+.doc-expense-open { align-self: flex-start; }
 
 /* Category picker: a field, and a panel with the tree that slides up softly */
 .cat-field { display: flex; align-items: center; gap: 10px; width: 100%; padding: 10px 12px; border-radius: 14px; border: 1px solid var(--line); background: var(--card); color: var(--ink); font: inherit; text-align: left; cursor: pointer; transition: border-color 0.15s, background 0.15s; }

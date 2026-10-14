@@ -1,6 +1,6 @@
 import type { DocsMeta, DocsPage, PaperlessDetail, PaperlessDoc } from '../../shared/types';
 
-// Paperless-ngx behind the Docs tab. Reading, plus changing tags.
+// Paperless-ngx behind the Docs tab. Reading, plus changing tags (and, for company expenses, the date and amount).
 //   PAPERLESS_URL         where the server reaches Paperless (e.g. http://paperless.lan:8000)
 //   PAPERLESS_TOKEN       an API token (Paperless → your profile → API Auth Token)
 //   PAPERLESS_PUBLIC_URL  the address to open documents in the browser (default PAPERLESS_URL)
@@ -11,6 +11,13 @@ type Fetch = typeof fetch;
 export const paperlessEnabled = () => !!(process.env.PAPERLESS_URL && process.env.PAPERLESS_TOKEN);
 const base = () => process.env.PAPERLESS_URL!.replace(/\/+$/, '');
 const publicBase = () => (process.env.PAPERLESS_PUBLIC_URL || process.env.PAPERLESS_URL!).replace(/\/+$/, '');
+
+// Names from our Paperless setup (the QR reader uses the same ones). A company expense is anything under the Expense
+// tag; when its QR code can't be read there's no Amount, or only a placeholder date tagged "Date missing".
+const EXPENSE_TAG = 'Expense';
+const DATE_MISSING_TAG = 'Date missing';
+const AMOUNT_FIELD = 'Amount';
+const PERIOD_FIELD = 'Period'; // YYYY-MM, follows the date
 
 export class PaperlessError extends Error {}
 
@@ -33,7 +40,7 @@ export async function paperlessFetch(path: string, get: Fetch = fetch, init: Req
 const json = async <T>(path: string, get: Fetch, init?: RequestInit) => (await (await paperlessFetch(path, get, init)).json()) as T;
 
 interface Page<T> { count: number; next: string | null; results: T[] }
-interface Named { id: number; name: string; color?: string }
+interface Named { id: number; name: string; color?: string; parent?: number | null }
 interface Field extends Named { data_type: string; extra_data?: { select_options?: (string | { id: string; label: string })[]; default_currency?: string } }
 interface Doc {
   id: number; title: string; correspondent: number | null; document_type: number | null; tags: number[];
@@ -100,6 +107,7 @@ const inboxTagOf = (n: Lookups) => {
   const name = (process.env.PAPERLESS_INBOX_TAG || 'inbox').toLowerCase();
   return n.tags.find((t) => t.name.toLowerCase() === name) ?? null;
 };
+const named = <T extends Named>(list: T[], name: string) => list.find((x) => x.name.toLowerCase() === name.toLowerCase()) ?? null;
 const sortByName = (list: Named[]) => [...list].sort((a, b) => a.name.localeCompare(b.name, 'pt'));
 
 function toDoc(d: Doc, n: Lookups, inboxId: number | null): PaperlessDoc {
@@ -136,10 +144,11 @@ export async function docsMeta(get: Fetch = fetch): Promise<DocsMeta> {
   const n = await lookups(get);
   const inbox = inboxTagOf(n);
   return {
-    tags: sortByName(n.tags).map(({ id, name }) => ({ id, name })),
+    tags: sortByName(n.tags).map(({ id, name, parent }) => ({ id, name, parent: parent ?? null })),
     correspondents: sortByName(n.correspondents).map(({ id, name }) => ({ id, name })),
     types: sortByName(n.types).map(({ id, name }) => ({ id, name })),
     inboxTag: inbox?.id ?? null,
+    expenseTag: named(n.tags, EXPENSE_TAG)?.id ?? null,
     url: publicBase(),
   };
 }
@@ -170,6 +179,8 @@ export async function docDetail(id: number, get: Fetch = fetch): Promise<Paperle
     json<Doc>(`/api/documents/${id}/`, get),
     json<{ correspondents?: number[]; tags?: number[]; document_types?: number[]; dates?: string[] }>(`/api/documents/${id}/suggestions/`, get).catch(() => ({}) as Record<string, undefined>),
   ]);
+  const amount = d.custom_fields?.find((f) => f.field === named(n.fields, AMOUNT_FIELD)?.id)?.value;
+  const euros = typeof amount === 'string' ? amount.match(/^(?:[A-Z]{3})?(-?[\d.]+)$/) : null;
   const pick = (list: Named[], ids: number[] | undefined) => (ids ?? []).map((i) => list.find((x) => x.id === i)).filter((x): x is Named => !!x).map(({ id, name }) => ({ id, name }));
   return {
     ...toDoc(d, n, inbox?.id ?? null),
@@ -177,6 +188,8 @@ export async function docDetail(id: number, get: Fetch = fetch): Promise<Paperle
     mime: d.mime_type ?? null,
     filename: d.original_file_name ?? null,
     notes: (d.notes ?? []).map((x) => ({ note: x.note, created: x.created })),
+    amount: euros ? Number(euros[1]) : null,
+    dateMissing: d.tags.includes(named(n.tags, DATE_MISSING_TAG)?.id ?? -1),
     suggestions: {
       correspondents: pick(n.correspondents, s.correspondents),
       types: pick(n.types, s.document_types),
@@ -186,19 +199,34 @@ export async function docDetail(id: number, get: Fetch = fetch): Promise<Paperle
   };
 }
 
-export interface DocChange { tags?: number[]; approve?: boolean }
+export interface DocChange { tags?: number[]; approve?: boolean; created?: string; amount?: number }
 
-/** Changes a document's tags; "approve" takes the inbox tag off. Nothing else is changed from the app. */
+/**
+ * Changes a document's tags; "approve" takes the inbox tag off. For a receipt whose QR code couldn't be read, the date
+ * (Period follows it, "Date missing" comes off) and the Amount can be put in by hand. Nothing else is changed.
+ */
 export async function updateDoc(id: number, change: DocChange, get: Fetch = fetch) {
   const n = await lookups(get);
   const inbox = inboxTagOf(n);
-  let tags = change.tags;
-  if (change.approve) {
-    tags ??= (await json<Doc>(`/api/documents/${id}/`, get)).tags;
-    tags = tags.filter((t) => t !== inbox?.id);
-  }
-  if (tags === undefined) return;
-  await paperlessFetch(`/api/documents/${id}/`, get, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ tags: [...new Set(tags)] }) });
+  const dated = change.created !== undefined;
+  const amountField = named(n.fields, AMOUNT_FIELD);
+  const periodField = named(n.fields, PERIOD_FIELD);
+  if (change.amount !== undefined && !amountField) throw new PaperlessError(`Paperless has no custom field called "${AMOUNT_FIELD}"`);
+  const doc = change.approve || dated || change.amount !== undefined ? await json<Doc>(`/api/documents/${id}/`, get) : null;
+  let tags = change.tags ?? (change.approve || dated ? doc!.tags : undefined);
+  if (change.approve) tags = tags!.filter((t) => t !== inbox?.id);
+  if (dated) tags = tags!.filter((t) => t !== named(n.tags, DATE_MISSING_TAG)?.id);
+
+  const patch: { tags?: number[]; created?: string; custom_fields?: { field: number; value: unknown }[] } = {};
+  if (tags !== undefined) patch.tags = [...new Set(tags)];
+  if (dated) patch.created = change.created;
+  // Paperless replaces the whole list of custom fields: send the others back as they are.
+  const values = new Map((doc?.custom_fields ?? []).map((f) => [f.field, f.value]));
+  if (change.amount !== undefined) values.set(amountField!.id, `${amountField!.extra_data?.default_currency || 'EUR'}${change.amount.toFixed(2)}`);
+  if (dated && periodField) values.set(periodField.id, change.created!.slice(0, 7));
+  if (change.amount !== undefined || (dated && periodField)) patch.custom_fields = [...values].map(([field, value]) => ({ field, value }));
+  if (!Object.keys(patch).length) return;
+  await paperlessFetch(`/api/documents/${id}/`, get, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify(patch) });
 }
 
 export class NotInInbox extends Error {}

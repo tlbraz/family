@@ -1,11 +1,13 @@
 import { Fragment, useCallback, useEffect, useState } from 'react';
 import type { DocsMeta, DocsName, PaperlessDetail, PaperlessDoc } from '../../../shared/types';
 import { api } from '../api';
+import { ExpenseFields, expenseChange, expenseInput, isExpense, parseAmount } from './DocExpense';
 import { Icon } from './Icon';
 import { Sheet } from './Sheet';
 
 // The Docs tab: Paperless in the app. Search, look at and download documents, change their tags and approve what's
-// in the inbox. Nothing is added or otherwise edited from here. Parents only; the token stays on the server.
+// in the inbox; a company expense's date and amount when its QR code wasn't read. Nothing is added or otherwise
+// edited from here. Parents only; the token stays on the server.
 
 const shortDate = (d: string) => new Date(`${d.slice(0, 10)}T12:00`).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 type Filters = { tag?: number; type?: number; correspondent?: number };
@@ -229,15 +231,26 @@ function DocSheet({ id, meta, onClose, onChanged }: { id: number; meta: DocsMeta
   );
 }
 
-/** The tags (Paperless's suggestions one tap away) and, for the inbox, Approve. The only changes made from here. */
+/**
+ * The tags (Paperless's suggestions one tap away), a company expense's date and amount, and, for the inbox, Approve.
+ * The only changes made from here.
+ */
 function TagEditor({ doc, meta, onSaved, onRejected }: { doc: PaperlessDetail; meta: DocsMeta; onSaved: (d: PaperlessDetail, approved: boolean) => void; onRejected: () => void }) {
   const initial = doc.tagIds.filter((t) => t !== meta.inboxTag);
   const [tags, setTags] = useState<number[]>(initial);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [rejecting, setRejecting] = useState(false); // asking "delete it?"
-  useEffect(() => setTags(doc.tagIds.filter((t) => t !== meta.inboxTag)), [doc, meta.inboxTag]);
-  const changed = tags.length !== initial.length || tags.some((t) => !initial.includes(t));
+  const [expense, setExpense] = useState(() => expenseInput(doc));
+  useEffect(() => {
+    setTags(doc.tagIds.filter((t) => t !== meta.inboxTag));
+    setExpense(expenseInput(doc));
+  }, [doc, meta.inboxTag]);
+  const tagsChanged = tags.length !== initial.length || tags.some((t) => !initial.includes(t));
+  const expenseNow = isExpense(tags, meta);
+  const extra = expenseNow ? expenseChange(doc, expense) : {};
+  const badAmount = expenseNow && !!expense.amount.trim() && !parseAmount(expense.amount);
+  const changed = tagsChanged || Object.keys(extra).length > 0;
   const name = (id: number) => meta.tags.find((x) => x.id === id)?.name ?? String(id);
 
   async function save(approve: boolean) {
@@ -246,7 +259,7 @@ function TagEditor({ doc, meta, onSaved, onRejected }: { doc: PaperlessDetail; m
     try {
       // Keep the inbox tag unless approving (the server takes it off then).
       const keep = doc.inbox && !approve && meta.inboxTag ? [...tags, meta.inboxTag] : tags;
-      onSaved(await api.saveDoc(doc.id, { tags: keep, approve }), approve);
+      onSaved(await api.saveDoc(doc.id, { tags: keep, approve, ...extra }), approve);
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -286,6 +299,7 @@ function TagEditor({ doc, meta, onSaved, onRejected }: { doc: PaperlessDetail; m
           {meta.tags.filter((t) => t.id !== meta.inboxTag && !tags.includes(t.id)).map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
         </select>
       </div>
+      {expenseNow && <ExpenseFields doc={doc} value={expense} onChange={setExpense} />}
       {error && <p className="error small">{error}</p>}
       {rejecting ? (
         <div className="review-actions">
@@ -296,8 +310,8 @@ function TagEditor({ doc, meta, onSaved, onRejected }: { doc: PaperlessDetail; m
       ) : (changed || doc.inbox) && (
         <div className="review-actions">
           {doc.inbox && <button type="button" className="chip doc-reject" disabled={busy} onClick={() => setRejecting(true)}>Reject</button>}
-          {changed && <button type="button" className={doc.inbox ? 'chip' : 'primary'} disabled={busy} onClick={() => void save(false)}>{busy ? 'Saving…' : 'Save tags'}</button>}
-          {doc.inbox && <button type="button" className="primary" disabled={busy} onClick={() => void save(true)}>{busy ? 'Saving…' : 'Approve ✓'}</button>}
+          {changed && <button type="button" className={doc.inbox ? 'chip' : 'primary'} disabled={busy || badAmount} onClick={() => void save(false)}>{busy ? 'Saving…' : tagsChanged && !Object.keys(extra).length ? 'Save tags' : 'Save'}</button>}
+          {doc.inbox && <button type="button" className="primary" disabled={busy || badAmount} onClick={() => void save(true)}>{busy ? 'Saving…' : 'Approve ✓'}</button>}
         </div>
       )}
     </div>

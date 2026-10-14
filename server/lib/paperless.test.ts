@@ -1,14 +1,16 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { fieldText, forgetLookups, highlightParts, rejectDoc, searchDocs, updateDoc } from './paperless';
+import { docDetail, docsMeta, fieldText, forgetLookups, highlightParts, rejectDoc, searchDocs, updateDoc } from './paperless';
 
 const page = (results: unknown[]) => ({ count: results.length, results });
 const api: Record<string, unknown> = {
-  '/api/tags/': page([{ id: 1, name: 'Inbox' }, { id: 2, name: 'Empresa' }]),
+  '/api/tags/': page([{ id: 1, name: 'Inbox' }, { id: 2, name: 'Empresa' }, { id: 4, name: 'Expense', parent: 2 }, { id: 5, name: 'Restaurants', parent: 4 }, { id: 6, name: 'Date missing' }]),
   '/api/correspondents/': page([{ id: 7, name: 'Continente' }]),
   '/api/document_types/': page([{ id: 3, name: 'Fatura' }]),
   '/api/custom_fields/': page([
     { id: 1, name: 'Total', data_type: 'monetary', extra_data: { default_currency: 'EUR' } },
     { id: 2, name: 'Paid', data_type: 'select', extra_data: { select_options: [{ id: 'a1', label: 'Company card' }, { id: 'b2', label: 'Personal' }] } },
+    { id: 3, name: 'Amount', data_type: 'monetary', extra_data: { default_currency: 'EUR' } },
+    { id: 4, name: 'Period', data_type: 'string' },
   ]),
   '/api/documents/': {
     count: 12,
@@ -24,12 +26,16 @@ const fake = (async (url: string, init?: RequestInit) => {
   if (init?.method === 'DELETE') return new Response(null, { status: 204 });
   if (pathname === '/api/documents/42/') return new Response(JSON.stringify({ id: 42, title: 'Approved', tags: [2] }));
   if (init?.method === 'PATCH') { sentBodies.push(JSON.parse(String(init.body))); return new Response('{}'); }
+  if (pathname === '/api/documents/43/') return new Response(JSON.stringify(receipt));
+  if (pathname === '/api/documents/44/') return new Response(JSON.stringify({ ...receipt, id: 44, tags: [2, 4], custom_fields: [{ field: 3, value: 'EUR144.55' }] }));
   if (pathname === '/api/documents/40/') return new Response(JSON.stringify((api['/api/documents/'] as { results: unknown[] }).results[0]));
   expect((init?.headers as Record<string, string>).Authorization).toBe('Token secret');
   expect((init?.headers as Record<string, string>).Accept).toBe('application/json; version=9'); // Paperless 3 takes 9 and 10
   const body = api[pathname];
   return new Response(JSON.stringify(body ?? {}), { status: body ? 200 : 404 });
 }) as typeof fetch;
+// A phone photo of a restaurant receipt: QR not read, so no Amount and a placeholder date.
+const receipt = { id: 43, title: 'IMG_0412', correspondent: null, document_type: null, tags: [1, 2, 4, 5, 6], created: '2026-10-01', added: '2026-10-01T09:00:00Z', custom_fields: [{ field: 2, value: 'a1' }] };
 let calls: string[] = [];
 let sentBodies: unknown[] = [];
 
@@ -78,6 +84,30 @@ describe('paperless inbox', () => {
     expect(sentBodies.at(-1)).toEqual({ tags: [2] });
     await updateDoc(40, { tags: [1, 2, 2, 5] }, fake); // only tags are ever sent
     expect(sentBodies.at(-1)).toEqual({ tags: [1, 2, 5] });
+  });
+
+  it('gives the tag tree and which tag marks company expenses', async () => {
+    const meta = await docsMeta(fake);
+    expect(meta.expenseTag).toBe(4);
+    expect(meta.tags.find((t) => t.name === 'Restaurants')).toEqual({ id: 5, name: 'Restaurants', parent: 4 });
+    expect(meta.tags.find((t) => t.name === 'Inbox')).toEqual({ id: 1, name: 'Inbox', parent: null });
+  });
+
+  it("says when an expense has no amount or only a placeholder date", async () => {
+    expect(await docDetail(43, fake)).toMatchObject({ amount: null, dateMissing: true, created: '2026-10-01' });
+    expect(await docDetail(44, fake)).toMatchObject({ amount: 144.55, dateMissing: false });
+  });
+
+  it("puts in a receipt's date and amount by hand, keeping its other fields", async () => {
+    await updateDoc(43, { tags: [1, 2, 4, 5, 6], created: '2026-09-13', amount: 144.55 }, fake);
+    expect(calls.at(-1)).toMatch(/^PATCH \/api\/documents\/43\//);
+    expect(sentBodies.at(-1)).toEqual({
+      tags: [1, 2, 4, 5], // "Date missing" comes off; still in the inbox
+      created: '2026-09-13',
+      custom_fields: [{ field: 2, value: 'a1' }, { field: 3, value: 'EUR144.55' }, { field: 4, value: '2026-09' }],
+    });
+    await updateDoc(43, { approve: true, amount: 12 }, fake); // just the amount: the date and its tag stay
+    expect(sentBodies.at(-1)).toEqual({ tags: [2, 4, 5, 6], custom_fields: [{ field: 2, value: 'a1' }, { field: 3, value: 'EUR12.00' }] });
   });
 
   it('rejecting deletes a document in the inbox, and nothing already approved', async () => {

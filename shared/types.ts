@@ -306,6 +306,8 @@ export interface PaperlessDetail extends PaperlessDoc {
   mime: string | null;
   filename: string | null;
   notes: { note: string; created: string }[];
+  amount: number | null; // the Amount field, in euros (none when the QR code wasn't read)
+  dateMissing: boolean; // tagged "Date missing": the date is only a placeholder
   suggestions: { correspondents: DocsName[]; types: DocsName[]; tags: DocsName[]; dates: string[] };
 }
 
@@ -314,11 +316,16 @@ export interface DocsName {
   name: string;
 }
 
+export interface DocsTag extends DocsName {
+  parent: number | null;
+}
+
 export interface DocsMeta {
-  tags: DocsName[];
+  tags: DocsTag[];
   correspondents: DocsName[];
   types: DocsName[];
   inboxTag: number | null;
+  expenseTag: number | null; // company expenses: this tag or one under it
   url: string; // Paperless in the browser
 }
 

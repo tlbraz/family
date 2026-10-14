@@ -41,13 +41,17 @@ export function docRoutes() {
     }
   });
 
-  // Change the tags, and/or approve (take it out of the inbox). Nothing else is edited from here.
+  // Change the tags, and/or approve (take it out of the inbox); for a receipt whose QR wasn't read, its date and amount.
   r.patch('/:id{[0-9]+}', async (c) => {
     const b = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
     const tags = Array.isArray(b.tags) && b.tags.every((t) => Number.isInteger(t)) ? (b.tags as number[]) : undefined;
-    if (tags === undefined && b.approve !== true) return c.json({ error: 'Nothing to change' }, 400);
+    const isDay = (s: unknown): s is string => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s) && new Date(`${s}T12:00Z`).getUTCDate() === Number(s.slice(8));
+    const created = isDay(b.created) ? b.created : undefined;
+    const amount = typeof b.amount === 'number' && b.amount > 0 && b.amount < 1e7 ? Math.round(b.amount * 100) / 100 : undefined;
+    if ((b.created !== undefined && !created) || (b.amount !== undefined && amount === undefined)) return c.json({ error: 'Not a valid date or amount' }, 400);
+    if (tags === undefined && b.approve !== true && !created && amount === undefined) return c.json({ error: 'Nothing to change' }, 400);
     try {
-      await updateDoc(Number(c.req.param('id')), { tags, approve: b.approve === true });
+      await updateDoc(Number(c.req.param('id')), { tags, approve: b.approve === true, created, amount });
       return c.json(await docDetail(Number(c.req.param('id'))));
     } catch (e) {
       const f = fail(e);
