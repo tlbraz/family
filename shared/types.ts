@@ -249,6 +249,11 @@ export interface MoneySummary {
     open: MoneyTransaction[]; // the expenses not paid back yet (amount = what's left), newest first
     recent: MoneyTransaction[]; // the latest payments and money back, newest first (money back < 0)
   } | null;
+  // Someone else's money passing through (categories in "A entregar"); neither income nor spending.
+  held: {
+    total: number; // still to hand over (cents; below zero if more was handed over than came in)
+    recent: MoneyTransaction[]; // the latest money in and hand-overs, newest first (money in < 0)
+  } | null;
   bills: MoneyBills | null; // family budget only
   // Fixed expenses (the month's bills) against the rest of the spending. Family budget only. Cents.
   fixed: {

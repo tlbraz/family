@@ -33,6 +33,10 @@ Install it on a phone with *Share → Add to Home Screen*.
   Available balance first, then spending this month vs. usual, by category group (tap for categories and transactions),
   what came in, and transactions tagged `#review`: pick a category (or "Looks fine") and the tag comes out, in Actual. Reads Actual every 20 min and asks it to sync the banks at 07:00, 13:00 and 19:00
   (`ACTUAL_BANK_SYNC=off` to stop). Swipe to change month.
+- **Money that isn't ours** (Money tab): categories in an `A receber` group (or named "Reembolso…") are paid for
+  someone else and come back; categories in an `A entregar` group are someone else's money passing through (raffle
+  tickets sold, a collection) until it's handed over. Neither counts as income or spending; the balance card shows
+  "+ € to come back" and "− € to hand over".
 - **Three levels of categories** on the Money tab, by name: a group called `Casa / Energia` sits under **Casa** in
   the donut (tap Casa → Energia → its categories). Groups without a `/` stay on their own; colours go by the top level.
 - **Bills & subscriptions** (Money tab, family budget): payments to the same payee in 3 of the last 4 months around

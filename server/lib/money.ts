@@ -39,6 +39,8 @@ export interface Snapshot {
   review: { id: string; accountId: string; fixable: boolean; parentId?: string | null; splitFrom?: string | null; splitTotal?: number | null; note?: string | null; date: string; amount: number; account: string; category: string | null; payee: string }[]; // tagged #review
   /** Every transaction ever in a "to be reimbursed" category (see reimbursable), oldest first. */
   owed?: Snapshot['tx'];
+  /** Every transaction ever in a "someone else's money" category (see heldForOthers), oldest first. */
+  held?: Snapshot['tx'];
   /** Recent plain transactions in any account (not transfers or splits), to spot transfers between our accounts. */
   loose?: { id: string; accountId: string; account: string; offBudget: boolean; date: string; amount: number; payee: string; note: string | null; category: string | null }[];
 }
@@ -53,6 +55,14 @@ export function reimbursable(groups: Snapshot['groups']): Set<string> {
       .filter((g) => !g.income)
       .flatMap((g) => g.categories.filter((c) => /^a receber$/i.test(g.name.trim()) || /reembols/i.test(c.name)).map((c) => c.id)),
   );
+}
+
+/**
+ * Someone else's money that only passes through our accounts (raffle tickets sold for the school, a collection…):
+ * the categories in a group called "A entregar". Neither income nor spending; what's left in them is to hand over.
+ */
+export function heldForOthers(groups: Snapshot['groups']): Set<string> {
+  return new Set(groups.filter((g) => !g.income && /^a entregar$/i.test(g.name.trim())).flatMap((g) => g.categories.map((c) => c.id)));
 }
 
 /** Which expenses haven't come back yet: money back pays off the oldest first. Amounts as in Actual (out < 0). */
@@ -121,7 +131,9 @@ async function load(budget: MoneyBudget, bankSync: boolean): Promise<Snapshot> {
     categories: (g.categories ?? []).map((c) => ({ id: c.id, name: c.name })),
   }));
   const owedCats = reimbursable(groups);
+  const heldCats = heldForOthers(groups);
   const owed: Snapshot['tx'] = [];
+  const held: Snapshot['tx'] = [];
   const loose: NonNullable<Snapshot['loose']> = [];
   const since = new Date();
   since.setDate(since.getDate() - 45);
@@ -161,9 +173,10 @@ async function load(budget: MoneyBudget, bankSync: boolean): Promise<Snapshot> {
       if (t.transfer_id || t.starting_balance_flag || t.is_child) continue;
       const split = !!t.subtransactions?.length;
       for (const p of split ? t.subtransactions! : [t]) {
-        if (!p.category || !owedCats.has(p.category)) continue;
+        const list = !p.category ? null : owedCats.has(p.category) ? owed : heldCats.has(p.category) ? held : null;
+        if (!list || !p.category) continue;
         const payee = (t.payee && payees.get(t.payee)) || t.imported_payee || '';
-        owed.push({ id: p.id, accountId: a.id, fixable: !split, parentId: split ? t.id : null, ...(split ? { splitFrom: t.imported_payee || payee || null, splitTotal: t.amount } : {}), review: REVIEW_TAG.test(p.notes ?? ''), note: descriptionOf(p.notes, t.imported_payee, payee), date: t.date, amount: p.amount, account: a.name, category: p.category, payee });
+        list.push({ id: p.id, accountId: a.id, fixable: !split, parentId: split ? t.id : null, ...(split ? { splitFrom: t.imported_payee || payee || null, splitTotal: t.amount } : {}), review: REVIEW_TAG.test(p.notes ?? ''), note: descriptionOf(p.notes, t.imported_payee, payee), date: t.date, amount: p.amount, account: a.name, category: p.category, payee });
       }
     }
     for (const t of await api.getTransactions(a.id, start, end)) {
@@ -194,7 +207,8 @@ async function load(budget: MoneyBudget, bankSync: boolean): Promise<Snapshot> {
   const synced = bankLinks.map((a) => a.lastSync).filter((d): d is string => !!d).sort();
   const bankSyncedAt = synced.at(-1) ?? null;
   owed.sort((x, y) => x.date.localeCompare(y.date));
-  return { fetchedAt: new Date().toISOString(), accounts, groups, tx, dataFrom, review, bankSyncedAt, bankLinks, owed, loose };
+  held.sort((x, y) => x.date.localeCompare(y.date));
+  return { fetchedAt: new Date().toISOString(), accounts, groups, tx, dataFrom, review, bankSyncedAt, bankLinks, owed, held, loose };
 }
 
 /** Fetches every configured budget. Called on a timer and, the first time, by the page. */
@@ -235,7 +249,7 @@ export function descriptionOf(notes: string | null | undefined, imported: string
 export function editTransaction(budget: MoneyBudget, id: string, change: { category?: string; review?: boolean; note?: string; noteRule?: boolean }) {
   return serial(async () => {
     const snap = snapshots.get(budget);
-    const item = snap?.tx.find((t) => t.id === id) ?? snap?.review.find((t) => t.id === id) ?? snap?.owed?.find((t) => t.id === id);
+    const item = snap?.tx.find((t) => t.id === id) ?? snap?.review.find((t) => t.id === id) ?? snap?.owed?.find((t) => t.id === id) ?? snap?.held?.find((t) => t.id === id);
     if (!snap || !item) throw new ReviewError('That transaction is no longer here; pull to refresh');
     if (change.category !== undefined) {
       if (!item.fixable && !item.parentId) throw new ReviewError('Change the category of transfers in Actual');
@@ -311,10 +325,10 @@ async function rewriteSplit(api: Api, all: Awaited<ReturnType<Api['getTransactio
 /**
  * Money that left one of our accounts and arrived in another (same amount, within a few days) but that Actual
  * didn't link as a transfer: each bank imports its own side. Closest dates pair first; money for someone else
- * ("A receber") and pairs marked "Not a transfer" are left alone.
+ * ("A receber", "A entregar") and pairs marked "Not a transfer" are left alone.
  */
 export function transferPairs(snap: Snapshot, ignored: string[] = []) {
-  const skip = reimbursable(snap.groups);
+  const skip = new Set([...reimbursable(snap.groups), ...heldForOthers(snap.groups)]);
   const loose = (snap.loose ?? []).filter((t) => !(t.category && skip.has(t.category)));
   const days = (a: string, b: string) => Math.abs(new Date(`${a}T12:00`).getTime() - new Date(`${b}T12:00`).getTime()) / 86_400_000;
   const candidates = loose
@@ -390,7 +404,7 @@ export function splitParts(amount: number, parts: SplitPart[], categories: Set<s
 export function splitTransaction(budget: MoneyBudget, id: string, parts: SplitPart[]) {
   return serial(async () => {
     const snap = snapshots.get(budget);
-    const item = snap?.tx.find((t) => t.id === id) ?? snap?.review.find((t) => t.id === id) ?? snap?.owed?.find((t) => t.id === id);
+    const item = snap?.tx.find((t) => t.id === id) ?? snap?.review.find((t) => t.id === id) ?? snap?.owed?.find((t) => t.id === id) ?? snap?.held?.find((t) => t.id === id);
     if (!snap || !item) throw new ReviewError('That transaction is no longer here; pull to refresh');
     if (!item.fixable && !item.parentId) throw new ReviewError('That one is a transfer: change it in Actual');
     const known = new Set(snap.groups.flatMap((g) => g.categories.map((c) => c.id)));
@@ -539,9 +553,11 @@ export function summarise(snap: Snapshot, budget: MoneyBudget, budgets: MoneyBud
   for (const g of snap.groups) for (const c of g.categories) groupOf.set(c.id, { groupId: g.id, groupName: g.name, name: c.name });
 
   // Spending: expenses count, refunds in an expense category count back; income and unknown money in don't.
-  // Money paid for someone else that comes back (e.g. the company) isn't household spending either.
+  // Money paid for someone else that comes back (e.g. the company) isn't household spending either, and neither is
+  // someone else's money passing through (raffle tickets sold, then handed over).
   const owedCats = reimbursable(snap.groups);
-  const spending = snap.tx.filter((t) => (t.category ? !incomeCats.has(t.category) && !owedCats.has(t.category) : t.amount < 0));
+  const heldCats = heldForOthers(snap.groups);
+  const spending = snap.tx.filter((t) => (t.category ? !incomeCats.has(t.category) && !owedCats.has(t.category) && !heldCats.has(t.category) : t.amount < 0));
   const usedCats = new Set(spending.map((t) => t.category));
   // Money in: income categories, and money in without a category (shown apart, it may be a refund or a transfer).
   const catName = new Map(snap.groups.flatMap((g) => g.categories.map((c) => [c.id, c.name] as const)));
@@ -581,6 +597,8 @@ export function summarise(snap: Snapshot, budget: MoneyBudget, budgets: MoneyBud
     .sort((a, b) => (a.id === 'uncategorised' ? 1 : b.id === 'uncategorised' ? -1 : b.amount - a.amount));
 
   const bills = budget === 'family' ? billsFor(snap, month, today, billOverrides) : null;
+  // A transaction from the owed/held lists, as the page shows it (amount: out > 0).
+  const listed = (t: Snapshot['tx'][number], amount: number, groupId: string): MoneyTransaction => ({ id: t.id, categoryId: t.category, fixable: t.fixable, splitOf: t.parentId ?? null, splitFrom: t.splitFrom ?? null, splitTotal: t.splitTotal == null ? null : -t.splitTotal, review: t.review, note: t.note, date: t.date, payee: t.payee, account: t.account, groupId, category: (t.category && catName.get(t.category)) || '', amount });
 
   const first = snap.dataFrom ? monthKey(snap.dataFrom) : current;
   const months: string[] = [];
@@ -636,12 +654,17 @@ export function summarise(snap: Snapshot, budget: MoneyBudget, budgets: MoneyBud
     owed: (() => {
       const items = snap.owed ?? [];
       if (!owedCats.size || !items.length) return null;
-      const tx = (t: Snapshot['tx'][number], amount: number) => ({ id: t.id, categoryId: t.category, fixable: t.fixable, splitOf: t.parentId ?? null, splitFrom: t.splitFrom ?? null, splitTotal: t.splitTotal == null ? null : -t.splitTotal, review: t.review, note: t.note, date: t.date, payee: t.payee, account: t.account, groupId: 'owed', category: (t.category && catName.get(t.category)) || '', amount });
+      const tx = (t: Snapshot['tx'][number], amount: number) => listed(t, amount, 'owed');
       return {
         total: -items.reduce((s, t) => s + t.amount, 0),
         open: stillOwed(items).map((t) => tx(t, t.left)).reverse(),
         recent: items.slice(-30).reverse().map((t) => tx(t, -t.amount)),
       };
+    })(),
+    held: (() => {
+      const items = snap.held ?? [];
+      if (!heldCats.size || !items.length) return null;
+      return { total: items.reduce((s, t) => s + t.amount, 0), recent: items.slice(-30).reverse().map((t) => listed(t, -t.amount, 'held')) };
     })(),
     bills,
     fixed: bills?.bills.length ? fixedVsVariable(bills, spending.filter((t) => monthKey(t.date) === month)) : null,

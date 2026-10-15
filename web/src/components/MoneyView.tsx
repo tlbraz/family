@@ -71,6 +71,7 @@ export function MoneyView({ meName }: { meName: string }) {
   const [source, setSource] = useState<string | null>(null); // an income source, to list its transactions
   const [holdingsOpen, setHoldingsOpen] = useState(false);
   const [owedOpen, setOwedOpen] = useState(false);
+  const [heldOpen, setHeldOpen] = useState(false);
   const [billsOpen, setBillsOpen] = useState(false);
   const [busy, setBusy] = useState(false);
 
@@ -142,7 +143,7 @@ export function MoneyView({ meName }: { meName: string }) {
 
       {data && (
         <>
-          <BalanceCard data={data} busy={busy} onRefresh={refresh} onOwed={() => setOwedOpen(true)} onChanged={load} />
+          <BalanceCard data={data} busy={busy} onRefresh={refresh} onOwed={() => setOwedOpen(true)} onHeld={() => setHeldOpen(true)} onChanged={load} />
           <div className="month-bar">
             <button className="round ghost" aria-label="Previous month" disabled={at <= 0} onClick={() => go(-1)}>
               <Icon name="left" />
@@ -211,6 +212,14 @@ export function MoneyView({ meName }: { meName: string }) {
           })()}
           <p className="muted small money-note">
             Paid for the company (or anyone else) and to come back: categories in the "A receber" group, or with "reembolso" in the name. They don't count as spending. Give the money back the same category, and the oldest expenses count as paid first.
+          </p>
+        </Sheet>
+      )}
+      {heldOpen && data?.held && (
+        <Sheet title={`To hand over · ${eur(data.held.total)}`} onClose={() => setHeldOpen(false)}>
+          <TxList tx={data.held.recent} showCategory={false} edit={{ data, budget, onChanged: load }} />
+          <p className="muted small money-note">
+            Someone else's money passing through (raffle tickets sold, a collection…): categories in the "A entregar" group. It isn't income or spending. Give the hand-over the same category; what's left is still to hand over.
           </p>
         </Sheet>
       )}
@@ -574,7 +583,7 @@ function TxEditor({ t, edit, onDone }: { t: MoneyTransaction; edit: Editing; onD
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Money going out (not money in, paid back or a transfer) can become a fixed expense: a bill, family budget only.
-  const fixed = SHOW_BILLS && t.amount > 0 && !['income', 'owed', 'transfer'].includes(t.groupId) ? fixedFor(t, edit.data) : null;
+  const fixed = SHOW_BILLS && t.amount > 0 && !['income', 'owed', 'held', 'transfer'].includes(t.groupId) ? fixedFor(t, edit.data) : null;
   const [fixing, setFixing] = useState(false);
   const change = {
     ...(editable(t) && pick && pick !== t.categoryId ? { category: pick } : {}),
@@ -903,7 +912,7 @@ function IncomeCard({ data, onOpen }: { data: MoneySummary; onOpen: (source: str
 const saving = (d: MoneySummary) => d.accounts.filter((a) => a.offBudget && a.balance >= 0);
 const debts = (d: MoneySummary) => d.accounts.filter((a) => a.offBudget && a.balance < 0);
 
-function BalanceCard({ data, busy, onRefresh, onOwed, onChanged }: { data: MoneySummary; busy: boolean; onRefresh: () => void; onOwed: () => void; onChanged: () => void }) {
+function BalanceCard({ data, busy, onRefresh, onOwed, onHeld, onChanged }: { data: MoneySummary; busy: boolean; onRefresh: () => void; onOwed: () => void; onHeld: () => void; onChanged: () => void }) {
   const [showAll, setShowAll] = useState(false);
   const onBudget = data.accounts.filter((a) => !a.offBudget);
   const total = onBudget.reduce((s, a) => s + a.balance, 0);
@@ -921,6 +930,12 @@ function BalanceCard({ data, busy, onRefresh, onOwed, onChanged }: { data: Money
       {data.owed && data.owed.total !== 0 && (
         <button className="balance-owed" onClick={onOwed}>
           {data.owed.total > 0 ? `+ ${eur(data.owed.total)} to come back` : `${eur(-data.owed.total)} came back more than was paid`}
+          <Icon name="right" size={14} />
+        </button>
+      )}
+      {data.held && data.held.total !== 0 && (
+        <button className="balance-owed" onClick={onHeld}>
+          {data.held.total > 0 ? `− ${eur(data.held.total)} to hand over` : `${eur(-data.held.total)} handed over more than came in`}
           <Icon name="right" size={14} />
         </button>
       )}

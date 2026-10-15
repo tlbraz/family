@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { budgetsFor, netWorth, ReviewError, reimbursable, splitParts, stillOwed, summarise, transferPairs, withoutReviewTag, descriptionOf, type Snapshot } from './money';
+import { budgetsFor, heldForOthers, netWorth, ReviewError, reimbursable, splitParts, stillOwed, summarise, transferPairs, withoutReviewTag, descriptionOf, type Snapshot } from './money';
 
 const snap = (tx: Snapshot['tx'], extra: Partial<Snapshot> = {}): Snapshot => ({
   fetchedAt: '2026-09-29T10:00:00Z',
@@ -236,6 +236,19 @@ describe('money to be reimbursed', () => {
     expect(s.owed!.total).toBe(8500);
     expect(s.owed!.open.map((o) => [o.payee, o.amount])).toEqual([['RESTAURANTE', 8500]]);
     expect(s.owed!.recent.map((o) => o.amount)).toEqual([-2000, 8500, 2000]);
+  });
+
+  it("keeps someone else's money (\"A entregar\") out of income and spending, and says what's to hand over", () => {
+    const g = [...groups(), { id: 'gae', name: 'A entregar', income: false, categories: [{ id: 'rifa', name: 'Dinheiro de terceiros' }] }];
+    expect([...heldForOthers(g)]).toEqual(['rifa']);
+    const tx = [t('2026-09-05', -5000, 'super'), t('2026-09-15', 1000, 'rifa', 'ANA'), t('2026-09-15', 1000, 'rifa', 'INES'), t('2026-09-20', -500, 'rifa', 'ESCOLA')];
+    const s = summarise(snap(tx, { groups: g, held: tx.filter((x) => x.category === 'rifa') }), 'family', ['family'], '2026-09', today);
+    expect(s.spent).toBe(5000);
+    expect(s.groups.map((x) => x.name)).toEqual(['Supermercado']);
+    expect(s.income.total).toBe(0);
+    expect(s.held!.total).toBe(1500);
+    expect(s.held!.recent.map((o) => [o.payee, o.amount])).toEqual([['ESCOLA', 500], ['INES', -1000], ['ANA', -1000]]);
+    expect(summarise(snap(tx, { groups: groups() }), 'family', ['family'], '2026-09', today).held).toBeNull();
   });
 });
 
