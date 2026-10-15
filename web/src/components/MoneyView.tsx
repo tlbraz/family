@@ -365,15 +365,19 @@ function categoryNames(group: MoneyGroup, data: MoneySummary) {
   return [...new Set([...group.categories.map((c) => c.name), ...tx.map((t) => t.category)])].filter((n) => tx.some((t) => t.category === n));
 }
 
+/** A group's sheet. When its only category is named like it ("Sem categoria" > "Sem categoria"), the transactions straight away. */
 function GroupSheet({ group, data, edit, onClose }: { group: MoneyGroup; data: MoneySummary; edit: Editing; onClose: () => void }) {
   const [all, toggleAll] = useOpenAll();
+  const tx = data.transactions.filter((t) => t.groupId === group.id);
+  const names = categoryNames(group, data);
+  const lone = names.length === 1 && names[0] === group.name;
+  const colour = levels(data).colour(group.id);
   return (
-    <Sheet title={`${group.name} · ${eur(group.amount)}`} icon={<SheetIcon name={categoryIcon(group.name)} colour={levels(data).colour(group.id)} />} onClose={onClose}
-      actions={data.transactions.some((t) => t.groupId === group.id) && <OpenAllButton all={all} onClick={toggleAll} />}>
-      <CategoryTx group={group} data={data} edit={edit} colour={levels(data).colour(group.id)} all={all} />
-      {group.id === 'uncategorised' && data.link && (
-        <p className="muted small money-note">Give these a category in <a href={data.link} target="_blank" rel="noreferrer">Actual</a> and they'll move to the right place.</p>
-      )}
+    <Sheet title={`${group.name} · ${eur(group.amount)}`} icon={<SheetIcon name={categoryIcon(group.name)} colour={colour} />} onClose={onClose}
+      actions={tx.length > 0 && !lone && <OpenAllButton all={all} onClick={toggleAll} />}>
+      {lone
+        ? <TxList tx={tx} showCategory={false} edit={edit} />
+        : <CategoryTx group={group} data={data} edit={edit} colour={colour} all={all} />}
     </Sheet>
   );
 }
