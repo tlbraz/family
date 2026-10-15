@@ -638,6 +638,9 @@ div.review-row { cursor: default; }
 .cat-top { margin: 6px 0 14px; }
 .cat-top-head { display: flex; align-items: center; gap: 10px; margin: 0 0 6px; font-size: 1rem; font-weight: 800; position: sticky; top: 0; background: var(--bg); padding: 6px 0; z-index: 1; }
 .cat-top-icon { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 9px; }
+.cat-top-pick { width: 100%; padding: 6px 10px 6px 0; border: 0; border-radius: 12px; color: var(--ink); font: inherit; font-size: 1rem; font-weight: 800; text-align: left; cursor: pointer; position: static; }
+.cat-top-pick.on { background: var(--soft); }
+.cat-top-pick > svg:last-child { margin-left: auto; color: var(--accent); }
 .cat-group { margin-left: 14px; padding-left: 14px; border-left: 2px solid var(--line); }
 .cat-group + .cat-group { margin-top: 6px; }
 .cat-sub-head { margin: 4px 0 2px; font-size: 0.72rem; font-weight: 800; letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); }

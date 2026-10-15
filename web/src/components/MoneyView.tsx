@@ -478,7 +478,7 @@ function CategoryPicker({ data, value, onChange }: { data: MoneySummary; value: 
   const [open, setOpen] = useState(false);
   const current = data.pickable.flatMap((g) => g.categories.map((c) => ({ ...c, groupId: g.id, group: g.name }))).find((c) => c.id === value);
   const parts = current ? splitGroup(current.group) : null;
-  const where = current ? (parts ? `${parts.top} › ${parts.sub}` : current.group) : '';
+  const where = current ? (parts ? (parts.sub === current.name ? parts.top : `${parts.top} › ${parts.sub}`) : current.group) : '';
   const colour = current ? groupColours(data).colour(current.groupId) : undefined;
   return (
     <>
@@ -523,7 +523,9 @@ function CategorySheet({ data, value, onPick, onClose }: { data: MoneySummary; v
   const q = fold(query.trim());
   const { colour } = groupColours(data);
   // Top level → groups → categories, in Actual's order. "Casa / Energia" sits under Casa; a group without "/" is its own top.
-  type Branch = { key: string; name: string; colourOf: string; groups: { id: string; name: string | null; categories: { id: string; name: string }[] }[] };
+  // A group whose only category is named like it ("Casa / Manutenção" > "Manutenção") gets no heading of its own, and a
+  // top level that is just one such category ("Outros" > "Outros") is picked by its own heading.
+  type Branch = { key: string; name: string; colourOf: string; groups: { id: string; name: string | null; categories: { id: string; name: string }[] }[]; lone?: string };
   const tree: Branch[] = [];
   for (const g of data.pickable) {
     const parts = splitGroup(g.name);
@@ -532,7 +534,12 @@ function CategorySheet({ data, value, onPick, onClose }: { data: MoneySummary; v
     if (!cats.length) continue;
     let top = tree.find((t) => t.name === topName);
     if (!top) tree.push((top = { key: g.id, name: topName, colourOf: g.id, groups: [] }));
-    top.groups.push({ id: g.id, name: parts ? parts.sub : null, categories: cats });
+    const lone = g.categories.length === 1 && g.categories[0]!.name === (parts ? parts.sub : topName);
+    top.groups.push({ id: g.id, name: parts && !lone ? parts.sub : null, categories: cats });
+  }
+  for (const t of tree) {
+    const only = t.groups.length === 1 && !t.groups[0]!.name && t.groups[0]!.categories.length === 1 ? t.groups[0]!.categories[0]! : null;
+    if (only?.name === t.name) t.lone = only.id;
   }
   const chosen = picked ?? value;
 
@@ -551,13 +558,23 @@ function CategorySheet({ data, value, onPick, onClose }: { data: MoneySummary; v
           {!tree.length && <p className="muted small cat-none">No category matches "{query}".</p>}
           {tree.map((top) => (
             <section key={top.key} className="cat-top">
-              <h3 className="cat-top-head">
-                <span className="cat-top-icon" style={{ color: colour(top.colourOf), background: `color-mix(in srgb, ${colour(top.colourOf)} 14%, transparent)` }}>
-                  <Icon name={categoryIcon(top.name)} size={16} />
-                </span>
-                {top.name}
-              </h3>
-              {top.groups.map((g) => (
+              {top.lone ? (
+                <button type="button" className={`cat-top-head cat-top-pick ${top.lone === chosen ? 'on' : ''}`} aria-pressed={top.lone === chosen} onClick={() => pick(top.lone!)}>
+                  <span className="cat-top-icon" style={{ color: colour(top.colourOf), background: `color-mix(in srgb, ${colour(top.colourOf)} 14%, transparent)` }}>
+                    <Icon name={categoryIcon(top.name)} size={16} />
+                  </span>
+                  {top.name}
+                  {top.lone === chosen && <Icon name="check" size={16} />}
+                </button>
+              ) : (
+                <h3 className="cat-top-head">
+                  <span className="cat-top-icon" style={{ color: colour(top.colourOf), background: `color-mix(in srgb, ${colour(top.colourOf)} 14%, transparent)` }}>
+                    <Icon name={categoryIcon(top.name)} size={16} />
+                  </span>
+                  {top.name}
+                </h3>
+              )}
+              {!top.lone && top.groups.map((g) => (
                 <div key={g.id} className={`cat-group ${g.name ? 'with-head' : ''}`} style={{ borderColor: `color-mix(in srgb, ${colour(top.colourOf)} 45%, transparent)` }}>
                   {g.name && <h4 className="cat-sub-head">{g.name}</h4>}
                   {g.categories.map((c) => (
