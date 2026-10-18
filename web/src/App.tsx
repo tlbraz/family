@@ -21,21 +21,26 @@ type Tab = 'calendar' | 'groceries' | 'docs' | 'family' | 'money' | 'watch';
 const TABS: Tab[] = ['calendar', 'groceries', 'docs', 'family', 'money', 'watch'];
 const TAB_KEY = 'family.tab';
 
-// The tab survives a refresh (and the reload after a deploy); opening the app afresh starts on the calendar.
-function readTab(): Tab {
+// The tab survives a refresh (and the reload after a deploy); opening the app afresh starts on the home tab —
+// Money for a signed-in parent, the calendar for everyone else. null = afresh, decided once the config is in.
+function readTab(): Tab | null {
   try {
     const saved = sessionStorage.getItem(TAB_KEY) as Tab | null;
-    return saved && TABS.includes(saved) ? saved : 'calendar';
+    return saved && TABS.includes(saved) ? saved : null;
   } catch {
-    return 'calendar';
+    return null;
   }
 }
+const homeTab = (config: AppConfig | null): Tab => (config?.features.money && config.me ? 'money' : 'calendar');
 
 type Open = { kind: 'event'; occurrence: Occurrence | null; day: string; shared?: Shared; fromDay?: boolean } | { kind: 'task'; task: Task | null; day: string; fromDay?: boolean } | null;
 
 export function App() {
-  const [tab, setTab] = useState<Tab>(readTab);
+  const [saved] = useState(readTab);
+  const [picked, setTab] = useState<Tab | null>(saved);
   const [config, setConfig] = useState<AppConfig | null>(null);
+  const home = homeTab(config);
+  const tab: Tab = picked ?? home;
   const [members, setMembers] = useState<Member[]>([]);
   const [health, setHealth] = useState<Health | null>(null);
   const [open, setOpen] = useState<Open>(null);
@@ -49,14 +54,15 @@ export function App() {
     window.addEventListener(DEPLOYING_EVENT, on);
     return () => window.removeEventListener(DEPLOYING_EVENT, on);
   }, []);
-  useBack(() => setTab('calendar'), tab !== 'calendar');
+  useBack(() => setTab(home), tab !== home);
   useEffect(() => {
+    if (!picked) return;
     try {
       sessionStorage.setItem(TAB_KEY, tab);
     } catch {
       /* private mode: fine */
     }
-  }, [tab]);
+  }, [picked, tab]);
 
   const loadAll = useCallback(() => {
     api.config().then(setConfig).catch(() => setConfig({ me: null, meTracksBp: false, features: { ai: false, google: false, telegram: false } }));
@@ -74,12 +80,18 @@ export function App() {
   const me = config?.me ?? null;
   const canEdit = me?.role === 'parent';
 
-  // Back on a tab that isn't there any more (signed out, or the feature is off): go to the calendar.
+  // Opened afresh: settle on the home tab as soon as the config says who this is, then stay put
+  // (signing in later doesn't throw you off the calendar).
+  useEffect(() => {
+    if (config && !picked) setTab(homeTab(config));
+  }, [config, picked]);
+
+  // Back on a tab that isn't there any more (signed out, or the feature is off): go home.
   useEffect(() => {
     if (!config) return;
     const f = config.features;
     const gone = (tab === 'docs' && !f.docs) || (tab === 'money' && !(f.money && config.me)) || (tab === 'watch' && !f.watch);
-    if (gone) setTab('calendar');
+    if (gone) setTab(homeTab(config));
   }, [config, tab]);
 
   // Something shared from another app: open "New event" with it (after signing in, if needed).
@@ -121,7 +133,7 @@ export function App() {
       </div>
 
       <main className="page">
-        {tab === 'calendar' && (
+        {tab === 'calendar' && (picked || config) && (
           <CalendarView
             members={members}
             refreshKey={refresh}
