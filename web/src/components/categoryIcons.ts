@@ -1,12 +1,13 @@
 // An icon for a Money category or level, guessed from its name (pt-PT, with some English), so renaming in Actual
-// keeps working. The first match wins: specific names first, then the top levels ("Casa", "Miúdos"…).
+// keeps working. The first match wins: specific names first, then the top levels ("Casa", "Miúdos"…). Both budgets
+// share it: the company's names (Salários, Impostos, Serviços, Refeições…) are here too.
 const RULES: [RegExp, string][] = [
   [/\batl\b/i, 'backpack'],
   [/almo[cç]o/i, 'tray'],
   [/basket/i, 'basketball'],
   [/gin[aá]stica/i, 'gymnast'],
   [/supermerc|mercearia|grocer/i, 'cart'],
-  [/restaur|eating|jantar/i, 'fork'],
+  [/restaur|eating|jantar|refei[cç]/i, 'fork'],
   [/take.?away|entrega/i, 'box'],
   [/lanche|caf[eé]|snack|gulos|pastel/i, 'coffee'],
   [/eletric|electric|luz|energia/i, 'bolt'],
@@ -16,8 +17,8 @@ const RULES: [RegExp, string][] = [
   [/telem[oó]v|phone/i, 'phone'],
   [/empregada|limpeza|housekeep/i, 'broom'],
   [/manuten|obras|repara|oficina/i, 'wrench'],
-  [/presta[cç][aã]o/i, 'key'],
-  [/seguro|insurance/i, 'shield'],
+  [/presta[cç][aã]o|leasing|renting/i, 'key'],
+  [/seguro|insurance|seguran[cç]a social/i, 'shield'],
   [/(^|\/\s*)contas$/i, 'plug'],
   [/cr[eé]dito|hipoteca|habita|renda|condom|mortgage/i, 'home'],
   [/combust|carrega|fuel/i, 'fuel'],
@@ -41,11 +42,14 @@ const RULES: [RegExp, string][] = [
   [/outras compras/i, 'box'],
   [/streaming|\bapps?\b/i, 'streaming'],
   [/curso|forma[cç]/i, 'grad'],
+  [/sal[aá]rio/i, 'wallet'],
+  [/contabil/i, 'calculator'],
+  [/escrit[oó]rio|equipament/i, 'laptop'],
   [/comiss|banc/i, 'bank'],
-  [/impost|\birs\b|tax/i, 'receipt'],
+  [/impost|\birs\b|tax|^estado$/i, 'receipt'],
   [/invest/i, 'chart'],
   [/poupan|saving/i, 'safe'],
-  [/reembols|a receber/i, 'money'],
+  [/reembols|a receber|devolvid/i, 'money'],
   [/prenda|presente/i, 'party'],
   [/(^|\/\s*)outros$/i, 'tag'],
   // top levels
@@ -58,6 +62,7 @@ const RULES: [RegExp, string][] = [
   [/^(bem.estar|pessoal)/i, 'lotus'],
   [/^compras/i, 'bag'],
   [/^finan/i, 'bank'],
+  [/^servi[cç]os/i, 'work'],
   [/sem categoria|uncategor/i, 'info'],
 ];
 

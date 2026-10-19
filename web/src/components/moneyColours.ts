@@ -2,20 +2,21 @@ import type { MoneySummary } from '../../../shared/types';
 
 // Category colours (styles.css --m1…--m10), validated so every pair stays apart on the cards in both themes
 // (OKLab ΔE ≥15.6 for normal vision; colour-blind pairs ≥6.6, fine because a name and icon sit next to every colour).
-// The family's own top levels keep a fixed colour by name; any other group takes the next free one, biggest
-// spenders first (the server's order), and past the tenth it goes gray.
+// The top levels of both budgets keep a fixed colour by name (a family one and a company one may share a colour: only
+// one budget shows at a time); any other group takes the next free one, biggest spenders first (the server's order),
+// and past the tenth it goes gray.
 const SLOTS = 10;
 const BY_NAME: [RegExp, number][] = [
-  [/^casa\b/i, 1], // orange
+  [/^casa\b|^escrit[oó]rio/i, 1], // orange
   [/^sa[uú]de/i, 2], // green
-  [/^(miúdos|miudos|filhos|kids)/i, 3], // blue
+  [/^(miúdos|miudos|filhos|kids|sal[aá]rio)/i, 3], // blue
   [/^transport/i, 4], // purple
   [/^compras/i, 5], // pink
-  [/^finan/i, 6], // magenta
+  [/^(finan|impost)/i, 6], // magenta
   [/^(bem.estar|pessoal)/i, 7], // lavender / indigo
   [/^lazer|leisure/i, 8], // cyan
-  [/^subscri/i, 9], // wine
-  [/^alimenta/i, 10], // olive
+  [/^(subscri|servi[cç]o)/i, 9], // wine
+  [/^(alimenta|refei[cç])/i, 10], // olive
 ];
 
 // A third level, by name: a group called "Casa / Energia" sits under "Casa" (Actual itself has only groups and

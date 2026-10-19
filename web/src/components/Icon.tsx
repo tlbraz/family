@@ -89,6 +89,9 @@ const PATHS: Record<string, string> = {
   shield: 'M12 3l8 3v6c0 4.5-3.4 8-8 9-4.6-1-8-4.5-8-9V6zM9 12l2 2 4-4',
   plug: 'M9 3v5M15 3v5M6 8h12v3a6 6 0 0 1-12 0zM12 17v4',
   key: 'M8 10a5 5 0 1 0 0 .1M12.5 12H21M18 12v3M21 12v2',
+  wallet: 'M4 7h15a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h11v3M16.5 13.5h.01',
+  calculator: 'M6 3h12v18H6zM9 7h6M9 11h.01M12 11h.01M15 11h.01M9 14.5h.01M12 14.5h.01M15 14.5h.01M9 18h.01M12 18h.01M15 18h.01',
+  laptop: 'M5 5h14v10H5zM2.5 19h19L19 15H5z',
   gymnast: 'M10.5 5.5a1.5 1.5 0 1 0 3 0a1.5 1.5 0 1 0-3 0M6 3l6 6 6-6M12 9v5l-3 7M12 14l7 1',
 };
 
