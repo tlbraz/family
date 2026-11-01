@@ -1,15 +1,15 @@
 import { Hono } from 'hono';
-import type { WatchDetail, WatchHealth, WatchKind, WatchSection } from '../../shared/types';
+import type { WatchDetail, WatchEpisode, WatchHealth, WatchKind, WatchSeasons, WatchSection } from '../../shared/types';
 import type { Db } from '../db';
 import type { AuthEnv } from '../lib/auth';
 import { requireParent } from '../lib/auth';
 import {
-  addMovie, addSeries, ArrError, arrEnabled, arrFor, arrHealth, findInJellyfin, jellyfinEnabled, jellyfinLink, myList, playerSessions, playOn,
-  removeTitle, type SeriesMonitor, statusLookup, statusOf,
+  addMovie, addSeries, ArrError, arrEnabled, arrFor, arrHealth, deleteEpisode, ensureSeries, episodeView, findEpisodeInJellyfin, findInJellyfin, findSeries, jellyfinEnabled, jellyfinLink, myList, playerSessions, playOn,
+  removeTitle, seasonSummaries, seriesEpisodes, seriesQueue, type SeriesMonitor, statusLookup, statusOf, wantEpisodes,
 } from '../lib/arr';
 import { arrivals, hookTokenMatches, parseArrHook } from '../lib/arrivals';
 import { memo } from '../lib/memo';
-import { genres, releases, search, TmdbError, tmdbCheck, tmdbEnabled, tmdbIdForTvdb, titleDetail } from '../lib/tmdb';
+import { genres, releases, search, TmdbError, tmdbCheck, tmdbEnabled, tmdbIdForTvdb, titleDetail, tvSeasonEpisodes, tvSeasons } from '../lib/tmdb';
 
 const KINDS: WatchKind[] = ['movie', 'tv'];
 const SECTIONS: WatchSection[] = ['out', 'soon', 'popular'];
@@ -151,6 +151,95 @@ export function watchRoutes() {
       const { tvdbId } = await titleDetail(kind, id).catch(() => ({ tvdbId: null }));
       const item = await findInJellyfin(kind, id, tvdbId);
       if (!item) return c.json({ error: 'It isn’t on Jellyfin yet' }, 404);
+      await playOn(b.session, item);
+      return c.json({ ok: true });
+    } catch (e) {
+      const f = fail(e);
+      return c.json({ error: f.error }, f.status);
+    }
+  });
+
+  // ---- A series, season by season. Sonarr is the truth once it has the series (its numbering is what it downloads by); TMDB before that.
+  const tv = '/title/tv/:id{[0-9]+}';
+  const season = '/seasons/:season{[0-9]+}';
+  const tvdbOf = async (id: number) => (await titleDetail('tv', id)).tvdbId;
+  const sonarrOf = async (id: number) => (arrEnabled('sonarr') ? findSeries(id, await tvdbOf(id)) : null);
+
+  async function seasonsOf(id: number): Promise<WatchSeasons> {
+    const series = await sonarrOf(id);
+    const episodes = series ? await seriesEpisodes(series.id) : [];
+    return { arrId: series?.id ?? null, seasons: episodes.length ? seasonSummaries(episodes, new Date()) : await tvSeasons(id) };
+  }
+  async function episodesOf(id: number, n: number): Promise<WatchEpisode[]> {
+    const series = await sonarrOf(id);
+    if (series) {
+      const [episodes, queue] = await Promise.all([seriesEpisodes(series.id), seriesQueue(series.id)]);
+      const now = new Date();
+      if (episodes.length) return episodes.filter((e) => e.seasonNumber === n).sort((a, b) => a.episodeNumber - b.episodeNumber).map((e) => episodeView(e, queue, now));
+    }
+    return tvSeasonEpisodes(id, n);
+  }
+
+  r.get(`${tv}/seasons`, async (c) => {
+    try {
+      return c.json(await seasonsOf(Number(c.req.param('id'))));
+    } catch (e) {
+      const f = fail(e);
+      return c.json({ error: f.error }, f.status);
+    }
+  });
+  r.get(`${tv}${season}`, async (c) => {
+    try {
+      return c.json(await episodesOf(Number(c.req.param('id')), Number(c.req.param('season'))));
+    } catch (e) {
+      const f = fail(e);
+      return c.json({ error: f.error }, f.status);
+    }
+  });
+
+  // Want (and look for) one episode or a whole season, or stop wanting it. A series not in Sonarr is added with nothing else wanted.
+  r.post(`${tv}${season}`, async (c) => {
+    const id = Number(c.req.param('id'));
+    const n = Number(c.req.param('season'));
+    const b = (await c.req.json().catch(() => ({}))) as { episode?: unknown; want?: unknown };
+    const episode = b.episode === undefined || b.episode === null ? null : b.episode;
+    if (typeof b.want !== 'boolean' || (episode !== null && !(Number.isInteger(episode) && (episode as number) >= 0))) return c.json({ error: 'Pick what to get' }, 400);
+    if (!arrEnabled('sonarr')) return c.json({ error: 'Sonarr is not set up on the server' }, 503);
+    try {
+      const tvdbId = await tvdbOf(id);
+      if (!tvdbId) return c.json({ error: 'TMDB has no TVDB id for this series, so Sonarr can’t find it. Add it in Sonarr.' }, 400);
+      const series = b.want ? { id: await ensureSeries(tvdbId) } : await findSeries(id, tvdbId);
+      if (!series) return c.json({ error: 'It isn’t in the library' }, 404);
+      await wantEpisodes(series.id, n, episode as number | null, b.want);
+      return c.json({ ...(await seasonsOf(id)), episodes: await episodesOf(id, n) });
+    } catch (e) {
+      const f = fail(e);
+      return c.json({ error: f.error }, f.status);
+    }
+  });
+
+  r.delete(`${tv}${season}/:episode{[0-9]+}`, async (c) => {
+    const id = Number(c.req.param('id'));
+    const n = Number(c.req.param('season'));
+    try {
+      const series = await sonarrOf(id);
+      if (!series) return c.json({ error: 'It isn’t in the library' }, 404);
+      await deleteEpisode(series.id, n, Number(c.req.param('episode')));
+      return c.json({ ...(await seasonsOf(id)), episodes: await episodesOf(id, n) });
+    } catch (e) {
+      const f = fail(e);
+      return c.json({ error: f.error }, f.status);
+    }
+  });
+
+  r.post(`${tv}${season}/:episode{[0-9]+}/play`, async (c) => {
+    const id = Number(c.req.param('id'));
+    const b = (await c.req.json().catch(() => ({}))) as { session?: unknown };
+    if (typeof b.session !== 'string' || !/^[\w-]{1,64}$/.test(b.session)) return c.json({ error: 'Pick a player' }, 400);
+    try {
+      const show = await findInJellyfin('tv', id, await tvdbOf(id));
+      const item = show && (await findEpisodeInJellyfin(show, Number(c.req.param('season')), Number(c.req.param('episode'))));
+      if (!item) return c.json({ error: 'That episode isn’t on Jellyfin yet' }, 404);
       await playOn(b.session, item);
       return c.json({ ok: true });
     } catch (e) {

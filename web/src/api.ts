@@ -1,4 +1,4 @@
-import type { GroceryList, AppConfig, CalendarEvent, EventDraft, EventInput, Health, Member, MemberDocument, MemberInput, MoneyBudget, MoneyHolding, MoneyHoldings, MoneySummary, TrackedBill, DocsMeta, DocsPage, PaperlessDetail, Occurrence, SearchResults, Task, TaskInput, WatchDetail, WatchGenre, WatchHealth, WatchKind, WatchList, WatchPage, WatchSection, WatchSession } from '../../shared/types';
+import type { GroceryList, AppConfig, CalendarEvent, EventDraft, EventInput, Health, Member, MemberDocument, MemberInput, MoneyBudget, MoneyHolding, MoneyHoldings, MoneySummary, TrackedBill, DocsMeta, DocsPage, PaperlessDetail, Occurrence, SearchResults, Task, TaskInput, WatchDetail, WatchGenre, WatchEpisode, WatchHealth, WatchSeasons, WatchKind, WatchList, WatchPage, WatchSection, WatchSession } from '../../shared/types';
 
 export interface GoogleStatus {
   connected: boolean;
@@ -124,6 +124,14 @@ export const api = {
   players: () => request<WatchSession[]>('/watch/players'),
   playTitle: (kind: WatchKind, id: number, session: string) => request<{ ok: true }>(`/watch/title/${kind}/${id}/play`, json('POST', { session })),
   watchList: () => request<WatchList>('/watch/list'),
+  seasons: (id: number) => request<WatchSeasons>(`/watch/title/tv/${id}/seasons`),
+  seasonEpisodes: (id: number, season: number) => request<WatchEpisode[]>(`/watch/title/tv/${id}/seasons/${season}`),
+  wantEpisodes: (id: number, season: number, episode: number | null, want: boolean) =>
+    request<WatchSeasons & { episodes: WatchEpisode[] }>(`/watch/title/tv/${id}/seasons/${season}`, json('POST', { episode, want })),
+  deleteEpisode: (id: number, season: number, episode: number) =>
+    request<WatchSeasons & { episodes: WatchEpisode[] }>(`/watch/title/tv/${id}/seasons/${season}/${episode}`, json('DELETE')),
+  playEpisode: (id: number, season: number, episode: number, session: string) =>
+    request<{ ok: true }>(`/watch/title/tv/${id}/seasons/${season}/${episode}/play`, json('POST', { session })),
   splitMoney: (budget: MoneyBudget, id: string, parts: { amount: number; category: string; note: string }[]) => request<{ ok: true }>('/money/split', json('POST', { budget, id, parts })),
   editMoney: (budget: MoneyBudget, id: string, change: { category?: string; review?: boolean; note?: string; noteRule?: boolean }) => request<{ ok: true }>('/money/edit', json('POST', { budget, id, ...change })),
 

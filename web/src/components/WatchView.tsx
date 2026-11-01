@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { WatchCard, WatchDetail, WatchFile, WatchGenre, WatchHealth, WatchKind, WatchList, WatchListItem, WatchSection, WatchSession, WatchStatus } from '../../../shared/types';
+import type { WatchCard, WatchDetail, WatchEpisode, WatchFile, WatchGenre, WatchHealth, WatchKind, WatchList, WatchListItem, WatchSeason, WatchSection, WatchSession, WatchStatus } from '../../../shared/types';
 import { api } from '../api';
 import { Icon } from './Icon';
 import { Sheet } from './Sheet';
@@ -380,6 +380,203 @@ function FileFacts({ state, file }: { state: WatchStatus['state']; file: WatchFi
   );
 }
 
+/** The latest season that has started: where you'd normally want to be. */
+function startSeason(seasons: WatchSeason[]) {
+  const today = new Date().toISOString().slice(0, 10);
+  const real = seasons.filter((s) => s.number > 0);
+  return ([...real].reverse().find((s) => s.airDate && s.airDate <= today) ?? real.at(-1) ?? seasons[0])?.number ?? null;
+}
+
+/** A series season by season: what's in each, what we have, and getting (or dropping) a single episode or a whole season. */
+function Episodes({ id, canGet, onJellyfin, onChanged }: { id: number; canGet: boolean; onJellyfin: boolean; onChanged: () => void }) {
+  const [seasons, setSeasons] = useState<WatchSeason[] | null>(null);
+  const [season, setSeason] = useState<number | null>(null);
+  const [episodes, setEpisodes] = useState<WatchEpisode[] | null>(null);
+  const [busy, setBusy] = useState<string | null>(null); // which row is working ("s" = the season)
+  const [error, setError] = useState<string | null>(null);
+  const [note, setNote] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState<number | null>(null);
+  const [confirm, setConfirm] = useState<number | null>(null);
+  const [players, setPlayers] = useState<{ episode: number; list: WatchSession[] } | null>(null);
+  const shown = useRef<number | null>(null); // ignore answers for a season we've left
+  shown.current = season;
+
+  useEffect(() => {
+    api.seasons(id).then((r) => { setSeasons(r.seasons); setSeason(startSeason(r.seasons)); }).catch((e: Error) => setError(e.message));
+  }, [id]);
+
+  const load = useCallback((n: number) => {
+    api.seasonEpisodes(id, n).then((list) => { if (shown.current === n) setEpisodes(list); }).catch((e: Error) => { if (shown.current === n) setError(e.message); });
+  }, [id]);
+  useEffect(() => {
+    if (season === null) return;
+    setEpisodes(null);
+    setExpanded(null);
+    setConfirm(null);
+    setPlayers(null);
+    setNote(null);
+    setError(null);
+    load(season);
+  }, [season, load]);
+
+  // While something downloads, keep the progress moving.
+  const active = episodes?.some((e) => e.state === 'downloading');
+  useEffect(() => {
+    if (!active || season === null) return;
+    const t = setInterval(() => load(season), 30_000);
+    return () => clearInterval(t);
+  }, [active, season, load]);
+
+  async function act(key: string, run: () => ReturnType<typeof api.wantEpisodes>, done: string) {
+    setBusy(key);
+    setError(null);
+    setNote(null);
+    try {
+      const r = await run();
+      setSeasons(r.seasons);
+      setEpisodes(r.episodes);
+      setConfirm(null);
+      setNote(done);
+      onChanged();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function play(n: number, player?: WatchSession) {
+    if (season === null) return;
+    setBusy(`e${n}`);
+    setError(null);
+    setNote(null);
+    try {
+      let target = player;
+      if (!target) {
+        const list = await api.players();
+        if (list.length !== 1) {
+          setPlayers({ episode: n, list });
+          return;
+        }
+        target = list[0]!;
+      }
+      await api.playEpisode(id, season, n, target.id);
+      setPlayers(null);
+      setNote(`Playing on ${target.name}`);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  if (!seasons) return error ? <p className="error small">{error}</p> : <p className="muted small">Loading episodes…</p>;
+  if (!seasons.length) return null;
+  const current = seasons.find((s) => s.number === season);
+  const label = (e: WatchEpisode) => `S${String(e.season).padStart(2, '0')}E${String(e.number).padStart(2, '0')}`;
+
+  return (
+    <section className="watch-episodes">
+      <h3 className="sheet-sub">Episodes</h3>
+      {seasons.length > 1 && (
+        <div className="watch-genres watch-seasons" role="group" aria-label="Season">
+          {seasons.map((s) => (
+            <button key={s.number} className={`watch-genre${s.number === season ? ' on' : ''}`} aria-pressed={s.number === season} onClick={() => setSeason(s.number)}>
+              {s.name}{s.have > 0 && <span className="watch-season-have"> {s.have === s.total ? '✓' : `${s.have}/${s.total}`}</span>}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {current && (
+        <div className="watch-season-head">
+          <span className="muted small">
+            {[current.airDate ? current.airDate.slice(0, 4) : null, `${current.total} episode${current.total === 1 ? '' : 's'}`, current.have ? `${current.have} in library` : null].filter(Boolean).join(' · ')}
+          </span>
+          {canGet && season !== null && (
+            current.wanted && !current.missing ? (
+              <button className="chip" disabled={busy !== null} onClick={() => void act('s', () => api.wantEpisodes(id, season, null, false), `Stopped wanting ${current.name}.`)}>Stop wanting</button>
+            ) : current.missing > 0 ? (
+              <button className="chip" disabled={busy !== null} onClick={() => void act('s', () => api.wantEpisodes(id, season, null, true), `Looking for ${current.name}.`)}>
+                <Icon name="download" size={16} /> {busy === 's' ? 'Adding…' : `Get ${current.number === 0 ? 'all' : 'season'} (${current.missing})`}
+              </button>
+            ) : null
+          )}
+        </div>
+      )}
+      {note && <p className="good-note small">{note}</p>}
+      {error && <p className="error small">{error}</p>}
+      {!episodes && !error && <p className="muted small">Loading…</p>}
+      {episodes && !episodes.length && <p className="muted small">No episodes listed yet.</p>}
+
+      <ul className="watch-eps">
+        {episodes?.map((e) => {
+          const key = `e${e.number}`;
+          const open = expanded === e.number;
+          const when = e.airDate ? `${e.aired ? '' : 'Airs '}${longDate(e.airDate)}` : 'No date yet';
+          return (
+            <li key={e.number} className={`watch-ep ${e.state}`}>
+              <div className="watch-ep-row">
+                <button className="watch-ep-text" aria-expanded={open} onClick={() => setExpanded(open ? null : e.number)}>
+                  <b>{e.number}. {e.title}</b>
+                  <span className="muted small">{[when, e.runtime ? `${e.runtime} min` : null].filter(Boolean).join(' · ')}</span>
+                  {e.text && <span className={`small watch-state ${e.state}`}>{e.text}</span>}
+                </button>
+                <span className="watch-ep-act">
+                  {e.state === 'library' && onJellyfin && (
+                    <button className="round ghost" disabled={busy !== null} aria-label={`Play ${label(e)} on TV`} title="Play on TV" onClick={() => void play(e.number)}><Icon name="play" size={18} /></button>
+                  )}
+                  {e.state === 'none' && canGet && season !== null && (
+                    <button className="chip" disabled={busy !== null} onClick={() => void act(key, () => api.wantEpisodes(id, season, e.number, true), e.aired ? `Looking for ${label(e)}.` : `${label(e)} downloads by itself when it’s out.`)}>
+                      {busy === key ? '…' : e.aired ? 'Get' : 'Want'}
+                    </button>
+                  )}
+                </span>
+              </div>
+              {e.progress !== undefined && <span className="watch-progress"><span style={{ width: `${Math.round(e.progress * 100)}%` }} /></span>}
+
+              {players?.episode === e.number && (
+                players.list.length ? (
+                  <div className="watch-players">
+                    <span className="muted small">Play on…</span>
+                    {players.list.map((p) => <button key={p.id} className="chip" disabled={busy !== null} onClick={() => void play(e.number, p)}>{p.name}</button>)}
+                  </div>
+                ) : <p className="watch-note small"><Icon name="tv" size={16} /> Open Jellyfin on the TV first, then tap Play again.</p>
+              )}
+
+              {open && (
+                <div className="watch-ep-more">
+                  {e.overview && <p className="small">{e.overview}</p>}
+                  {e.state === 'library' && (e.size || e.specs?.length) ? <p className="muted small">{[e.size ? gb(e.size) : null, ...(e.specs ?? [])].filter(Boolean).join(' · ')}</p> : null}
+                  {canGet && season !== null && e.state === 'wanted' && (
+                    <div className="watch-actions">
+                      {e.aired && <button className="chip" disabled={busy !== null} onClick={() => void act(key, () => api.wantEpisodes(id, season, e.number, true), `Looking for ${label(e)}.`)}><Icon name="search" size={16} /> Search now</button>}
+                      <button className="chip" disabled={busy !== null} onClick={() => void act(key, () => api.wantEpisodes(id, season, e.number, false), `Stopped wanting ${label(e)}.`)}>Stop wanting</button>
+                    </div>
+                  )}
+                  {canGet && season !== null && e.state === 'library' && (
+                    confirm === e.number ? (
+                      <div className="watch-confirm">
+                        <p className="small">Delete {label(e)}’s file? It won’t download again unless you ask.</p>
+                        <div className="confirm">
+                          <button type="button" className="chip danger" disabled={busy !== null} onClick={() => void act(key, () => api.deleteEpisode(id, season, e.number), `Deleted ${label(e)}.`)}>Yes, delete</button>
+                          <button type="button" className="chip" onClick={() => setConfirm(null)}>Keep</button>
+                        </div>
+                      </div>
+                    ) : (
+                      <button type="button" className="danger-link" onClick={() => setConfirm(e.number)}><Icon name="trash" size={16} /> Delete this episode</button>
+                    )
+                  )}
+                </div>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    </section>
+  );
+}
+
 function TitleSheet({ kind, id, onClose, onChanged }: Open & { onClose: () => void; onChanged: () => void }) {
   const [t, setT] = useState<WatchDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -549,6 +746,18 @@ function TitleSheet({ kind, id, onClose, onChanged }: Open & { onClose: () => vo
           )}
 
           {t.overview && <p className="watch-overview">{t.overview}</p>}
+
+          {kind === 'tv' && (
+            <Episodes
+              id={id}
+              canGet={t.can.arr}
+              onJellyfin={!!t.jellyfin}
+              onChanged={() => {
+                onChanged();
+                api.watchTitle(kind, id).then(setT).catch(() => {});
+              }}
+            />
+          )}
 
           {t.cast.length > 0 && (
             <>

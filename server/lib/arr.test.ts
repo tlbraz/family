@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { bytesText, dueForSearch, etaText, fileSpecs, healthIssues, mbpsOf, movieStatus, posterOf, seriesStatus, type RadarrMovie } from './arr';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { bytesText, deleteEpisode, dueForSearch, episodeView, etaText, fileSpecs, healthIssues, mbpsOf, movieStatus, posterOf, seasonSummaries, seriesStatus, wantEpisodes, type RadarrMovie, type SonarrEpisode } from './arr';
 
 const now = new Date('2026-10-10T15:00:00');
 const movie = (m: Partial<RadarrMovie>): RadarrMovie => ({ id: 1, tmdbId: 550, title: 'Weapons', monitored: true, hasFile: false, ...m });
@@ -114,5 +114,100 @@ describe('file size, speed and specs', () => {
     expect(bytesText(850e6)).toBe('850 MB');
     const st = movieStatus({ id: 1, tmdbId: 9, title: 'W', monitored: true, hasFile: true, runtime: 129, movieFile: { size: 26.5e9, quality: { quality: { source: 'webdl', resolution: 2160 } }, mediaInfo: { resolution: '3840x2160', runTime: '2:09:00' } } }, [], now);
     expect(st.file).toMatchObject({ size: 26.5e9, mbps: 27.4, specs: ['WEB-DL', '4K', 'SDR'] });
+  });
+});
+
+describe('episodes', () => {
+  const e = (x: Partial<SonarrEpisode>): SonarrEpisode => ({ id: 7, seasonNumber: 2, episodeNumber: 3, title: 'Three', airDate: '2026-10-01', monitored: false, hasFile: false, ...x });
+
+  it('says where one episode stands', () => {
+    expect(episodeView(e({}), [], now)).toMatchObject({ state: 'none', text: '', aired: true, season: 2, number: 3 });
+    expect(episodeView(e({ airDate: '2026-11-01' }), [], now)).toMatchObject({ state: 'none', aired: false });
+    expect(episodeView(e({ monitored: true }), [], now)).toMatchObject({ state: 'wanted', text: 'Looking for a copy' });
+    expect(episodeView(e({ monitored: true, airDate: '2026-11-01' }), [], now)).toMatchObject({ state: 'wanted', text: 'Wanted' });
+    expect(episodeView(e({ hasFile: true, episodeFile: { id: 1, size: 2e9 } }), [], now)).toMatchObject({ state: 'library', size: 2e9 });
+  });
+
+  it('downloading wins, and only for that episode', () => {
+    const queue = [{ episodeId: 7, size: 100, sizeleft: 50 }, { episodeId: 8, size: 100, sizeleft: 0 }];
+    expect(episodeView(e({ hasFile: true }), queue, now)).toMatchObject({ state: 'downloading', progress: 0.5 });
+    expect(episodeView(e({ id: 9 }), queue, now).state).toBe('none');
+  });
+
+  it('counts each season, specials last', () => {
+    const s = seasonSummaries(
+      [
+        e({ id: 1, seasonNumber: 0, episodeNumber: 1 }),
+        e({ id: 2, seasonNumber: 1, episodeNumber: 1, hasFile: true }),
+        e({ id: 3, seasonNumber: 1, episodeNumber: 2 }),
+        e({ id: 4, seasonNumber: 1, episodeNumber: 3, airDate: '2026-12-01' }),
+        e({ id: 5, seasonNumber: 2, episodeNumber: 1, monitored: true }),
+      ],
+      now,
+    );
+    expect(s.map((x) => x.name)).toEqual(['Season 1', 'Season 2', 'Specials']);
+    expect(s[0]).toMatchObject({ total: 3, have: 1, missing: 1, wanted: false, airDate: '2026-10-01' });
+    expect(s[1]).toMatchObject({ total: 1, have: 0, missing: 0, wanted: true });
+  });
+});
+
+describe('wanting episodes', () => {
+  const eps: SonarrEpisode[] = [
+    { id: 1, seasonNumber: 1, episodeNumber: 1, airDate: '2020-01-01', monitored: false, hasFile: true, episodeFile: { id: 50 } },
+    { id: 2, seasonNumber: 1, episodeNumber: 2, airDate: '2020-01-08', monitored: false, hasFile: false },
+    { id: 3, seasonNumber: 1, episodeNumber: 3, airDate: '2099-01-01', monitored: false, hasFile: false },
+  ];
+  const series = { id: 9, tvdbId: 1, title: 'X', monitored: true, seasons: [{ seasonNumber: 1, monitored: false }, { seasonNumber: 2, monitored: false }] };
+  let calls: { method: string; path: string; body?: Record<string, unknown> }[];
+
+  beforeEach(() => {
+    calls = [];
+    vi.stubEnv('SONARR_URL', 'http://sonarr');
+    vi.stubEnv('SONARR_API_KEY', 'k');
+    vi.stubGlobal('fetch', async (url: string, init: RequestInit = {}) => {
+      const path = url.replace('http://sonarr/api/v3', '');
+      const method = init.method ?? 'GET';
+      if (method !== 'GET') calls.push({ method, path, body: init.body ? (JSON.parse(init.body as string) as Record<string, unknown>) : undefined });
+      const body = path.startsWith('/episode?') ? eps : path.startsWith('/series/9') ? series : {};
+      return new Response(JSON.stringify(body), { status: 200 });
+    });
+  });
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+  });
+  const when = new Date('2026-10-10T15:00:00');
+
+  it('one episode: wanted and searched, the season itself stays unwanted', async () => {
+    await wantEpisodes(9, 1, 2, true, when);
+    expect(calls).toEqual([
+      { method: 'PUT', path: '/episode/monitor', body: { episodeIds: [2], monitored: true } },
+      { method: 'POST', path: '/command', body: { name: 'EpisodeSearch', episodeIds: [2] } },
+    ]);
+  });
+
+  it('an episode not out yet is wanted but not searched', async () => {
+    await wantEpisodes(9, 1, 3, true, when);
+    expect(calls.map((c) => c.path)).toEqual(['/episode/monitor']);
+  });
+
+  it('a whole season: flag, every episode, one season search', async () => {
+    await wantEpisodes(9, 1, null, true, when);
+    expect(calls[0]).toMatchObject({ method: 'PUT', path: '/series/9' });
+    expect((calls[0]!.body!.seasons as unknown[])).toEqual([{ seasonNumber: 1, monitored: true }, { seasonNumber: 2, monitored: false }]);
+    expect(calls[1]!.body).toEqual({ episodeIds: [1, 2, 3], monitored: true });
+    expect(calls[2]!.body).toEqual({ name: 'SeasonSearch', seriesId: 9, seasonNumber: 1 });
+  });
+
+  it('stop wanting never searches, and refuses an episode Sonarr lacks', async () => {
+    await wantEpisodes(9, 1, 2, false, when);
+    expect(calls).toEqual([{ method: 'PUT', path: '/episode/monitor', body: { episodeIds: [2], monitored: false } }]);
+    await expect(wantEpisodes(9, 1, 99, true, when)).rejects.toThrow(/no S01E99/);
+  });
+
+  it('deleting unwants first, so Sonarr does not fetch it again', async () => {
+    await deleteEpisode(9, 1, 1);
+    expect(calls.map((c) => `${c.method} ${c.path}`)).toEqual(['PUT /episode/monitor', 'DELETE /episodefile/50']);
+    await expect(deleteEpisode(9, 1, 2)).rejects.toThrow(/isn’t in the library/);
   });
 });

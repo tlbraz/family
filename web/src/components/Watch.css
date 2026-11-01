@@ -91,3 +91,18 @@
 .watch-face img { width: 100%; height: 100%; object-fit: cover; }
 .watch-confirm { display: flex; flex-direction: column; gap: 8px; }
 .watch-confirm p { margin: 0; }
+
+/* Episodes of a series */
+.watch-episodes { display: flex; flex-direction: column; gap: 8px; }
+.watch-seasons { margin-bottom: 0; }
+.watch-season-have { opacity: 0.75; font-weight: 600; }
+.watch-season-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; min-height: 36px; }
+.watch-season-head .chip { display: inline-flex; align-items: center; gap: 6px; }
+.watch-eps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.watch-ep { display: flex; flex-direction: column; gap: 6px; padding: 10px 0; border-top: 1px solid var(--line); }
+.watch-ep-row { display: flex; align-items: center; gap: 8px; }
+.watch-ep-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; padding: 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; }
+.watch-ep-text b { overflow-wrap: anywhere; }
+.watch-ep-act { flex: none; display: flex; align-items: center; }
+.watch-ep-more { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
+.watch-ep-more p { margin: 0; }

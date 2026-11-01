@@ -1,4 +1,5 @@
-import type { WatchCard, WatchDetail, WatchGenre, WatchKind, WatchSection, WatchStatus } from '../../shared/types';
+import type { WatchCard, WatchDetail, WatchEpisode, WatchGenre, WatchKind, WatchSeason, WatchSection, WatchStatus } from '../../shared/types';
+import { bySeason, seasonName } from './arr';
 import { mapLimit, memo } from './memo';
 import { addDays, dateKey } from './time';
 
@@ -64,7 +65,7 @@ export interface SearchItem extends TmdbListItem { media_type?: string }
 export interface ReleaseDates { results: { iso_3166_1: string; release_dates: { type: number; release_date: string }[] }[] }
 export interface Video { key: string; site: string; type: string; official?: boolean; iso_639_1?: string; published_at?: string }
 interface Credits { cast: { name: string; character?: string; profile_path?: string | null; order?: number }[] }
-interface Season { season_number: number; air_date?: string | null; episode_count?: number }
+interface Season { season_number: number; name?: string; air_date?: string | null; episode_count?: number }
 interface Episode { air_date?: string | null; season_number: number; episode_number: number }
 interface Details {
   id: number;
@@ -316,6 +317,33 @@ export async function tmdbIdForTvdb(tvdbId: number, get: Fetch = fetch): Promise
 }
 
 /** For the health line: does TMDB answer with our key? */
+/** The seasons of a series we don't have in Sonarr yet (nothing on disk, nothing wanted). */
+export async function tvSeasons(id: number, get: Fetch = fetch): Promise<WatchSeason[]> {
+  const d = await details('tv', id, get);
+  return (d.seasons ?? [])
+    .filter((s) => s.episode_count)
+    .map((s) => ({ number: s.season_number, name: seasonName(s.season_number), airDate: s.air_date ?? null, total: s.episode_count!, have: 0, missing: s.episode_count!, wanted: false }))
+    .sort(bySeason);
+}
+
+/** The episodes of one season, from TMDB. */
+export async function tvSeasonEpisodes(id: number, season: number, now = new Date(), get: Fetch = fetch): Promise<WatchEpisode[]> {
+  const today = dateKey(now);
+  const r = await tmdb<{ episodes?: { episode_number: number; name?: string; overview?: string; air_date?: string | null; runtime?: number | null }[] }>(`/tv/${id}/season/${season}`, {}, get);
+  return (r.episodes ?? []).map((e) => ({
+    id: null,
+    season,
+    number: e.episode_number,
+    title: e.name || `Episode ${e.episode_number}`,
+    airDate: e.air_date ?? null,
+    aired: !!e.air_date && e.air_date <= today,
+    overview: e.overview ?? '',
+    runtime: e.runtime ?? null,
+    state: 'none' as const,
+    text: '',
+  }));
+}
+
 export async function tmdbCheck(get: Fetch = fetch): Promise<string | null> {
   if (!tmdbEnabled()) return 'TMDB key missing';
   return tmdb('/configuration', {}, get, 60_000).then(() => null, (e: Error) => e.message);

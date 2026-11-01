@@ -1,5 +1,5 @@
 import { eq } from 'drizzle-orm';
-import type { WatchKind, WatchListItem, WatchSession, WatchStatus } from '../../shared/types';
+import type { WatchEpisode, WatchKind, WatchListItem, WatchSeason, WatchSession, WatchStatus } from '../../shared/types';
 import type { Db } from '../db';
 import { settings } from '../schema';
 import { memo } from './memo';
@@ -97,7 +97,21 @@ export interface SonarrSeries {
   previousAiring?: string;
   added?: string;
   images?: Image[];
+  seasons?: { seasonNumber: number; monitored: boolean }[];
   statistics?: { episodeFileCount?: number; episodeCount?: number; totalEpisodeCount?: number; sizeOnDisk?: number };
+}
+export interface SonarrEpisode {
+  id: number;
+  seasonNumber: number;
+  episodeNumber: number;
+  title?: string;
+  airDate?: string;
+  overview?: string;
+  runtime?: number;
+  monitored: boolean;
+  hasFile: boolean;
+  episodeFile?: { id: number; size?: number; quality?: Quality; mediaInfo?: MediaInfo };
+  episodeFileId?: number;
 }
 interface Quality { quality?: { name?: string; source?: string; resolution?: number; modifier?: string } }
 export interface MediaInfo {
@@ -114,6 +128,7 @@ export interface QueueRecord {
   quality?: Quality;
   movieId?: number;
   seriesId?: number;
+  episodeId?: number;
   size?: number;
   sizeleft?: number;
   estimatedCompletionTime?: string;
@@ -227,6 +242,9 @@ export function movieStatus(m: RadarrMovie | undefined, queue: QueueRecord[], no
   return { state: 'wanted', arrId: m.id, text };
 }
 
+/** Added for single episodes, and none is wanted any more. (A series just added whole has its seasons monitored already.) */
+const nothingWanted = (s: SonarrSeries) => !!s.seasons?.length && s.seasons.every((x) => !x.monitored) && !s.statistics?.episodeCount && !s.nextAiring;
+
 /** Where a series stands. "In library" once it has episodes; downloading wins while new ones come in. */
 export function seriesStatus(s: SonarrSeries | undefined, queue: QueueRecord[], now: Date): WatchStatus {
   if (!s) return NONE;
@@ -238,7 +256,7 @@ export function seriesStatus(s: SonarrSeries | undefined, queue: QueueRecord[], 
     const size = s.statistics?.sizeOnDisk ?? 0;
     return { state: 'library', arrId: s.id, text: have < aired ? `In library · ${have} of ${aired} episodes` : 'In library', ...(size ? { file: { size, episodes: have, specs: [] } } : {}) };
   }
-  if (!s.monitored) return { ...NONE, arrId: s.id };
+  if (!s.monitored || nothingWanted(s)) return { ...NONE, arrId: s.id };
   const text = s.nextAiring && s.nextAiring.slice(0, 10) >= dateKey(now) ? `Wanted — next episode on ${shortDate(s.nextAiring)}` : 'Wanted — looking for episodes';
   return { state: 'wanted', arrId: s.id, text };
 }
@@ -346,6 +364,122 @@ export async function addSeries(tvdbId: number, monitor: SeriesMonitor, search: 
   forgetLibrary();
 }
 
+// ---- Seasons and episodes ------------------------------------------------------------------------
+
+/** One episode for the list: downloading (from the queue), on disk, wanted, or neither. */
+export function episodeView(e: SonarrEpisode, queue: QueueRecord[], now: Date): WatchEpisode {
+  const airDate = e.airDate ?? null;
+  const aired = !!airDate && airDate <= dateKey(now);
+  const base = { id: e.id, season: e.seasonNumber, number: e.episodeNumber, title: e.title || `Episode ${e.episodeNumber}`, airDate, aired, overview: e.overview ?? '', runtime: e.runtime || null };
+  const q = queue.filter((r) => r.episodeId === e.id);
+  if (q.length) {
+    const st = downloading(q, e.id, now);
+    return { ...base, state: 'downloading', text: st.text, progress: st.progress };
+  }
+  if (e.hasFile) {
+    const f = e.episodeFile;
+    return { ...base, state: 'library', text: 'In library', ...(f?.size ? { size: f.size } : {}), specs: fileSpecs(f?.quality, f?.mediaInfo) };
+  }
+  if (e.monitored) return { ...base, state: 'wanted', text: aired ? 'Looking for a copy' : 'Wanted' };
+  return { ...base, state: 'none', text: '' };
+}
+
+export const seasonName = (n: number) => (n === 0 ? 'Specials' : `Season ${n}`);
+/** Specials go last: most people never want them, and they'd otherwise open the list. */
+export const bySeason = (a: { number: number }, b: { number: number }) => (a.number === 0 ? 1 : b.number === 0 ? -1 : a.number - b.number);
+
+/** The seasons Sonarr has, with counts. */
+export function seasonSummaries(episodes: SonarrEpisode[], now: Date): WatchSeason[] {
+  const today = dateKey(now);
+  const seasons = new Map<number, SonarrEpisode[]>();
+  for (const e of episodes) seasons.set(e.seasonNumber, [...(seasons.get(e.seasonNumber) ?? []), e]);
+  return [...seasons]
+    .map(([number, eps]) => {
+      const lacking = eps.filter((e) => !e.hasFile);
+      return {
+        number,
+        name: seasonName(number),
+        airDate: eps.map((e) => e.airDate).filter(Boolean).sort()[0] ?? null,
+        total: eps.length,
+        have: eps.length - lacking.length,
+        missing: lacking.filter((e) => !e.monitored && !!e.airDate && e.airDate <= today).length,
+        wanted: lacking.length > 0 && lacking.every((e) => e.monitored),
+      };
+    })
+    .sort(bySeason);
+}
+
+export const seriesEpisodes = (seriesId: number) => arrFetch<SonarrEpisode[]>('sonarr', `/episode?seriesId=${seriesId}&includeEpisodeFile=true`);
+export const seriesQueue = (seriesId: number) => arrFetch<QueueRecord[]>('sonarr', `/queue/details?seriesId=${seriesId}&includeEpisode=true`).catch(() => [] as QueueRecord[]);
+
+/** The series in Sonarr, by TMDB or TVDB id. */
+export async function findSeries(tmdbId: number, tvdbId: number | null) {
+  return (await library()).series.find((s) => s.tmdbId === tmdbId || (tvdbId && s.tvdbId === tvdbId)) ?? null;
+}
+
+const wait = (ms: number) => new Promise((done) => setTimeout(done, ms));
+
+/**
+ * The series' id in Sonarr, adding it with nothing wanted if it isn't there, so that one episode can be picked.
+ * New seasons don't come by themselves either. Sonarr fills in the episodes a few seconds after adding.
+ */
+export async function ensureSeries(tvdbId: number, pause = 1500): Promise<number> {
+  const [existing] = await arrFetch<SonarrSeries[]>('sonarr', `/series?tvdbId=${tvdbId}`);
+  if (existing) return existing.id;
+  const [found] = await arrFetch<Record<string, unknown>[]>('sonarr', `/series/lookup?term=${encodeURIComponent(`tvdb:${tvdbId}`)}`);
+  if (!found?.tvdbId) throw new ArrError('Sonarr could not find that series');
+  const added = await arrFetch<SonarrSeries>('sonarr', '/series', {
+    method: 'POST',
+    body: JSON.stringify({
+      ...found,
+      qualityProfileId: profile('sonarr'),
+      rootFolderPath: await rootFolder('sonarr'),
+      monitored: true,
+      monitorNewItems: 'none',
+      seasonFolder: true,
+      seriesType: found.seriesType ?? 'standard',
+      addOptions: { monitor: 'none', searchForMissingEpisodes: false, searchForCutoffUnmetEpisodes: false },
+    }),
+  });
+  forgetLibrary();
+  for (let i = 0; i < 12 && !(await seriesEpisodes(added.id)).length; i++) await wait(pause);
+  return added.id;
+}
+
+/** Want (and look for) one episode or a whole season, or stop wanting it. What's already on disk stays. */
+export async function wantEpisodes(seriesId: number, season: number, episode: number | null, want: boolean, now = new Date()) {
+  const today = dateKey(now);
+  const targets = (await seriesEpisodes(seriesId)).filter((e) => e.seasonNumber === season && (episode === null || e.episodeNumber === episode));
+  if (!targets.length) throw new ArrError(`Sonarr has no ${episode === null ? seasonName(season).toLowerCase() : ep({ seasonNumber: season, episodeNumber: episode })} for this series`);
+
+  // A whole season carries its own flag; a single episode leaves it alone, so the rest of the season isn't wanted.
+  const series = await arrFetch<SonarrSeries & Record<string, unknown>>('sonarr', `/series/${seriesId}`);
+  const seasons = (series.seasons ?? []).map((s) => (episode === null && s.seasonNumber === season ? { ...s, monitored: want } : s));
+  const monitored = want || series.monitored;
+  if (monitored !== series.monitored || seasons.some((s, i) => s.monitored !== series.seasons![i]!.monitored)) {
+    await arrFetch('sonarr', `/series/${seriesId}`, { method: 'PUT', body: JSON.stringify({ ...series, monitored, seasons }) });
+  }
+  await arrFetch('sonarr', '/episode/monitor', { method: 'PUT', body: JSON.stringify({ episodeIds: targets.map((e) => e.id), monitored: want }) });
+
+  const missing = targets.filter((e) => !e.hasFile && !!e.airDate && e.airDate <= today);
+  if (want && missing.length) {
+    const command = episode === null ? { name: 'SeasonSearch', seriesId, seasonNumber: season } : { name: 'EpisodeSearch', episodeIds: missing.map((e) => e.id) };
+    await arrFetch('sonarr', '/command', { method: 'POST', body: JSON.stringify(command) });
+  }
+  forgetLibrary();
+}
+
+/** Deletes one episode's file. Unwanted first, or Sonarr would simply download it again. */
+export async function deleteEpisode(seriesId: number, season: number, episode: number) {
+  const e = (await seriesEpisodes(seriesId)).find((x) => x.seasonNumber === season && x.episodeNumber === episode);
+  const fileId = e?.episodeFile?.id ?? e?.episodeFileId;
+  if (!e || !e.hasFile || !fileId) throw new ArrError('That episode isn’t in the library');
+  await arrFetch('sonarr', '/episode/monitor', { method: 'PUT', body: JSON.stringify({ episodeIds: [e.id], monitored: false }) });
+  await arrFetch('sonarr', `/episodefile/${fileId}`, { method: 'DELETE' });
+  forgetLibrary();
+  await refreshJellyfin().catch(() => {});
+}
+
 /** Removes a film or series and its files, then tells Jellyfin. */
 export async function removeTitle(kind: WatchKind, arrId: number) {
   const a = arrFor(kind);
@@ -399,6 +533,12 @@ export async function playOn(sessionId: string, item: JfItem) {
   await jellyfinFetch(`/Sessions/${sessionId}/Playing?playCommand=PlayNow&itemIds=${play}`, { method: 'POST' });
 }
 
+/** One episode of a series on Jellyfin. */
+export async function findEpisodeInJellyfin(series: JfItem, season: number, episode: number): Promise<JfItem | null> {
+  const r = await jellyfinFetch<{ Items: (JfItem & { IndexNumber?: number })[] }>(`/Shows/${series.Id}/Episodes?season=${season}`);
+  return r.Items.find((i) => i.IndexNumber === episode) ?? null;
+}
+
 /** Asks Jellyfin to look for new files (after an import or a delete). */
 export async function refreshJellyfin() {
   if (!jellyfinEnabled()) return;
@@ -443,7 +583,7 @@ export async function myList(tmdbOf: (tvdbId: number) => Promise<number | null>,
     .map(({ m, out }) => movieRow(m, !out ? 'No digital date yet' : out > today ? `Out on ${shortDate(out)}` : `Out since ${shortDate(out)} · looking for a copy`, out || null));
   const wantedSeries = await Promise.all(
     lib.series
-      .filter((s) => s.monitored && !(s.statistics?.episodeFileCount ?? 0) && !lib.seriesQueue.some((q) => q.seriesId === s.id))
+      .filter((s) => s.monitored && !nothingWanted(s) && !(s.statistics?.episodeFileCount ?? 0) && !lib.seriesQueue.some((q) => q.seriesId === s.id))
       .map((s) => seriesRow(s, s.nextAiring ? `Next episode on ${shortDate(s.nextAiring)}` : 'Looking for episodes', s.nextAiring ?? null)),
   );
   const wanted = [...wantedMovies, ...wantedSeries].sort((a, b) => (a.at ?? '9999').localeCompare(b.at ?? '9999'));

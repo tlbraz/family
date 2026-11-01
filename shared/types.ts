@@ -417,6 +417,38 @@ export interface WatchDetail {
   can: { arr: boolean; jellyfin: boolean };
 }
 
+/** One episode, as the Episodes list shows it. `id` is Sonarr's (null while the series isn't in Sonarr). */
+export interface WatchEpisode {
+  id: number | null;
+  season: number;
+  number: number;
+  title: string;
+  airDate: string | null; // YYYY-MM-DD
+  aired: boolean;
+  overview: string;
+  runtime: number | null; // minutes
+  state: WatchStatus['state'];
+  text: string; // "In library", "Downloading 43 % · ETA 21:30", "Looking for a copy", "Wanted", ""
+  progress?: number;
+  size?: number; // bytes on disk
+  specs?: string[];
+}
+
+export interface WatchSeason {
+  number: number; // 0 = specials
+  name: string;
+  airDate: string | null;
+  total: number;
+  have: number; // episodes on disk (0 while the series isn't in Sonarr)
+  missing: number; // aired, not on disk and not wanted yet: what "Get season" would add
+  wanted: boolean; // every episode is wanted (or there's one still to come): "Stop wanting" applies
+}
+
+export interface WatchSeasons {
+  arrId: number | null; // the series in Sonarr
+  seasons: WatchSeason[]; // specials last
+}
+
 /** A row in "My list". */
 export interface WatchListItem {
   kind: WatchKind;
