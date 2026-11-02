@@ -664,7 +664,6 @@ div.review-row { cursor: default; }
 .month-note-emoji { font-size: 1.5rem; line-height: 1; }
 .month-note-text { display: flex; flex-direction: column; flex: 1; min-width: 0; }
 .month-note .amt { font-weight: 800; white-space: nowrap; }
-.month-unusual-head { margin-top: 14px; }
 .month-unusual button { display: grid; grid-template-columns: 22px 1fr auto; grid-template-rows: auto auto; column-gap: 10px; width: 100%; padding: 6px 4px; border: 0; background: none; color: var(--ink); font: inherit; text-align: left; cursor: pointer; }
 .month-unusual .cat-icon { grid-row: span 2; align-self: center; display: flex; }
 .month-unusual .name { font-weight: 700; }

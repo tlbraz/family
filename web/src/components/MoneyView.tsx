@@ -155,16 +155,12 @@ export function MoneyView({ meName }: { meName: string }) {
           </div>
           <div key={data.month} className={`money-cards slide ${slide}`} onAnimationEnd={() => setSlide('')}>
             <SpentCard data={data} />
-            <MonthCard
-              data={data}
-              budget={budget}
-              onChanged={load}
-              onOpenGroup={(id) => { const g = data.groups.find((x) => x.id === id); if (g) setOpen(g); }}
-            />
+            <MonthCard data={data} budget={budget} onChanged={load} />
             {SHOW_BILLS && <BillsCard data={data} onOpen={() => setBillsOpen(true)} />}
             <ReviewCard review={data.review} onOpen={() => setReviewing(true)} />
             <TransfersCard data={data} budget={budget} onChanged={load} />
             <GroupsCard data={data} onOpen={(g) => (g.children?.length ? setOpenTop(g) : setOpen(g))} />
+            <UnusualCard data={data} onOpenGroup={(id) => { const g = data.groups.find((x) => x.id === id); if (g) setOpen(g); }} />
             <IncomeCard data={data} onOpen={setSource} />
           </div>
           {data.worth && <WorthCard worth={data.worth} />}
@@ -239,16 +235,14 @@ export function MoneyView({ meName }: { meName: string }) {
 const NOTE_EMOJIS = ['🩺', '🦶', '🦷', '💊', '🚗', '🏠', '🔧', '✈️', '🎂', '🎁', '🎉', '🐶', '🎓', '💼', '🛒', '📌'];
 
 /**
- * What happened this month: notes you write ("🦶 Foot fracture: doctor, boot") and the categories that spent clearly
- * more than usual, so an unusual month makes sense when you look back. Notes live in the app, not in Actual.
+ * What happened this month: notes you write ("🦶 Foot fracture: doctor, boot"), so an unusual month makes sense
+ * when you look back. Notes live in the app, not in Actual.
  */
-function MonthCard({ data, budget, onChanged, onOpenGroup }: { data: MoneySummary; budget: MoneyBudget; onChanged: () => void; onOpenGroup: (groupId: string) => void }) {
+function MonthCard({ data, budget, onChanged }: { data: MoneySummary; budget: MoneyBudget; onChanged: () => void }) {
   const notes = data.notes ?? [];
-  const unusual = data.unusual ?? [];
   const [editing, setEditing] = useState<string | null>(null); // a note's id, or 'new'
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const { colour } = groupColours(data);
   async function save(list: MonthNote[]) {
     setBusy(true);
     setError(null);
@@ -263,7 +257,7 @@ function MonthCard({ data, budget, onChanged, onOpenGroup }: { data: MoneySummar
     }
   }
   const month = new Date(`${data.month}-15T12:00`).toLocaleDateString('en-GB', { month: 'long' });
-  if (!notes.length && !unusual.length && editing === null) {
+  if (!notes.length && editing === null) {
     return (
       <button className="card money-card month-empty" onClick={() => setEditing('new')}>
         <Icon name="plus" size={16} /> Note what happened in {month}
@@ -300,24 +294,31 @@ function MonthCard({ data, budget, onChanged, onOpenGroup }: { data: MoneySummar
       {editing === 'new' && (
         <NoteEditor busy={busy} onCancel={() => setEditing(null)} onSave={(x) => void save([...notes, x])} />
       )}
-      {unusual.length > 0 && (
-        <>
-          <h3 className="sheet-sub month-unusual-head">Above usual</h3>
-          <ul className="month-unusual">
-            {unusual.map((u) => (
-              <li key={u.categoryId}>
-                <button onClick={() => onOpenGroup(u.groupId)}>
-                  <span className="cat-icon" style={{ color: colour(u.groupId) }}><Icon name={categoryIcon(u.name)} size={16} /></span>
-                  <span className="name">{u.name}</span>
-                  <span className="amt">+{eur(u.amount - u.usual)}</span>
-                  <span className="muted small month-unusual-sub">{eur(u.amount)} · usually ~{eur(u.usual)}</span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        </>
-      )}
       {error && <p className="error small">{error}</p>}
+    </section>
+  );
+}
+
+/** The categories that spent clearly more than their usual this month; tap one to see its group. */
+function UnusualCard({ data, onOpenGroup }: { data: MoneySummary; onOpenGroup: (groupId: string) => void }) {
+  const unusual = data.unusual ?? [];
+  const { colour } = groupColours(data);
+  if (!unusual.length) return null;
+  return (
+    <section className="card money-card">
+      <h2>Above usual</h2>
+      <ul className="month-unusual">
+        {unusual.map((u) => (
+          <li key={u.categoryId}>
+            <button onClick={() => onOpenGroup(u.groupId)}>
+              <span className="cat-icon" style={{ color: colour(u.groupId) }}><Icon name={categoryIcon(u.name)} size={16} /></span>
+              <span className="name">{u.name}</span>
+              <span className="amt">+{eur(u.amount - u.usual)}</span>
+              <span className="muted small month-unusual-sub">{eur(u.amount)} · usually ~{eur(u.usual)}</span>
+            </button>
+          </li>
+        ))}
+      </ul>
     </section>
   );
 }
