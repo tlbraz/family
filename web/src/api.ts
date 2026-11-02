@@ -1,4 +1,4 @@
-import type { GroceryList, AppConfig, CalendarEvent, EventDraft, EventInput, Health, Member, MemberDocument, MemberInput, MoneyBudget, MoneyHolding, MoneyHoldings, MoneySummary, TrackedBill, DocsMeta, DocsPage, PaperlessDetail, Occurrence, SearchResults, Task, TaskInput, WatchDetail, WatchGenre, WatchEpisode, WatchHealth, WatchSeasons, WatchKind, WatchList, WatchPage, WatchSection, WatchSession } from '../../shared/types';
+import type { GroceryList, AppConfig, CalendarEvent, EventDraft, EventInput, Health, Member, MemberDocument, MemberInput, MoneyBudget, MoneyHolding, MoneyHoldings, MoneySummary, MonthNote, TrackedBill, DocsMeta, DocsPage, PaperlessDetail, Occurrence, SearchResults, Task, TaskInput, WatchDetail, WatchGenre, WatchEpisode, WatchHealth, WatchSeasons, WatchKind, WatchList, WatchPage, WatchSection, WatchSession } from '../../shared/types';
 
 export interface GoogleStatus {
   connected: boolean;
@@ -133,6 +133,7 @@ export const api = {
   playEpisode: (id: number, season: number, episode: number, session: string) =>
     request<{ ok: true }>(`/watch/title/tv/${id}/seasons/${season}/${episode}/play`, json('POST', { session })),
   splitMoney: (budget: MoneyBudget, id: string, parts: { amount: number; category: string; note: string }[]) => request<{ ok: true }>('/money/split', json('POST', { budget, id, parts })),
+  saveMonthNotes: (budget: MoneyBudget, month: string, notes: MonthNote[]) => request<{ notes: MonthNote[] }>('/money/notes', json('PUT', { budget, month, notes })),
   editMoney: (budget: MoneyBudget, id: string, change: { category?: string; review?: boolean; note?: string; noteRule?: boolean }) => request<{ ok: true }>('/money/edit', json('POST', { budget, id, ...change })),
 
 };

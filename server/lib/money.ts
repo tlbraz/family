@@ -1,7 +1,7 @@
 import { mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { MoneyBudget, MoneyGroup, MoneySummary, MoneyTransaction, MoneyWorth } from '../../shared/types';
+import type { MoneyBudget, MoneyGroup, MoneySummary, MoneyTransaction, MoneyUnusual, MoneyWorth } from '../../shared/types';
 import { type BillOverrides, billsFor, fixedVsVariable } from './bills';
 import { dateKey } from './time';
 
@@ -596,6 +596,21 @@ export function summarise(snap: Snapshot, budget: MoneyBudget, budgets: MoneyBud
     .filter((g) => g.amount > 0)
     .sort((a, b) => (a.id === 'uncategorised' ? 1 : b.id === 'uncategorised' ? -1 : b.amount - a.amount));
 
+  // Categories clearly above their usual full month (the average of the earlier complete months): at least €50 more
+  // and half again as much. Helps spot what made a month unusual.
+  const unusual: MoneyUnusual[] = earlier.length
+    ? sorted
+        .filter((g) => g.id !== 'uncategorised')
+        .flatMap((g) => g.categories.map((c) => {
+          const before = earlier.map((m) => spending.filter((t) => t.category === c.id && monthKey(t.date) === m).reduce((s, t) => s - t.amount, 0));
+          const usual = Math.round(before.reduce((s, x) => s + x, 0) / earlier.length);
+          return { categoryId: c.id, name: c.name, groupId: g.id, amount: c.amount, usual };
+        }))
+        .filter((c) => c.amount - c.usual >= 5000 && c.amount >= c.usual * 1.5)
+        .sort((a, b) => b.amount - b.usual - (a.amount - a.usual))
+        .slice(0, 5)
+    : [];
+
   const bills = budget === 'family' ? billsFor(snap, month, today, billOverrides) : null;
   // A transaction from the owed/held lists, as the page shows it (amount: out > 0).
   const listed = (t: Snapshot['tx'][number], amount: number, groupId: string): MoneyTransaction => ({ id: t.id, categoryId: t.category, fixable: t.fixable, splitOf: t.parentId ?? null, splitFrom: t.splitFrom ?? null, splitTotal: t.splitTotal == null ? null : -t.splitTotal, review: t.review, note: t.note, date: t.date, payee: t.payee, account: t.account, groupId, category: (t.category && catName.get(t.category)) || '', amount });
@@ -627,6 +642,9 @@ export function summarise(snap: Snapshot, budget: MoneyBudget, budgets: MoneyBud
       };
     })(),
     usual,
+    unusual,
+    notes: [],
+    noteMonths: {},
     groups: sorted,
     // Colours go to the groups actually used (Actual's unused default and hidden groups would take slots otherwise),
     // biggest spenders over all history first: only eight colours stay distinct, so they go to what matters, and

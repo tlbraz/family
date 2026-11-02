@@ -26,6 +26,7 @@ import { accountIbans, cleanIban, saveIban } from './lib/ibans';
 import { bpSettingsOf } from './lib/bp';
 import { upcomingRoutes } from './routes/upcoming';
 import { members, settings } from './schema';
+import { cleanNotes, monthNotes, saveMonthNotes } from './lib/monthNotes';
 import pkg from '../package.json';
 
 export interface AppHooks extends EventHooks {
@@ -129,9 +130,25 @@ export function createApp(db: Db, hooks: AppHooks = noop) {
     try {
       const summary = summarise(await moneySnapshot(budget), budget, budgets, month, now, budget === 'family' ? await billOverrides(db) : undefined, await notTransfers(budget));
       const ibans = await accountIbans(db);
-      return c.json({ ...summary, accounts: summary.accounts.map((a) => ({ ...a, iban: ibans[`${budget}:${a.name}`] ?? null })) });
+      const notes = await monthNotes(db, budget);
+      const noteMonths = Object.fromEntries(Object.entries(notes).map(([m, list]) => [m, list.map((n) => n.emoji)]));
+      return c.json({ ...summary, notes: notes[month] ?? [], noteMonths, accounts: summary.accounts.map((a) => ({ ...a, iban: ibans[`${budget}:${a.name}`] ?? null })) });
     } catch (e) {
       return c.json({ error: (e as Error).message }, 503);
+    }
+  });
+  // What happened in a month (notes written on the Money tab): the whole month's list replaces what was there.
+  api.put('/money/notes', requireParent, async (c) => {
+    const body = (await c.req.json().catch(() => ({}))) as { budget?: unknown; month?: unknown; notes?: unknown };
+    const budget = (typeof body.budget === 'string' ? body.budget : 'family') as MoneyBudget;
+    if (!budgetsFor(c.get('me')!.name).includes(budget)) return c.json({ error: 'Not available' }, 403);
+    if (typeof body.month !== 'string' || !/^\d{4}-\d{2}$/.test(body.month)) return c.json({ error: 'Pick a month' }, 400);
+    try {
+      const notes = cleanNotes(body.notes);
+      await saveMonthNotes(db, budget, body.month, notes);
+      return c.json({ notes });
+    } catch (e) {
+      return c.json({ error: (e as Error).message }, 400);
     }
   });
   // An account's IBAN, to copy from the Money tab (empty removes it).

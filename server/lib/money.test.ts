@@ -316,3 +316,18 @@ describe('parts of a split', () => {
     expect(s.transactions[0]).toMatchObject({ splitOf: 'p1', splitFrom: 'GINASIO CLUBE PORTO', splitTotal: 9000, amount: 4125 });
   });
 });
+
+describe('categories above usual', () => {
+  it('lists the ones clearly above their usual full month, biggest jump first', () => {
+    const tx = [
+      t('2026-07-05', -6000, 'luz'), t('2026-08-05', -6000, 'luz'), t('2026-09-05', -40000, 'luz'), // 400 vs 60
+      t('2026-07-05', -10000, 'super'), t('2026-08-05', -10000, 'super'), t('2026-09-05', -13000, 'super'), // +30: not enough
+      t('2026-09-12', -9000, 'hipoteca'), // 90 vs 0: new this month
+    ];
+    const s = summarise(snap(tx), 'family', ['family'], '2026-09', new Date(2026, 8, 20));
+    expect(s.unusual.map((u) => [u.name, u.amount, u.usual])).toEqual([['Luz', 40000, 6000], ['Hipoteca', 9000, 0]]);
+  });
+  it('says nothing without earlier months to compare with', () => {
+    expect(summarise(snap([t('2026-09-05', -90000, 'luz')], { dataFrom: '2026-09-01' }), 'family', ['family'], '2026-09', new Date(2026, 8, 20)).unusual).toEqual([]);
+  });
+});

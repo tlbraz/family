@@ -223,6 +223,24 @@ export interface TrackedBill {
   day?: number; // 1–31: around which day of the month it comes
 }
 
+/** Something that happened in a month, to make sense of its spending ("🦶 Foot fracture"). Amount in cents. */
+export interface MonthNote {
+  id: string;
+  emoji: string;
+  title: string;
+  text: string | null;
+  amount: number | null;
+}
+
+/** A category that spent clearly more than usual this month (cents; usual = average of earlier full months). */
+export interface MoneyUnusual {
+  categoryId: string;
+  name: string;
+  groupId: string;
+  amount: number;
+  usual: number;
+}
+
 export interface MoneySummary {
   budget: MoneyBudget;
   budgets: MoneyBudget[]; // the ones this person may open
@@ -233,6 +251,9 @@ export interface MoneySummary {
   spent: number;
   income: { total: number; sources: { name: string; amount: number }[]; transactions: MoneyTransaction[] }; // money in this month
   usual: number | null; // what's usually spent by this point of the month (null until there's enough history)
+  unusual: MoneyUnusual[]; // categories well above their usual month, biggest jump first
+  notes: MonthNote[]; // what happened this month (written in the app)
+  noteMonths: Record<string, string[]>; // month → the emojis of its notes, to mark months that have some
   groups: MoneyGroup[];
   groupOrder: string[]; // every expense group in Actual's order, so a group keeps its colour from month to month
   transactions: MoneyTransaction[];

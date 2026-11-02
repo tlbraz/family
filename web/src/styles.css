@@ -654,3 +654,28 @@ div.review-row { cursor: default; }
 .doc-reject { margin-right: auto; color: var(--danger); }
 .doc-reject-ask { margin-right: auto; }
 .doc-edit .review-actions .chip { white-space: nowrap; }
+
+/* What happened this month */
+.month-emojis { font-size: 0.95em; }
+.money-card.month-empty { display: flex; align-items: center; gap: 8px; color: var(--muted); font-weight: 700; text-align: left; padding: 12px 16px; border: 1px dashed var(--line); background: transparent; }
+.month-card h2 { margin: 0; }
+.month-notes, .month-unusual { list-style: none; margin: 10px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.month-note { display: flex; align-items: center; gap: 12px; width: 100%; padding: 10px 12px; border: 0; border-radius: 14px; background: var(--soft); color: var(--ink); font: inherit; text-align: left; cursor: pointer; }
+.month-note-emoji { font-size: 1.5rem; line-height: 1; }
+.month-note-text { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+.month-note .amt { font-weight: 800; white-space: nowrap; }
+.month-unusual-head { margin-top: 14px; }
+.month-unusual button { display: grid; grid-template-columns: 22px 1fr auto; grid-template-rows: auto auto; column-gap: 10px; width: 100%; padding: 6px 4px; border: 0; background: none; color: var(--ink); font: inherit; text-align: left; cursor: pointer; }
+.month-unusual .cat-icon { grid-row: span 2; align-self: center; display: flex; }
+.month-unusual .name { font-weight: 700; }
+.month-unusual .amt { font-weight: 800; color: var(--ink); }
+.month-unusual-sub { grid-column: 2 / 4; }
+.note-editor { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; padding: 12px; border-radius: 14px; background: var(--soft); }
+.note-editor input { width: 100%; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--card); font: inherit; color: var(--ink); }
+.note-emojis { display: flex; flex-wrap: wrap; gap: 4px; }
+.note-emojis button { width: 36px; height: 36px; border-radius: 10px; border: 1px solid transparent; background: var(--card); font-size: 1.15rem; cursor: pointer; }
+.note-emojis button.on { border-color: var(--ink); }
+.note-title-row { display: grid; grid-template-columns: 56px 1fr; gap: 8px; }
+.note-emoji-input { text-align: center; font-size: 1.2rem !important; }
+.note-amount { display: flex; align-items: center; gap: 6px; font-weight: 800; }
+.danger-text { color: var(--danger, #c0392b); margin-right: auto; }

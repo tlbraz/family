@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
-import type { MoneyBudget, MoneyGroup, MoneyHolding, MoneyHoldings, MoneySummary, MoneyTransaction, MoneyWorth } from '../../../shared/types';
+import type { MoneyBudget, MoneyGroup, MoneyHolding, MoneyHoldings, MoneySummary, MoneyTransaction, MoneyWorth, MonthNote } from '../../../shared/types';
 import { api } from '../api';
 import { useBack } from '../back';
 import { BillsCard, BillsSheet, FixedForm, fixedFor } from './Bills';
@@ -148,13 +148,19 @@ export function MoneyView({ meName }: { meName: string }) {
             <button className="round ghost" aria-label="Previous month" disabled={at <= 0} onClick={() => go(-1)}>
               <Icon name="left" />
             </button>
-            <span>{monthName(data.month)}</span>
+            <span>{monthName(data.month)}{data.noteMonths?.[data.month]?.length ? <span className="month-emojis" aria-label="has notes"> {data.noteMonths[data.month]!.join(' ')}</span> : null}</span>
             <button className="round ghost" aria-label="Next month" disabled={at >= data.months.length - 1} onClick={() => go(1)}>
               <Icon name="right" />
             </button>
           </div>
           <div key={data.month} className={`money-cards slide ${slide}`} onAnimationEnd={() => setSlide('')}>
             <SpentCard data={data} />
+            <MonthCard
+              data={data}
+              budget={budget}
+              onChanged={load}
+              onOpenGroup={(id) => { const g = data.groups.find((x) => x.id === id); if (g) setOpen(g); }}
+            />
             {SHOW_BILLS && <BillsCard data={data} onOpen={() => setBillsOpen(true)} />}
             <ReviewCard review={data.review} onOpen={() => setReviewing(true)} />
             <TransfersCard data={data} budget={budget} onChanged={load} />
@@ -227,6 +233,125 @@ export function MoneyView({ meName }: { meName: string }) {
       {holdingsOpen && <HoldingsSheet onClose={() => setHoldingsOpen(false)} onSaved={load} />}
       {reviewing && data && <ReviewSheet data={data} budget={budget} onChanged={load} onClose={() => setReviewing(false)} />}
     </div>
+  );
+}
+
+const NOTE_EMOJIS = ['🩺', '🦶', '🦷', '💊', '🚗', '🏠', '🔧', '✈️', '🎂', '🎁', '🎉', '🐶', '🎓', '💼', '🛒', '📌'];
+
+/**
+ * What happened this month: notes you write ("🦶 Foot fracture: doctor, boot") and the categories that spent clearly
+ * more than usual, so an unusual month makes sense when you look back. Notes live in the app, not in Actual.
+ */
+function MonthCard({ data, budget, onChanged, onOpenGroup }: { data: MoneySummary; budget: MoneyBudget; onChanged: () => void; onOpenGroup: (groupId: string) => void }) {
+  const notes = data.notes ?? [];
+  const unusual = data.unusual ?? [];
+  const [editing, setEditing] = useState<string | null>(null); // a note's id, or 'new'
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const { colour } = groupColours(data);
+  async function save(list: MonthNote[]) {
+    setBusy(true);
+    setError(null);
+    try {
+      await api.saveMonthNotes(budget, data.month, list);
+      setEditing(null);
+      onChanged();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  const month = new Date(`${data.month}-15T12:00`).toLocaleDateString('en-GB', { month: 'long' });
+  if (!notes.length && !unusual.length && editing === null) {
+    return (
+      <button className="card money-card month-empty" onClick={() => setEditing('new')}>
+        <Icon name="plus" size={16} /> Note what happened in {month}
+      </button>
+    );
+  }
+  return (
+    <section className="card money-card month-card">
+      <div className="row">
+        <h2>What happened in {month}</h2>
+        {editing === null && <button className="pill" onClick={() => setEditing('new')}><Icon name="plus" size={14} /> Note</button>}
+      </div>
+      {notes.length > 0 && (
+        <ul className="month-notes">
+          {notes.map((n) =>
+            editing === n.id ? (
+              <li key={n.id}>
+                <NoteEditor note={n} busy={busy} onCancel={() => setEditing(null)}
+                  onSave={(x) => void save(notes.map((o) => (o.id === n.id ? x : o)))}
+                  onDelete={() => void save(notes.filter((o) => o.id !== n.id))} />
+              </li>
+            ) : (
+              <li key={n.id}>
+                <button className="month-note" onClick={() => setEditing(n.id)}>
+                  <span className="month-note-emoji">{n.emoji}</span>
+                  <span className="month-note-text"><b>{n.title}</b>{n.text && <span className="muted small">{n.text}</span>}</span>
+                  {n.amount !== null && <span className="amt">~{eur(n.amount)}</span>}
+                </button>
+              </li>
+            ),
+          )}
+        </ul>
+      )}
+      {editing === 'new' && (
+        <NoteEditor busy={busy} onCancel={() => setEditing(null)} onSave={(x) => void save([...notes, x])} />
+      )}
+      {unusual.length > 0 && (
+        <>
+          <h3 className="sheet-sub month-unusual-head">Above usual</h3>
+          <ul className="month-unusual">
+            {unusual.map((u) => (
+              <li key={u.categoryId}>
+                <button onClick={() => onOpenGroup(u.groupId)}>
+                  <span className="cat-icon" style={{ color: colour(u.groupId) }}><Icon name={categoryIcon(u.name)} size={16} /></span>
+                  <span className="name">{u.name}</span>
+                  <span className="amt">+{eur(u.amount - u.usual)}</span>
+                  <span className="muted small month-unusual-sub">{eur(u.amount)} · usually ~{eur(u.usual)}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+      {error && <p className="error small">{error}</p>}
+    </section>
+  );
+}
+
+/** One note: an emoji (a few to tap, or type any), a title, optional details and a rough amount. */
+function NoteEditor({ note, busy, onSave, onCancel, onDelete }: { note?: MonthNote; busy: boolean; onSave: (n: MonthNote) => void; onCancel: () => void; onDelete?: () => void }) {
+  const [emoji, setEmoji] = useState(note?.emoji ?? '📌');
+  const [title, setTitle] = useState(note?.title ?? '');
+  const [text, setText] = useState(note?.text ?? '');
+  const [amount, setAmount] = useState(note?.amount != null ? String(note.amount / 100) : '');
+  const cents = amount.trim() ? Math.round(Number(amount.replace(',', '.')) * 100) : null;
+  const ok = title.trim() && (cents === null || (Number.isFinite(cents) && cents >= 0));
+  return (
+    <form className="note-editor" onSubmit={(e) => { e.preventDefault(); if (ok) onSave({ id: note?.id ?? '', emoji, title: title.trim(), text: text.trim() || null, amount: cents }); }}>
+      <div className="note-emojis" role="group" aria-label="Emoji">
+        {NOTE_EMOJIS.map((x) => (
+          <button key={x} type="button" className={x === emoji ? 'on' : ''} aria-pressed={x === emoji} onClick={() => setEmoji(x)}>{x}</button>
+        ))}
+      </div>
+      <div className="note-title-row">
+        <input className="note-emoji-input" value={emoji} onChange={(e) => setEmoji(e.target.value)} maxLength={8} aria-label="Emoji" />
+        <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="What happened? e.g. Foot fracture" maxLength={80} aria-label="Title" autoFocus={!note} />
+      </div>
+      <input value={text} onChange={(e) => setText(e.target.value)} placeholder="Details (optional): doctor, orthopaedic boot…" maxLength={300} aria-label="Details" />
+      <label className="note-amount">
+        <span>€</span>
+        <input inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="about how much (optional)" aria-label="About how much" />
+      </label>
+      <div className="review-actions">
+        {onDelete && <button type="button" className="chip danger-text" disabled={busy} onClick={onDelete}>Delete</button>}
+        <button type="button" className="chip" disabled={busy} onClick={onCancel}>Cancel</button>
+        <button type="submit" className="primary" disabled={busy || !ok}>{busy ? 'Saving…' : 'Save'}</button>
+      </div>
+    </form>
   );
 }
 
