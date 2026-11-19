@@ -19,6 +19,7 @@ export function DocsView() {
   const [text, setText] = useState('');
   const [query, setQuery] = useState('');
   const [filters, setFilters] = useState<Filters>({});
+  const [sort, setSort] = useState<'' | 'date' | 'date-asc'>('');
   const [docs, setDocs] = useState<PaperlessDoc[]>([]);
   const [count, setCount] = useState(0);
   const [page, setPage] = useState(1);
@@ -47,7 +48,7 @@ export function DocsView() {
       setLoading(true);
       setError(null);
       api
-        .docs({ q: query || undefined, inbox: mode === 'inbox', page: pageNo, ...filters })
+        .docs({ q: query || undefined, inbox: mode === 'inbox', page: pageNo, sort: sort || undefined, ...filters })
         .then((p) => {
           setDocs((d) => (pageNo === 1 ? p.documents : [...d, ...p.documents]));
           setCount(p.count);
@@ -57,7 +58,7 @@ export function DocsView() {
         .catch((e: Error) => setError(e.message))
         .finally(() => setLoading(false));
     },
-    [mode, query, filters],
+    [mode, query, filters, sort],
   );
   useEffect(() => load(1), [load]);
 
@@ -104,6 +105,11 @@ export function DocsView() {
             <option value="">Any tag</option>
             {meta.tags.filter((t) => t.id !== meta.inboxTag).map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
           </select>
+          <select value={sort} onChange={(e) => setSort(e.target.value as typeof sort)} aria-label="Sort" className={sort ? 'on' : ''}>
+            <option value="">{query ? 'Best match' : 'Newest added'}</option>
+            <option value="date">Date: newest</option>
+            <option value="date-asc">Date: oldest</option>
+          </select>
           {filtered && <button className="link small" onClick={() => setFilters({})}>Clear</button>}
         </div>
       )}
@@ -121,7 +127,7 @@ export function DocsView() {
             ? 'Looking…'
             : mode === 'inbox' && !count && !query && !filtered
               ? 'Nothing to approve ✓'
-              : `${count} document${count === 1 ? '' : 's'}${query ? ` matching "${query}"` : ''}${filters.type ? ` · ${nameIn(meta?.types, filters.type)}` : ''}${filters.correspondent ? ` · ${nameIn(meta?.correspondents, filters.correspondent)}` : ''}${filters.tag ? ` · #${nameIn(meta?.tags, filters.tag)}` : ''}${query ? ', best match first' : ', newest first'}`}
+              : `${count} document${count === 1 ? '' : 's'}${query ? ` matching "${query}"` : ''}${filters.type ? ` · ${nameIn(meta?.types, filters.type)}` : ''}${filters.correspondent ? ` · ${nameIn(meta?.correspondents, filters.correspondent)}` : ''}${filters.tag ? ` · #${nameIn(meta?.tags, filters.tag)}` : ''}${sort === 'date' ? ', by date, newest first' : sort === 'date-asc' ? ', by date, oldest first' : query ? ', best match first' : ', newest added first'}`}
         </p>
       )}
 

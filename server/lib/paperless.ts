@@ -153,9 +153,11 @@ export async function docsMeta(get: Fetch = fetch): Promise<DocsMeta> {
   };
 }
 
-export interface DocsQuery { query?: string; inbox?: boolean; tag?: number; correspondent?: number; type?: number; page?: number }
+/** How to order: by when it was added (default; best match when searching), or by the document's own date. */
+export type DocsSort = 'added' | 'date' | 'date-asc';
+export interface DocsQuery { query?: string; inbox?: boolean; tag?: number; correspondent?: number; type?: number; page?: number; sort?: DocsSort }
 
-/** One page of documents: full-text search (best match first) or the newest first, with optional filters. */
+/** One page of documents: full-text search (best match first) or the newest first, or by the document's date; with optional filters. */
 export async function searchDocs(q: DocsQuery, get: Fetch = fetch): Promise<DocsPage> {
   const n = await lookups(get);
   const inbox = inboxTagOf(n);
@@ -166,7 +168,9 @@ export async function searchDocs(q: DocsQuery, get: Fetch = fetch): Promise<Docs
   if (q.correspondent) p.set('correspondent__id', String(q.correspondent));
   if (q.type) p.set('document_type__id', String(q.type));
   if (q.query?.trim()) p.set('query', q.query.trim().slice(0, 200));
-  else p.set('ordering', '-added');
+  if (q.sort === 'date') p.set('ordering', '-created');
+  else if (q.sort === 'date-asc') p.set('ordering', 'created');
+  else if (!q.query?.trim()) p.set('ordering', '-added');
   const page = await json<Page<Doc>>(`/api/documents/?${p}`, get);
   return { count: page.count, next: !!page.next, documents: page.results.map((d) => toDoc(d, n, inbox?.id ?? null)) };
 }

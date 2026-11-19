@@ -71,6 +71,16 @@ describe('paperless inbox', () => {
     expect(Object.fromEntries(new URLSearchParams(calls.at(-1)!.split('?')[1]))).toMatchObject({ tags__id__all: '1', ordering: '-added' });
   });
 
+  it("sorts by the document's date, newest or oldest first, also when searching", async () => {
+    const ordering = () => new URLSearchParams(calls.at(-1)!.split('?')[1]).get('ordering');
+    await searchDocs({ sort: 'date' }, fake);
+    expect(ordering()).toBe('-created');
+    await searchDocs({ query: 'anthropic', sort: 'date-asc' }, fake);
+    expect(ordering()).toBe('created');
+    await searchDocs({ query: 'anthropic' }, fake);
+    expect(ordering()).toBeNull();
+  });
+
   it('keeps search highlights as plain text pieces', () => {
     expect(highlightParts('Fatura da <span class="match">luz</span> &amp; <b>gás</b>')).toEqual([
       { text: 'Fatura da ', hit: false }, { text: 'luz', hit: true }, { text: ' & gás', hit: false },

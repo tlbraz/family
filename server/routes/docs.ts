@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import type { AuthEnv } from '../lib/auth';
 import { requireParent } from '../lib/auth';
+import type { DocsSort } from '../lib/paperless';
 import { docDetail, docsMeta, NotInInbox, paperlessEnabled, PaperlessError, paperlessFetch, rejectDoc, searchDocs, updateDoc } from '../lib/paperless';
 
 /** The Docs tab: Paperless, for parents only. */
@@ -22,10 +23,11 @@ export function docRoutes() {
     }
   });
 
+  const sortOf = (s?: string): DocsSort | undefined => (s === 'added' || s === 'date' || s === 'date-asc' ? s : undefined);
   r.get('/', async (c) => {
     const num = (k: string) => (/^\d+$/.test(c.req.query(k) ?? '') ? Number(c.req.query(k)) : undefined);
     try {
-      return c.json(await searchDocs({ query: c.req.query('q'), inbox: c.req.query('inbox') === '1', tag: num('tag'), correspondent: num('correspondent'), type: num('type'), page: num('page') }));
+      return c.json(await searchDocs({ query: c.req.query('q'), inbox: c.req.query('inbox') === '1', tag: num('tag'), correspondent: num('correspondent'), type: num('type'), page: num('page'), sort: sortOf(c.req.query('sort')) }));
     } catch (e) {
       const f = fail(e);
       return c.json({ error: f.error }, f.status);

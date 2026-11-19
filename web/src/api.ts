@@ -103,7 +103,7 @@ export const api = {
   refreshMoney: () => request<{ ok: true }>('/money/refresh', json('POST')),
   transferMoney: (budget: MoneyBudget, out: string, into: string, action: 'link' | 'ignore') => request<{ ok: true }>('/money/transfer', json('POST', { budget, out, in: into, action })),
   docsMeta: () => request<DocsMeta>('/docs/meta'),
-  docs: (q: { q?: string; inbox?: boolean; tag?: number; correspondent?: number; type?: number; page?: number }) => {
+  docs: (q: { q?: string; inbox?: boolean; tag?: number; correspondent?: number; type?: number; page?: number; sort?: 'date' | 'date-asc' }) => {
     const p = new URLSearchParams();
     for (const [k, v] of Object.entries(q)) if (v !== undefined && v !== '' && v !== false) p.set(k, v === true ? '1' : String(v));
     return request<DocsPage>(`/docs?${p}`);
