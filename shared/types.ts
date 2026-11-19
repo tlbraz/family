@@ -270,6 +270,11 @@ export interface MoneySummary {
     open: MoneyTransaction[]; // the expenses not paid back yet (amount = what's left), newest first
     recent: MoneyTransaction[]; // the latest payments and money back, newest first (money back < 0)
   } | null;
+  // Put into savings and investments this month (categories in a "Poupança e investimentos" group); not spending.
+  saved: {
+    total: number; // cents put aside (below zero if more came out of them)
+    transactions: MoneyTransaction[]; // newest first
+  } | null;
   // Someone else's money passing through (categories in "A entregar"); neither income nor spending.
   held: {
     total: number; // still to hand over (cents; below zero if more was handed over than came in)

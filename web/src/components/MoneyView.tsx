@@ -72,6 +72,7 @@ export function MoneyView({ meName }: { meName: string }) {
   const [holdingsOpen, setHoldingsOpen] = useState(false);
   const [owedOpen, setOwedOpen] = useState(false);
   const [heldOpen, setHeldOpen] = useState(false);
+  const [savedOpen, setSavedOpen] = useState(false);
   const [billsOpen, setBillsOpen] = useState(false);
   const [busy, setBusy] = useState(false);
 
@@ -154,7 +155,7 @@ export function MoneyView({ meName }: { meName: string }) {
             </button>
           </div>
           <div key={data.month} className={`money-cards slide ${slide}`} onAnimationEnd={() => setSlide('')}>
-            <SpentCard data={data} />
+            <SpentCard data={data} onSaved={() => setSavedOpen(true)} />
             <MonthCard data={data} budget={budget} onChanged={load} />
             {SHOW_BILLS && <BillsCard data={data} onOpen={() => setBillsOpen(true)} />}
             <ReviewCard review={data.review} onOpen={() => setReviewing(true)} />
@@ -215,6 +216,11 @@ export function MoneyView({ meName }: { meName: string }) {
           <p className="muted small money-note">
             Paid for the company (or anyone else) and to come back: categories in the "A receber" group, or with "reembolso" in the name. They don't count as spending. Give the money back the same category, and the oldest expenses count as paid first.
           </p>
+        </Sheet>
+      )}
+      {savedOpen && data?.saved && (
+        <Sheet title={`Savings & investments · ${eur(data.saved.total)}`} onClose={() => setSavedOpen(false)}>
+          <TxList tx={data.saved.transactions} showCategory edit={{ data, budget, onChanged: load }} />
         </Sheet>
       )}
       {heldOpen && data?.held && (
@@ -356,7 +362,7 @@ function NoteEditor({ note, busy, onSave, onCancel, onDelete }: { note?: MonthNo
   );
 }
 
-function SpentCard({ data }: { data: MoneySummary }) {
+function SpentCard({ data, onSaved }: { data: MoneySummary; onSaved: () => void }) {
   const { spent, usual, today } = data;
   const scale = Math.max(spent, usual ?? 0) * 1.15 || 1;
   const diff = usual === null ? 0 : usual - spent;
@@ -378,6 +384,12 @@ function SpentCard({ data }: { data: MoneySummary }) {
           <span className="muted">Usually <b className="ink">~{eur(usual)}</b> {today ? 'by now' : 'in a month'}</span>
           <b>{diff >= 0 ? `${eur(diff)} under ✓` : `${eur(-diff)} over`}</b>
         </div>
+      )}
+      {data.saved && data.saved.total !== 0 && (
+        <button className="balance-owed" onClick={onSaved}>
+          {data.saved.total > 0 ? `+ ${eur(data.saved.total)} into savings & investments` : `${eur(-data.saved.total)} out of savings & investments`}
+          <Icon name="right" size={14} />
+        </button>
       )}
     </section>
   );
@@ -730,7 +742,7 @@ function TxEditor({ t, edit, onDone }: { t: MoneyTransaction; edit: Editing; onD
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Money going out (not money in, paid back or a transfer) can become a fixed expense: a bill, family budget only.
-  const fixed = SHOW_BILLS && t.amount > 0 && !['income', 'owed', 'held', 'transfer'].includes(t.groupId) ? fixedFor(t, edit.data) : null;
+  const fixed = SHOW_BILLS && t.amount > 0 && !['income', 'owed', 'held', 'saved', 'transfer'].includes(t.groupId) ? fixedFor(t, edit.data) : null;
   const [fixing, setFixing] = useState(false);
   const change = {
     ...(editable(t) && pick && pick !== t.categoryId ? { category: pick } : {}),

@@ -65,6 +65,14 @@ export function heldForOthers(groups: Snapshot['groups']): Set<string> {
   return new Set(groups.filter((g) => !g.income && /^a entregar$/i.test(g.name.trim())).flatMap((g) => g.categories.map((c) => c.id)));
 }
 
+/**
+ * Money put aside, not spent: the categories in a group with "poupança" or "invest" in its name (the family's
+ * "Finanças / Poupança e investimentos"). Not the month's spending; shown apart as what went into savings.
+ */
+export function savingsCategories(groups: Snapshot['groups']): Set<string> {
+  return new Set(groups.filter((g) => !g.income && /poupan|invest/i.test(g.name)).flatMap((g) => g.categories.map((c) => c.id)));
+}
+
 /** Which expenses haven't come back yet: money back pays off the oldest first. Amounts as in Actual (out < 0). */
 export function stillOwed(items: Snapshot['tx']) {
   const sorted = [...items].sort((a, b) => a.date.localeCompare(b.date));
@@ -557,7 +565,9 @@ export function summarise(snap: Snapshot, budget: MoneyBudget, budgets: MoneyBud
   // someone else's money passing through (raffle tickets sold, then handed over).
   const owedCats = reimbursable(snap.groups);
   const heldCats = heldForOthers(snap.groups);
-  const spending = snap.tx.filter((t) => (t.category ? !incomeCats.has(t.category) && !owedCats.has(t.category) && !heldCats.has(t.category) : t.amount < 0));
+  // Savings and investments (the monthly PPR plan…) are money put aside, not spent: shown apart.
+  const savedCats = savingsCategories(snap.groups);
+  const spending = snap.tx.filter((t) => (t.category ? !incomeCats.has(t.category) && !owedCats.has(t.category) && !heldCats.has(t.category) && !savedCats.has(t.category) : t.amount < 0));
   const usedCats = new Set(spending.map((t) => t.category));
   // Money in: income categories, and money in without a category (shown apart, it may be a refund or a transfer).
   const catName = new Map(snap.groups.flatMap((g) => g.categories.map((c) => [c.id, c.name] as const)));
@@ -678,6 +688,11 @@ export function summarise(snap: Snapshot, budget: MoneyBudget, budgets: MoneyBud
         open: stillOwed(items).map((t) => tx(t, t.left)).reverse(),
         recent: items.slice(-30).reverse().map((t) => tx(t, -t.amount)),
       };
+    })(),
+    saved: (() => {
+      const items = snap.tx.filter((t) => t.category && savedCats.has(t.category) && monthKey(t.date) === month);
+      if (!items.length) return null;
+      return { total: -items.reduce((s, t) => s + t.amount, 0), transactions: items.map((t) => listed(t, -t.amount, 'saved')).sort((a, b) => b.date.localeCompare(a.date)) };
     })(),
     held: (() => {
       const items = snap.held ?? [];

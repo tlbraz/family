@@ -33,6 +33,9 @@ Install it on a phone with *Share → Add to Home Screen*.
   Available balance first, then spending this month vs. usual, by category group (tap for categories and transactions),
   what came in, and transactions tagged `#review`: pick a category (or "Looks fine") and the tag comes out, in Actual. Reads Actual every 20 min and asks it to sync the banks at 07:00, 13:00 and 19:00
   (`ACTUAL_BANK_SYNC=off` to stop). Swipe to change month.
+- **Savings aren't spending** (Money tab): categories in a group with "Poupança" or "Invest" in its name (the
+  monthly PPR plan…) don't count in the month's spending or the usual; the Spent card shows "+ € into savings &
+  investments" and opens the list. Transfers to the investment accounts never counted.
 - **Money that isn't ours** (Money tab): categories in an `A receber` group (or named "Reembolso…") are paid for
   someone else and come back; categories in an `A entregar` group are someone else's money passing through (raffle
   tickets sold, a collection) until it's handed over. Neither counts as income or spending; the balance card shows
